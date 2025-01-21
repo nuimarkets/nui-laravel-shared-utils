@@ -13,19 +13,21 @@
   "require": {
     "php": "^8.2",
     "bramus/monolog-colored-line-formatter": "~3.0.0",
-    "monolog/monolog": "^2.0"
+    "monolog/monolog": "^2.0",
+    "laravel/framework": "^9.0|^10.0"
   },
   "require-dev": {
-    "phpunit/phpunit": "^9.0"
+    "phpunit/phpunit": "^9.0",
+    "orchestra/testbench": "^7.50"
   },
   "autoload": {
     "psr-4": {
-      "VendorName\\PackageName\\": "src/"
+      "Nuimarkets\\LaravelSharedUtils\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "VendorName\\PackageName\\Tests\\": "tests/"
+      "Nuimarkets\\LaravelSharedUtils\\Tests\\": "tests/"
     }
   }
 }

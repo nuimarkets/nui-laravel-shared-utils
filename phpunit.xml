@@ -4,13 +4,9 @@
          verbose="true"
          stopOnFailure="false">
     <testsuites>
-        <testsuite name="Package Test Suite">
-            <directory>tests</directory>
+        <testsuite name="Unit">
+            <directory suffix="Test.php">./tests</directory>
         </testsuite>
     </testsuites>
-    <coverage>
-        <include>
-            <directory suffix=".php">src/</directory>
-        </include>
-    </coverage>
+
 </phpunit>

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Logging;
+namespace Nuimarkets\LaravelSharedUtils\Logging;
 
 use Bramus\Monolog\Formatter\ColoredLineFormatter;
 use JsonSerializable;
