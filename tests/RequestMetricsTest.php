@@ -4,8 +4,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Route as RoutingRoute;
-use Illuminate\Support\Facades\Log;
-use Nuimarkets\LaravelSharedUtils\HttpMiddleware\RequestMetrics;
+use Nuimarkets\LaravelSharedUtils\Http\Middleware\RequestMetrics;
 use Orchestra\Testbench\TestCase;
 
 class RequestMetricsTest extends TestCase
@@ -17,7 +16,7 @@ class RequestMetricsTest extends TestCase
         parent::setUp();
         $this->middleware = new RequestMetrics();
     }
-    
+
     public function testHandleLogsRequestMetrics()
     {
 

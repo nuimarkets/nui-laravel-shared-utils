@@ -1,18 +1,20 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\HttpController;
+namespace Nuimarkets\LaravelSharedUtils\Http\Controllers;
 
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Storage;
 
-
+/**
+ * Detailed Health Checks
+ */
 class HealthCheckController extends Controller
 {
     /**
@@ -204,7 +206,7 @@ class HealthCheckController extends Controller
                 3.0,
                 null,
                 false,
-                0
+                0,
             );
 
             if (!$connection->isConnected()) {

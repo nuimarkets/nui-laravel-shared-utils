@@ -26,7 +26,7 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
             self::HEADER_FORMAT,
             $className,
             $record['level_name'],
-            $record['message']
+            $record['message'],
         );
 
         $output = $this->colorize($headerLine, $record['level'], $colorScheme);
@@ -59,12 +59,12 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
         $lines = explode("\n", $dataTree);
 
         $coloredLines = array_map(
-            function($line) use ($debugColor, $reset) {
+            function ($line) use ($debugColor, $reset) {
                 $truncated = strlen($line) > self::MAX_LINE_LENGTH;
                 $truncatedLine = substr($line, 0, self::MAX_LINE_LENGTH - ($truncated ? 3 : 0));
                 return $debugColor . $truncatedLine . ($truncated ? '...' : '') . $reset;
             },
-            $lines
+            $lines,
         );
 
         return implode("\n", $coloredLines) . "\n";
@@ -128,14 +128,14 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
      */
     protected function formatValue(mixed $value): string
     {
-        return match(true) {
+        return match (true) {
             is_null($value) => 'null',
             is_bool($value) => $value ? 'true' : 'false',
             is_scalar($value) => (string) $value,
             is_array($value) => $this->formatArray($value),
             $value instanceof JsonSerializable => json_encode($value),
             is_object($value) => 'Object(' . get_class($value) . ')',
-            default => '[Unknown Type]'
+            default => '[Unknown Type]',
         };
     }
 
