@@ -1,11 +1,14 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\HttpMiddleware;
+namespace Nuimarkets\LaravelSharedUtils\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Request Metrics
+ */
 class RequestMetrics
 {
     public function handle(Request $request, Closure $next)

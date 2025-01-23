@@ -4,6 +4,9 @@ namespace Nuimarkets\LaravelSharedUtils\Logging;
 
 use Monolog\Processor\ProcessorInterface;
 
+/**
+ * Log Processor for PHP Source Location
+ */
 class SourceLocationProcessor implements ProcessorInterface
 {
 
