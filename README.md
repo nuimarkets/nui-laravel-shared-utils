@@ -24,6 +24,5 @@ composer require nuimarkets/laravel-shared-utils
 | `Nuimarkets\LaravelSharedUtils\Logging` | `SourceLocationProcessor` | Log Processor for PHP Source Location |
 | `Nuimarkets\LaravelSharedUtils\Http\Requests` | `BaseFormRequest` | Base Form Request - logging & error handling bits |
 | `Nuimarkets\LaravelSharedUtils\Http\Controllers` | `ErrorTestController` | Test exception handling by using /test-error?exception= |
-| `Nuimarkets\LaravelSharedUtils\Http\Controllers` | `BaseFormRequest` |  |
 | `Nuimarkets\LaravelSharedUtils\Http\Controllers` | `HealthCheckController` | Detailed Health Checks |
 | `Nuimarkets\LaravelSharedUtils\Http\Middleware` | `RequestMetrics` | Request Metrics |

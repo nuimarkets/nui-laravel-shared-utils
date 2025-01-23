@@ -2,7 +2,6 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Exceptions;
 
-
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**

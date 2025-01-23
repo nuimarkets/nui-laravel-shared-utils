@@ -16,7 +16,7 @@ class RequestMetricsTest extends TestCase
         parent::setUp();
         $this->middleware = new RequestMetrics();
     }
-    
+
     public function testHandleLogsRequestMetrics()
     {
 

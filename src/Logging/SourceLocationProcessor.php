@@ -9,7 +9,6 @@ use Monolog\Processor\ProcessorInterface;
  */
 class SourceLocationProcessor implements ProcessorInterface
 {
-
     public function __invoke(array $record): array
     {
 

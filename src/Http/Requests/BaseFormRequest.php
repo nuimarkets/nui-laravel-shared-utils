@@ -28,13 +28,14 @@ abstract class BaseFormRequest extends FormRequest
      */
     public function validateResolved(): void
     {
+        parent::validateResolved();
+
         Log::debug(class_basename(get_class($this)) . ".rules()", [
             'data' => $this->all(),
             'headers' => $this->headers->all(),
             'route' => $this->method() . ' ' . $this->url(),
         ]);
 
-        parent::validateResolved();
     }
 
     protected function failedValidation(Validator $validator)

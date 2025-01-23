@@ -51,7 +51,7 @@ class ErrorTestController extends Controller
                     ],
                     extra: [
                         'misc' => 123,
-                    ]
+                    ],
                 );
             case '404':
                 throw new NotFoundHttpException(); // Symfony

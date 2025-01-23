@@ -206,7 +206,7 @@ class HealthCheckController extends Controller
                 3.0,
                 null,
                 false,
-                0
+                0,
             );
 
             if (!$connection->isConnected()) {
