@@ -7,7 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
-use Nuimarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
+use Nuimarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use Nuimarkets\LaravelSharedUtils\Http\Requests\BaseFormRequest;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -36,14 +36,14 @@ class ErrorTestController extends Controller
             case '400':
             case 'BadRequestHttpException':
                 throw new BadRequestHttpException('Test BadRequestHttpException'); // Symfony
-            case 'BadHttpRequestException':
-                throw new BadHttpRequestException('Test BadHttpRequestException'); // app one (default=400)
+            case 'BaseHttpRequestException':
+                throw new BaseHttpRequestException('Test BaseHttpRequestException'); // app one (default=400)
             case 'BadHttpRequestException500':
-                throw new BadHttpRequestException('Test BadHttpRequestException (500)', 500);
+                throw new BaseHttpRequestException('Test BaseHttpRequestException (500)', 500);
             case 'BadHttpRequestExceptionPrevious':
                 $exception = new \PDOException("testing 123");
-                throw new BadHttpRequestException(
-                    'Test BadHttpRequestException (Previous)',
+                throw new BaseHttpRequestException(
+                    'Test BaseHttpRequestException (Previous)',
                     500,
                     $exception,
                     tags: [

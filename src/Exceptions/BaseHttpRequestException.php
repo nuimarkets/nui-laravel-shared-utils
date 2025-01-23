@@ -14,14 +14,14 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  *  - preserving previous exception if its re throwing
  *
  * Usage:
- *      new BadHttpRequestException('Failed to create order', 500, $exception,
+ *      new BaseHttpRequestException('Failed to create order', 500, $exception,
  *              tags: ['test' => 'tag'], extra: ['misc' => 123]);
  *
  *  Note it's recommended to NOT use $e->getMessage() for message to avoid exposing the internal exception info in response
  *
  * @package App\Exceptions
  */
-class BadHttpRequestException extends HttpException
+class BaseHttpRequestException extends HttpException
 {
     protected ?\Throwable $previous = null;
     protected array $tags = [];

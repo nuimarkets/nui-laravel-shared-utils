@@ -27,6 +27,7 @@ class HealthCheckController extends Controller
      */
     public function detailed(): JsonResponse
     {
+
         $checks = [
             'mysql' => $this->checkMysql(),
             'redis' => $this->checkRedis(),
