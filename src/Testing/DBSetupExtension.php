@@ -2,13 +2,15 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Testing;
 
-use Exception;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log;
+use Nuimarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+use Exception;
 use PHPUnit\Runner\BeforeFirstTestHook;
 
 /**
@@ -46,8 +48,8 @@ class DBSetupExtension implements
         });
 
         $app->singleton(
-            \Illuminate\Contracts\Debug\ExceptionHandler::class,
-            \App\Exceptions\Handler::class
+            ExceptionHandler::class,
+            BaseErrorHandler::class
         );
 
         // Set the application instance for Facades
@@ -104,6 +106,9 @@ class DBSetupExtension implements
 
         // Create a new connection without specifying a database
         $tempConnection = Config::get('database.connections.' . env('DB_CONNECTION'));
+
+        // Temporarily set to mysql so it won't complain about missing DB :(
+        $tempConnection['database'] = "mysql";
 
         Config::set('database.connections.temp', $tempConnection);
 
