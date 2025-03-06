@@ -34,6 +34,7 @@ class HealthCheckController extends Controller
             'queue' => $this->checkQueue(),
             'storage' => $this->checkStorage(),
             'cache' => $this->checkCache(),
+            'opCache' => $this->checkOpCache(),
         ];
 
         // Only add RabbitMQ check if the package is available
@@ -311,6 +312,57 @@ class HealthCheckController extends Controller
                 'message' => 'Cache system failed: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Check Cache functionality
+     */
+    protected function checkOpCache(): array
+    {
+        // Check if OPcache is enabled
+        if (function_exists('opcache_get_configuration') && function_exists('opcache_get_status')) {
+            $opcacheConfig = opcache_get_configuration();
+            $opcacheStatus = opcache_get_status();
+
+            return [
+                'status' => 'ok',
+                'message' => 'OPcache operational',
+                'memory_usage' => [
+                    'used_memory' => $this->formatBytes($opcacheStatus['memory_usage']['used_memory'] ?? 0),
+                    'free_memory' => $this->formatBytes($opcacheStatus['memory_usage']['free_memory'] ?? 0),
+                    'wasted_memory' => $this->formatBytes($opcacheStatus['memory_usage']['wasted_memory'] ?? 0),
+                    'current_wasted_percentage' => ($opcacheStatus['memory_usage']['current_wasted_percentage'] ?? 0) . '%',
+                ],
+                'hit_rate' => ($opcacheStatus['opcache_statistics']['hits'] ?? 0) /
+                    (($opcacheStatus['opcache_statistics']['hits'] ?? 0) +
+                        ($opcacheStatus['opcache_statistics']['misses'] ?? 1)) * 100 . '%',
+                'configuration' => [
+                    'memory_consumption' => $this->formatBytes($opcacheConfig['directives']['opcache.memory_consumption'] ?? 0),
+                    'interned_strings_buffer' => ($opcacheConfig['directives']['opcache.interned_strings_buffer'] ?? 0) . 'MB',
+                    'max_accelerated_files' => $opcacheConfig['directives']['opcache.max_accelerated_files'] ?? 0,
+                    'revalidate_freq' => $opcacheConfig['directives']['opcache.revalidate_freq'] ?? 0,
+                    'fast_shutdown' => (bool)($opcacheConfig['directives']['opcache.fast_shutdown'] ?? false),
+                    'enable_cli' => (bool)($opcacheConfig['directives']['opcache.enable_cli'] ?? false),
+                ],
+            ];
+        } else {
+           return [
+                'status' => 'error',
+                'message' => 'OPcache extension not available',
+            ];
+        }
+
+    }
+
+    private function formatBytes($bytes, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 
     /**
