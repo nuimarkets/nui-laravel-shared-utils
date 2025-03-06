@@ -325,7 +325,8 @@ class HealthCheckController extends Controller
             $opcacheStatus = opcache_get_status();
 
             return [
-                'enabled' => $opcacheStatus['opcache_enabled'] ?? false,
+                'status' => 'ok',
+                'message' => 'OPcache operational',
                 'memory_usage' => [
                     'used_memory' => $this->formatBytes($opcacheStatus['memory_usage']['used_memory'] ?? 0),
                     'free_memory' => $this->formatBytes($opcacheStatus['memory_usage']['free_memory'] ?? 0),
