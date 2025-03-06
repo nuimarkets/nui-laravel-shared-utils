@@ -18,7 +18,6 @@ composer require nuimarkets/laravel-shared-utils
 ### Testing
 
 * `DBSetupExtension` - DB Setup Extension for phpUnit to drop/create testing database with migrations run
-* `bootstrap` - 
 
 ### Exceptions
 
@@ -37,7 +36,7 @@ composer require nuimarkets/laravel-shared-utils
 
 * `BaseFormRequest` - Base Form Request - logging & error handling bits
 * `ErrorTestController` - Test exception handling by using /test-error?exception=
-* `HomeController` - 
+* `HomeController` - Home Route (hello/health check)
 * `HealthCheckController` - Detailed Health Checks
 * `RequestMetrics` - Request Metrics
 
