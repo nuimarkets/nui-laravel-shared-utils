@@ -22,11 +22,28 @@ class HealthCheckController extends Controller
      */
     protected const DEFAULT_TIMEOUT = 5;
 
+    protected function isAuthorizedForDetailedInfo(): bool
+    {
+        // Example implementation - update this logic to suit your security requirements.
+        $allowedEnvs = ['local', 'development'];
+        $hasValidToken = request()->has('token') &&
+                         request()->get('token') === env('HEALTH_CHECK_DETAILED_TOKEN');
+
+        return in_array(env('APP_ENV'), $allowedEnvs) || $hasValidToken;
+    }
+
     /**
      * Perform all health checks and return results
      */
     public function detailed(): JsonResponse
     {
+
+        if (!$this->isAuthorizedForDetailedInfo()) {
+            return new JsonResponse([
+                'status' => 'restricted',
+                'message' => 'Access to detailed information is restricted',
+            ], 401);
+        }
 
         $checks = [
             'mysql' => $this->checkMysql(),
@@ -195,7 +212,7 @@ class HealthCheckController extends Controller
         try {
             $start = microtime(true);
 
-            $connection = new AMQPStreamConnection(
+            $connection = new \PhpAmqpLib\Connection\AMQPStreamConnection(
                 config('rabbit.host'),
                 config('rabbit.port', 5672),
                 config('rabbit.username'),
@@ -363,12 +380,12 @@ class HealthCheckController extends Controller
                     'interned_strings_buffer' => ($opcacheConfig['directives']['opcache.interned_strings_buffer'] ?? 0) . 'MB',
                     'max_accelerated_files' => $opcacheConfig['directives']['opcache.max_accelerated_files'] ?? 0,
                     'revalidate_freq' => $opcacheConfig['directives']['opcache.revalidate_freq'] ?? 0,
-                    'fast_shutdown' => (bool)($opcacheConfig['directives']['opcache.fast_shutdown'] ?? false),
-                    'enable_cli' => (bool)($opcacheConfig['directives']['opcache.enable_cli'] ?? false),
+                    'fast_shutdown' => (bool) ($opcacheConfig['directives']['opcache.fast_shutdown'] ?? false),
+                    'enable_cli' => (bool) ($opcacheConfig['directives']['opcache.enable_cli'] ?? false),
                 ],
             ];
         } else {
-           return [
+            return [
                 'status' => 'error',
                 'message' => 'OPcache extension not available',
             ];
