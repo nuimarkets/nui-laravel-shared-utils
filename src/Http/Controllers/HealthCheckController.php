@@ -35,6 +35,7 @@ class HealthCheckController extends Controller
             'storage' => $this->checkStorage(),
             'cache' => $this->checkCache(),
             'opCache' => $this->checkOpCache(),
+            'php' => $this->getPhpEnvironment(),
         ];
 
         // Only add RabbitMQ check if the package is available
@@ -312,6 +313,27 @@ class HealthCheckController extends Controller
                 'message' => 'Cache system failed: ' . $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Get PHP runtime and environment details
+     */
+    protected function getPhpEnvironment(): array
+    {
+        return [
+            'php_version' => phpversion(),
+            'php_sapi' => php_sapi_name(),
+            'memory_limit' => ini_get('memory_limit'),
+            'max_execution_time' => ini_get('max_execution_time') . ' seconds',
+            'loaded_extensions' => implode(', ', get_loaded_extensions()),
+            'php_ini_paths' => [
+                'loaded_php_ini' => php_ini_loaded_file(),
+                'additional_ini_files' => php_ini_scanned_files(),
+            ],
+            'realpath_cache_size' => ini_get('realpath_cache_size'),
+            'output_buffering' => ini_get('output_buffering'),
+            'zend_enable_gc' => ini_get('zend.enable_gc'),
+        ];
     }
 
     /**
