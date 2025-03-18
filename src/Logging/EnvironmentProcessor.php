@@ -47,7 +47,7 @@ class EnvironmentProcessor implements ProcessorInterface
             // Add command-specific information if it's a console command
             if (app()->runningInConsole()) {
                 global $argv;
-                $extraInfo['command'] = $argv[1] ?? '';
+                $extraInfo['command.name'] = $argv[1] ?? '';
                 $extraInfo['command.arguments'] = json_encode(array_slice($argv, 2) ?? []);
             }
         }
