@@ -15,7 +15,8 @@
     "php": "^8.2",
     "bramus/monolog-colored-line-formatter": "~3.0.0",
     "monolog/monolog": "^2.0",
-    "laravel/framework": "^9.0|^10.0"
+    "laravel/framework": "^9.0|^10.0",
+    "sentry/sentry-laravel": "^4.13"
   },
   "suggest": {
     "php-amqplib/php-amqplib": "Required for RabbitMQ health checks (~3.5.0)",
