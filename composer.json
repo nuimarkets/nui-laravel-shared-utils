@@ -15,11 +15,11 @@
     "php": "^8.2",
     "bramus/monolog-colored-line-formatter": "~3.0.0",
     "monolog/monolog": "^2.0",
-    "laravel/framework": "^9.0|^10.0"
+    "laravel/framework": "^9.0|^10.0",
+    "sentry/sentry-laravel": "^4.11"
   },
   "suggest": {
-    "php-amqplib/php-amqplib": "Required for RabbitMQ health checks (~3.5.0)",
-    "sentry/sentry-laravel": "Optional: Error tracking and monitoring (~4.11.0)"
+    "php-amqplib/php-amqplib": "Required for RabbitMQ health checks (~3.5.0)"
   },
   "scripts": {
     "format": "php-cs-fixer fix",

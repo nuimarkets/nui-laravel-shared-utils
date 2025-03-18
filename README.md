@@ -15,6 +15,10 @@ composer require nuimarkets/laravel-shared-utils
 
 ## Classes
 
+### Services
+
+* `SentryEventHandler` - Sentry Event Handler
+
 ### Testing
 
 * `DBSetupExtension` - DB Setup Extension for phpUnit to drop/create testing database with migrations run
