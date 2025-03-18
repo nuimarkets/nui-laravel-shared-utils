@@ -12,11 +12,47 @@ class EnvironmentProcessor implements ProcessorInterface
     public function __invoke(array $record): array
     {
 
-        $record['extra'] = array_merge($record['extra'], [
+        $extraInfo = [
             'environment' => env('APP_ENV', 'testing'),
             'hostname' => gethostname(),
-            'correlation_id' => request()?->header('X-Request-ID', '') ?? '', // todo use Laravel's request helper
-        ]);
+            // Git info
+            'git.commit' => env('GIT_COMMIT'),
+            'git.branch' => env('GIT_BRANCH'),
+            'git.tag' => env('GIT_TAG'),
+        ];
+
+        // Add request-specific information only if in a web request context
+        if (app()->bound('request') && request()) {
+            $amzTraceId = request()->header('x-amzn-trace-id', '');
+            preg_match('/Root=(1-[a-z0-9]+-[a-z0-9]+)/', $amzTraceId, $matches);
+
+            // Get IP from x-forwarded-for header if available, or fall back to request->ip()
+            $ip = request()->header('x-forwarded-for') ?: request()->ip();
+            // If x-forwarded-for contains multiple IPs, get the first one (client IP)
+            if (strpos($ip, ',') !== false) {
+                $ip = trim(explode(',', $ip)[0]);
+            }
+
+            $extraInfo = array_merge($extraInfo, [
+                'request.amz-trace-id' => $matches[1] ?? '',
+                'request.ip' => $ip ?? '',
+                'request.method' => request()->method() ?? '',
+                'request.url' => request()->url() ?? '',
+                'request.path' => request()->path() ?? '',
+                'request.route' => request()->route()?->getName() ?? '',
+                'request.query' => request()->getQueryString() ?? '',
+                'request.user-agent' => request()->userAgent() ?? '',
+            ]);
+        } else {
+            // Add command-specific information if it's a console command
+            if (app()->runningInConsole()) {
+                global $argv;
+                $extraInfo['command.name'] = $argv[1] ?? '';
+                $extraInfo['command.arguments'] = json_encode(array_slice($argv, 2) ?? []);
+            }
+        }
+
+        $record['extra'] = array_merge($record['extra'], $extraInfo);
 
         return $record;
     }
