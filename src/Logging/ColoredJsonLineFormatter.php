@@ -36,6 +36,10 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
             $output .= $this->formatContext($record['context'], $colorScheme);
         }
 
+        if (!empty($record['extra'])  && env('LOG_PRETTY_SHOW_EXTRA', false)) {
+            $output .= $this->formatContext($record['extra'], $colorScheme);
+        }
+
         return $output . "\n";
     }
 

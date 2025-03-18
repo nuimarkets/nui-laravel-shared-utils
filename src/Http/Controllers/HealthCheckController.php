@@ -417,7 +417,9 @@ class HealthCheckController extends Controller
             'QUEUE_CONNECTION' => env('QUEUE_CONNECTION'),
             'CACHE_DRIVER' => env('CACHE_DRIVER'),
             'RABBITMQ_HOST' => env('RABBITMQ_HOST'),
-
+            'GIT_COMMIT' => env('GIT_COMMIT'),
+            'GIT_BRANCH' => env('GIT_BRANCH'),
+            'GIT_TAG' => env('GIT_TAG'),
 
         ];
 
