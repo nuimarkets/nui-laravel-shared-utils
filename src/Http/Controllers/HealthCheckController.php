@@ -218,15 +218,20 @@ class HealthCheckController extends Controller
                 config('rabbit.username'),
                 config('rabbit.password'),
                 config('rabbit.vhost', '/'),
-                false,
+                config('rabbit.use_ssl', false),
                 'AMQPLAIN',
                 null,
                 'en_US',
-                3.0,
-                3.0,
+                3.0, // Connection timeout
+                3.0, // Read write timeout
                 null,
                 false,
                 0,
+                config('rabbit.use_ssl') ? [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                ] : []
             );
 
             if (!$connection->isConnected()) {
