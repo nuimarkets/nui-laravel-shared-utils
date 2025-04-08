@@ -227,6 +227,7 @@ class HealthCheckController extends Controller
                 null,
                 false,
                 0,
+                3.0,  // Channel RPC timeout
                 config('rabbit.use_ssl') ? [
                     'verify_peer' => false,
                     'verify_peer_name' => false,
