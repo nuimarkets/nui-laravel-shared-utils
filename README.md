@@ -32,6 +32,7 @@ composer require nuimarkets/laravel-shared-utils
 
 * `SensitiveDataProcessor` - Log Processor for sanitizing sensitive data in log records
 * `EnvironmentProcessor` - Log Processor for environment info etc
+* `SlackHandler` - Slack Handler
 * `ColoredJsonLineFormatter` - Formats log records as colored JSON lines with improved readability.
 * `SentryHandler` - Sentry Error Handler with support for tags and exceptions
 * `SourceLocationProcessor` - Log Processor for PHP Source Location
