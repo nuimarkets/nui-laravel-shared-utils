@@ -212,28 +212,38 @@ class HealthCheckController extends Controller
         try {
             $start = microtime(true);
 
-            $connection = new \PhpAmqpLib\Connection\AMQPStreamConnection(
+            $connectionClass = config('rabbit.use_ssl')
+                ? \PhpAmqpLib\Connection\AMQPSSLConnection::class
+                : \PhpAmqpLib\Connection\AMQPStreamConnection::class;
+
+            // Set up common connection parameters
+            $connectionParams = [
                 config('rabbit.host'),
-                config('rabbit.port', 5672),
+                config('rabbit.port'),
                 config('rabbit.username'),
                 config('rabbit.password'),
                 config('rabbit.vhost', '/'),
-                config('rabbit.use_ssl', false),
-                'AMQPLAIN',
-                null,
-                'en_US',
-                3.0, // Connection timeout
-                3.0, // Read write timeout
-                null,
-                false,
-                0,
-                3.0,  // Channel RPC timeout
-                config('rabbit.use_ssl') ? [
+            ];
+
+            // Add SSL options if using SSL
+            if (config('rabbit.use_ssl')) {
+                $sslOptions = [
                     'verify_peer' => false,
                     'verify_peer_name' => false,
                     'allow_self_signed' => true
-                ] : []
-            );
+                ];
+                $connectionParams[] = $sslOptions;
+            }
+
+            // Add common options
+            $connectionParams[] = [
+                'connection_timeout' => 3.0,
+                'read_write_timeout' => 3.0,
+                'heartbeat' => 0
+            ];
+
+            // Create the connection with the appropriate class and parameters
+            $connection = new $connectionClass(...$connectionParams);
 
             if (!$connection->isConnected()) {
                 throw new Exception('Failed to establish connection');
