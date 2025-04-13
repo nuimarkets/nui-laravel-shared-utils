@@ -15,6 +15,17 @@ composer require nuimarkets/laravel-shared-utils
 
 ## Classes
 
+### Console
+
+* `ScheduleRunCommand` - Run scheduled tasks ensuring Log is used for all stdout
+* `TestFailedJob` - 
+* `TestJob` - 
+
+### Jobs
+
+* `TestFailedJob` - 
+* `TestJob` - 
+
 ### Services
 
 * `SentryEventHandler` - Sentry Event Handler
