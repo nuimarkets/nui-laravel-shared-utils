@@ -46,7 +46,6 @@ class HealthCheckController extends Controller
         }
 
         $checks = [
-            'mysql' => $this->checkMysql(),
             'redis' => $this->checkRedis(),
             'queue' => $this->checkQueue(),
             'storage' => $this->checkStorage(),
@@ -54,6 +53,11 @@ class HealthCheckController extends Controller
             'opCache' => $this->checkOpCache(),
             'php' => $this->getPhpEnvironment(),
         ];
+
+        // Only check if database config exists
+        if (file_exists(config_path('database.php')) && config('database.connections')) {
+            $checks['mysql'] =  $this->checkMysql();
+        }
 
         // Only add RabbitMQ check if the package is available
         if (class_exists('PhpAmqpLib\Connection\AMQPStreamConnection')) {
