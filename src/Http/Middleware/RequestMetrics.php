@@ -32,26 +32,13 @@ class RequestMetrics
 
         // Log the metrics
         Log::info('Request end', [
-            'path' => $request->path(),
-            'method' => $request->method(),
-            'route' => $request->route()?->getName(),
-            'status' => $response->getStatusCode(),
-            'duration_ms' => round($duration * 1000, 2),
-            'memory_usage' => $this->formatBytes($memoryUsage),
-            'peak_memory' => $this->formatBytes($peakMemory),
+            'request.status' => $response->getStatusCode(),
+            'request.duration_ms' => round($duration * 1000, 2),
+            'request.memory_usage_mb' => round($memoryUsage / (1024 * 1024), 2),
+            'request.peak_memory_mb' => round($peakMemory / (1024 * 1024), 2),
         ]);
 
         return $response;
     }
 
-    private function formatBytes($bytes)
-    {
-        if ($bytes > 1024 * 1024) {
-            return round($bytes / 1024 / 1024, 2) . 'MB';
-        }
-        if ($bytes > 1024) {
-            return round($bytes / 1024, 2) . 'KB';
-        }
-        return $bytes . 'B';
-    }
 }
