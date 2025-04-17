@@ -20,6 +20,7 @@ composer require nuimarkets/laravel-shared-utils
 * `ScheduleRunCommand` - Run scheduled tasks ensuring Log is used for all stdout
 * `TestFailedJob` - 
 * `TestJob` - 
+* `WorkCommand` - Run queue work jobs ensuring Log is used for all stdout
 
 ### Jobs
 
