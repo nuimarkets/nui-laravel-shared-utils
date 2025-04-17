@@ -113,7 +113,7 @@ class WorkCommand extends BaseWorkCommand
 
     protected function writeOutput($job, $status)
     {
-        Log::channel('stdoutJson')->info("Queue job status update", [
+        Log::info("Queue job status update", [
             'job_class' => $job->resolveName(),
             'status' => $status,
         ]);
