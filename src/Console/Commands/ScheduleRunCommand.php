@@ -17,10 +17,12 @@ use Illuminate\Console\Events\ScheduledTaskFailed;
 /**
  * Run scheduled tasks ensuring Log is used for all stdout
  *
- *   Register in AppServiceProvider
- *     $this->app->singleton('command.schedule.run', function ($app) {
- *       return $app->make(ScheduleRunCommand::class);
- *     });
+ *   Add to Kernel.php
+ *
+ *   protected $commands = [
+ *     ScheduleRunCommand::class,
+ *     WorkCommand::class,
+ *   ];
  *
  */
 class ScheduleRunCommand extends BaseScheduleRunCommand
