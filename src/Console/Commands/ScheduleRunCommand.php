@@ -77,19 +77,9 @@ class ScheduleRunCommand extends BaseScheduleRunCommand
     protected function runEvent($event): void
     {
 
-        $summary = $event->getSummaryForDisplay();
-        $commandName = $event instanceof CallbackEvent
-            ? $summary
-            : trim(
-                str_replace(
-                    [$this->phpBinary, "'artisan' "],
-                    '',
-                    $event->command,
-                ),
-            );
-        $commandName = ltrim($commandName);
+        $commandName = $this->resolveCommandName($event);
 
-        Log::withContext(['command' => $commandName,  "summary" => $summary,]);
+        Log::withContext(['command' => $commandName]);
 
         Log::debug("Starting scheduled task");
 
@@ -114,6 +104,24 @@ class ScheduleRunCommand extends BaseScheduleRunCommand
         }
     }
 
+    protected function resolveCommandName(Event $event): string
+    {
+        $summary = $event->getSummaryForDisplay();
+
+        if ($event instanceof CallbackEvent) {
+            return $summary;
+        }
+
+        // Strip out the PHP binary and the 'artisan' wrapper.
+        $name = str_replace(
+            [$this->phpBinary, "'artisan' "],
+            '',
+            $event->command,
+        );
+
+        return ltrim($name);
+    }
+
     /**
      * Run a scheduled event that should only run on one server.
      *
@@ -125,8 +133,8 @@ class ScheduleRunCommand extends BaseScheduleRunCommand
         if ($this->schedule->serverShouldRun($event, $this->startedAt)) {
             $this->runEvent($event);
         } else {
-            $summary = $event->getSummaryForDisplay();
-            Log::info("Skipping scheduled task on this server; already executed elsewhere.", ['command' => $summary]);
+            $commandName = $this->resolveCommandName($event);
+            Log::info("Skipping scheduled task on this server; already executed elsewhere.", ['command' => $commandName]);
             $this->dispatcher->dispatch(new ScheduledTaskSkipped($event));
         }
     }
