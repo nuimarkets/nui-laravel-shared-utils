@@ -29,15 +29,6 @@ class SentryEventHandler
         // Get the exception from the event
         $exception = $event->getExceptions()[0] ?? null;
 
-        Log::debug(
-            "Sentry before event",
-            [
-                'msg' => $event->getMessage(),
-                'extra' => $event->getExtra(),
-                'exception' => $exception?->getValue(),
-            ],
-        );
-
         // Check if it's a FatalError related to timeout
         if ($exception &&
             $exception->getType() === 'Symfony\Component\ErrorHandler\Error\FatalError' &&
