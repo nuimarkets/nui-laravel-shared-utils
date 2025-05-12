@@ -17,6 +17,11 @@ class RequestMetrics
         $startTime = microtime(true);
         $startMemory = memory_get_usage();
 
+        // Log the metrics
+        Log::info('Request start', [
+            'request.memory_start_mb' => round($startMemory / (1024 * 1024), 2),
+        ]);
+
         // Handle the request
         $response = $next($request);
 
