@@ -48,7 +48,7 @@ class EnvironmentProcessor implements ProcessorInterface
                     'request.method' => request()->method() ?? '',
                     'request.url' => request()->url() ?? '',
                     'request.path' => request()->path() ?? '',
-                    'request.route' => request()->route()?->getName() ?? '',
+                    'request.route' => request()->route()?->uri() ?? '',
                     'request.query' => request()->getQueryString() ?? '',
                     'request.user-agent' => request()->userAgent() ?? '',
                 ]);
