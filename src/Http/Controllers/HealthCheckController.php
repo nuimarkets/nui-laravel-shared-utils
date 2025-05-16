@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * Detailed Health Checks
@@ -54,9 +55,29 @@ class HealthCheckController extends Controller
             'php' => $this->getPhpEnvironment(),
         ];
 
-        // Only check if database config exists
+        // Database checks (MySQL, PostgreSQL, etc.)
         if (file_exists(config_path('database.php')) && config('database.connections')) {
-            $checks['mysql'] =  $this->checkMysql();
+            foreach (config('database.connections') as $connName => $connConfig) {
+                // skip any testing schemas
+                if (Str::contains($connName, 'test')) {
+                    continue;
+                }
+
+                switch ($connConfig['driver']) {
+                    case 'mysql':
+                        $checks[$connName] = $this->checkMysql($connName);
+                        break;
+
+                    case 'pgsql':
+                        $checks[$connName] = $this->checkPostgres($connName);
+                        break;
+
+                    default:
+                        // optional: warn on unsupported drivers
+                        Log::warning("Health check skipped for unsupported driver [{$connConfig['driver']}] on connection [{$connName}].");
+                        break;
+                }
+            }
         }
 
         // Only add RabbitMQ check if the package is available
@@ -82,30 +103,69 @@ class HealthCheckController extends Controller
 
     /**
      * Check MySQL connection
+     * @param string $connectionName
+     * @return string[]
      */
-    protected function checkMysql(): array
+    protected function checkMysql(string $connectionName): array
     {
+        $conn = DB::connection($connectionName);
+
         try {
             $start = microtime(true);
-            DB::connection()->getPdo();
+            $conn->getPdo();
             $duration = microtime(true) - $start;
 
             return [
-                'status' => 'ok',
+                'status'   => 'ok',
                 'duration' => round($duration * 1000, 2) . 'ms',
-                'message' => 'MySQL connection successful',
+                'message'  => "MySQL [{$connectionName}] connection successful",
             ];
         } catch (Exception $e) {
-            Log::error('Health check failed: MySQL connection error', [
-                'error' => $e->getMessage(),
+            Log::error("Health check failed: MySQL connection error for [{$connectionName}]", [
+                'error'      => $e->getMessage(),
+                'connection' => $connectionName,
             ]);
 
             return [
-                'status' => 'error',
-                'message' => 'MySQL connection failed: ' . $e->getMessage(),
+                'status'  => 'error',
+                'message' => "MySQL [{$connectionName}] connection failed: " . $e->getMessage(),
             ];
         }
     }
+
+    /**
+     * Check PostGreSQL connection
+     * @param string $connectionName
+     * @return string[]
+     */
+    protected function checkPostgres(string $connectionName): array
+    {
+        $conn = DB::connection($connectionName);
+
+        try {
+            $start = microtime(true);
+            $conn->getPdo();
+            $duration = microtime(true) - $start;
+
+            return [
+                'status'   => 'ok',
+                'duration' => round($duration * 1000, 2) . 'ms',
+                'message'  => "PostgreSQL [{$connectionName}] connection successful",
+            ];
+        } catch (Exception $e) {
+            Log::error("Health check failed: PostgreSQL connection error for [{$connectionName}]", [
+                'error'      => $e->getMessage(),
+                'connection' => $connectionName,
+            ]);
+
+            return [
+                'status'  => 'error',
+                'message' => "PostgreSQL [{$connectionName}] connection failed: " . $e->getMessage(),
+            ];
+        }
+    }
+
+
 
     /**
      * Check Redis connection
@@ -234,7 +294,7 @@ class HealthCheckController extends Controller
                 $sslOptions = [
                     'verify_peer' => false,
                     'verify_peer_name' => false,
-                    'allow_self_signed' => true
+                    'allow_self_signed' => true,
                 ];
                 $connectionParams[] = $sslOptions;
             }
@@ -243,7 +303,7 @@ class HealthCheckController extends Controller
             $connectionParams[] = [
                 'connection_timeout' => 3.0,
                 'read_write_timeout' => 3.0,
-                'heartbeat' => 0
+                'heartbeat' => 0,
             ];
 
             // Create the connection with the appropriate class and parameters

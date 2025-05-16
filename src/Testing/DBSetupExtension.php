@@ -3,7 +3,9 @@
 namespace Nuimarkets\LaravelSharedUtils\Testing;
 
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Connectors\ConnectionFactory;
 use Illuminate\Database\DatabaseManager;
+use Illuminate\Foundation\Bootstrap\LoadConfiguration;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +23,9 @@ class DBSetupExtension implements
 {
     use CreatesApplication;
 
+    /**
+     * @throws Exception
+     */
     public function executeBeforeFirstTest(): void
     {
 
@@ -36,11 +41,11 @@ class DBSetupExtension implements
 
 
         $app->bootstrapWith([
-            \Illuminate\Foundation\Bootstrap\LoadConfiguration::class,
+            LoadConfiguration::class,
         ]);
 
         $app->singleton('db.factory', function () use ($app) {
-            return new \Illuminate\Database\Connectors\ConnectionFactory($app);
+            return new ConnectionFactory($app);
         });
 
         app()->singleton('db', function () use ($app) {
@@ -49,7 +54,7 @@ class DBSetupExtension implements
 
         $app->singleton(
             ExceptionHandler::class,
-            BaseErrorHandler::class
+            BaseErrorHandler::class,
         );
 
         // Set the application instance for Facades
@@ -64,7 +69,21 @@ class DBSetupExtension implements
 
         Log::debug("Testing connection", [$testing]);
 
+        $this->runMigrations();
 
+        $this->verifyMigrations();
+
+        $this->runSeeder();
+
+        $endTime = microtime(true);
+        $executionTime = round(($endTime - $startTime) * 1000);
+
+        Log::warning("DB Setup done in {$executionTime}ms (migrate:fresh + db:seed)");
+
+    }
+
+    protected function runMigrations(): void
+    {
         try {
             Log::info("Running migrate:fresh");
             Artisan::call('migrate:fresh');
@@ -77,9 +96,10 @@ class DBSetupExtension implements
             ]);
             throw $exception;
         }
+    }
 
-        $this->verifyMigrations();
-
+    protected function runSeeder(): void
+    {
         try {
             Log::info("Running db:seed");
             Artisan::call('db:seed');
@@ -92,13 +112,6 @@ class DBSetupExtension implements
             ]);
             throw $exception;
         }
-
-
-        $endTime = microtime(true);
-        $executionTime = round(($endTime - $startTime) * 1000);
-
-        Log::warning("DB Setup done in {$executionTime}ms (migrate:fresh + db:seed)");
-
     }
 
     protected function setTemporaryDefaultConnection(): void
@@ -107,8 +120,8 @@ class DBSetupExtension implements
         // Create a new connection without specifying a database
         $tempConnection = Config::get('database.connections.' . env('DB_CONNECTION'));
 
-        // Temporarily set to mysql so it won't complain about missing DB :(
-        $tempConnection['database'] = "mysql";
+        // Temporarily set to null so it won't complain about missing DB :(
+        $tempConnection['database'] = null;
 
         Config::set('database.connections.temp', $tempConnection);
 
@@ -122,18 +135,24 @@ class DBSetupExtension implements
 
         $dbName = getenv("DB_DATABASE_TEST");
 
+        $connection = app('db')->connection();
+        $grammar    = $connection->getQueryGrammar();
+
         log::debug("Resetting the test database $dbName ...");
+
+        // wrap() to use backticks on MySQL, double-quotes on Postgres, etc.
+        $quotedName = $grammar->wrap($dbName);
 
         // Drop the database if it exists
 
-        app('db')->unprepared("DROP DATABASE IF EXISTS `{$dbName}`");
-        app('db')->unprepared("CREATE DATABASE `{$dbName}`");
+        $connection->unprepared("DROP DATABASE IF EXISTS {$quotedName}");
+        $connection->unprepared("CREATE DATABASE {$quotedName}");
 
         log::info("Dropped/Created database: {$dbName}");
 
     }
 
-    protected function verifyMigrations()
+    protected function verifyMigrations(): void
     {
         // Get all migration files and extract their base names
         $migrationFiles = collect(glob(database_path('migrations') . '/*.php'))
