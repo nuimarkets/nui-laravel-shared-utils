@@ -140,6 +140,12 @@ class DBSetupExtension implements
 
         log::debug("Resetting the test database $dbName ...");
 
+        if ($connection->getDriverName() === 'pgsql') {
+            Log::debug("Terminating pg connections on $dbName");
+            $connection->unprepared("SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                                 WHERE datname = '{$dbName}' AND pid <> pg_backend_pid(); ");
+        }
+
         // wrap() to use backticks on MySQL, double-quotes on Postgres, etc.
         $quotedName = $grammar->wrap($dbName);
 
