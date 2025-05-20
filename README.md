@@ -52,6 +52,7 @@ composer require nuimarkets/laravel-shared-utils
 ### Http
 
 * `BaseFormRequest` - Base Form Request - logging & error handling bits
+* `ClearLadaAndResponseCacheController` - Clear Lada and Response Cache
 * `ErrorTestController` - Test exception handling by using /test-error?exception=
 * `HomeController` - Home Route (hello/health check)
 * `HealthCheckController` - Detailed Health Checks

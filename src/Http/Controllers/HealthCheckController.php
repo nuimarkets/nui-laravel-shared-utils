@@ -25,7 +25,6 @@ class HealthCheckController extends Controller
 
     protected function isAuthorizedForDetailedInfo(): bool
     {
-        // Example implementation - update this logic to suit your security requirements.
         $allowedEnvs = ['local', 'development'];
         $hasValidToken = request()->has('token') &&
                          request()->get('token') === env('HEALTH_CHECK_DETAILED_TOKEN');
