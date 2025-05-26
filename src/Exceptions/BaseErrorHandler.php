@@ -2,7 +2,6 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Exceptions;
 
-
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
@@ -131,13 +130,13 @@ class BaseErrorHandler extends ExceptionHandler
             [
                 ...$errorData['errors'],
                 'exception' => $e,
-            ]
+            ],
         );
 
         parent::report($e);
     }
 
-    public function render($request, Throwable $e): JsonResponse
+    public function render($request, Throwable $e): Response
     {
         $errorData = $this->getFormattedError($e);
 
