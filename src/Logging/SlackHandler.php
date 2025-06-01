@@ -32,6 +32,9 @@ use Monolog\Handler\SlackWebhookHandler;
  */
 class SlackHandler extends SlackWebhookHandler
 {
+
+    protected bool $disabled = false;
+
     /**
      * Create a new SlackHandler instance.
      *
@@ -41,6 +44,15 @@ class SlackHandler extends SlackWebhookHandler
      */
     public function __construct($webhookUrl, $level)
     {
+
+        if (empty($webhookUrl)) {
+            // No webhook configured: disable this handler
+            $this->disabled = true;
+            // Still set the level property so isHandling(...) can compare if needed
+            $this->level = $level;
+            return;
+        }
+
         parent::__construct(
             $webhookUrl,
             null,
@@ -56,6 +68,10 @@ class SlackHandler extends SlackWebhookHandler
 
     public function isHandling(array $record): bool
     {
+
+        if ($this->disabled) {
+            return false;
+        }
 
         if ($this->level === Logger::ERROR && $record['level'] >= Logger::ERROR) {
             return true;
@@ -76,6 +92,10 @@ class SlackHandler extends SlackWebhookHandler
 
     protected function write(array $record): void
     {
+
+        if ($this->disabled) {
+            return;
+        }
 
         // Filter out null values from context
         if (isset($record['extra']) && is_array($record['extra'])) {
