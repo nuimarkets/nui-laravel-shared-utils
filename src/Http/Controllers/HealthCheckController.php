@@ -490,12 +490,20 @@ class HealthCheckController extends Controller
     {
 
         return [
-            'APP_ENV' => env('APP_ENV'),
+            'app.env' => config('app.env'),
+            'app.name' => config('app.name'),
+            'app.debug' => config('app.debug'),
+            //
             'DB_CONNECTION' => env('DB_CONNECTION'),
             'DB_DATABASE' => env('DB_DATABASE'),
+            //
+            'REDIS_DB' => env('REDIS_DB'),
+            'REDIS_CACHE_DB' => env('REDIS_CACHE_DB'),
+            //
             'QUEUE_CONNECTION' => env('QUEUE_CONNECTION'),
             'CACHE_DRIVER' => env('CACHE_DRIVER'),
             'RABBITMQ_HOST' => env('RABBITMQ_HOST'),
+            //
             'GIT_COMMIT' => env('GIT_COMMIT'),
             'GIT_BRANCH' => env('GIT_BRANCH'),
             'GIT_TAG' => env('GIT_TAG'),

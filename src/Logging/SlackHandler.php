@@ -56,7 +56,7 @@ class SlackHandler extends SlackWebhookHandler
         parent::__construct(
             $webhookUrl,
             null,
-            env('APP_NAME', '') . '.' . env('APP_ENV', ''),
+            config('app.name') . '.' . config('app.env'),
             true,
             null,
             false,

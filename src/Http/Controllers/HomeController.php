@@ -13,7 +13,7 @@ class HomeController extends Controller
 {
     public function home(): JsonResponse
     {
-        $service = env('APP_NAME', '') . '.' . env('APP_ENV', '');
+        $service = config('app.name') . '.' . config('app.env');
 
         Log::info("home info", ['service' => $service]);
 
@@ -21,8 +21,8 @@ class HomeController extends Controller
             'message' => $service,
         ];
 
-        // Only add debug info if APP_DEBUG is set to true
-        if (env('APP_DEBUG') === true || env('APP_DEBUG') === 'true') {
+        // Only add debug info if app.debug is set to true
+        if (config('app.debug') === true) {
             $results['debug'] = true;
             $results['app_url'] = env('APP_URL');
         }
