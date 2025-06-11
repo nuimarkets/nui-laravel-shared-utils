@@ -29,7 +29,7 @@ class HealthCheckController extends Controller
         $hasValidToken = request()->has('token') &&
                          request()->get('token') === env('HEALTH_CHECK_DETAILED_TOKEN');
 
-        return in_array(env('APP_ENV'), $allowedEnvs) || $hasValidToken;
+        return in_array(config('app.env'), $allowedEnvs) || $hasValidToken;
     }
 
     /**
