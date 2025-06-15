@@ -38,6 +38,20 @@ class HealthCheckControllerTest extends TestCase
             ],
         ]);
         $app['config']->set('database.default', 'testing');
+
+        // Configure queue to use sync driver for testing (no external queue needed)
+        $app['config']->set('queue.default', 'sync');
+        $app['config']->set('queue.connections.sync', [
+            'driver' => 'sync',
+        ]);
+
+        // Configure cache to use array driver for testing (no external cache needed)
+        $app['config']->set('cache.default', 'array');
+        $app['config']->set('cache.stores.array', [
+            'driver' => 'array',
+        ]);
+
+        // Don't configure Redis - let the health check detect it's not available and skip it
     }
 
     public function test_health_check_returns_success_response()
@@ -53,14 +67,19 @@ class HealthCheckControllerTest extends TestCase
         $this->assertArrayHasKey('checks', $data);
         $this->assertArrayHasKey('timestamp', $data);
         $this->assertArrayHasKey('environment', $data);
+
+        // These checks should always be present
         $this->assertArrayHasKey('cache', $data['checks']);
         $this->assertArrayHasKey('storage', $data['checks']);
         $this->assertArrayHasKey('php', $data['checks']);
+        $this->assertArrayHasKey('opCache', $data['checks']);
 
         // Verify all basic checks are OK
         $this->assertEquals('ok', $data['checks']['cache']['status']);
         $this->assertEquals('ok', $data['checks']['storage']['status']);
         $this->assertArrayHasKey('php_version', $data['checks']['php']);
+
+        // Redis and Queue checks are optional and may not be present in testing environment
     }
 
     public function test_php_environment_check()
@@ -136,12 +155,16 @@ class HealthCheckControllerTest extends TestCase
         $this->assertArrayHasKey('checks', $data);
         $this->assertArrayHasKey('timestamp', $data);
         $this->assertArrayHasKey('environment', $data);
+
+        // These checks should always be present
         $this->assertArrayHasKey('cache', $data['checks']);
         $this->assertArrayHasKey('storage', $data['checks']);
         $this->assertArrayHasKey('php', $data['checks']);
         $this->assertArrayHasKey('opCache', $data['checks']);
 
         // Optional checks - may or may not be present
+        // Redis check is only added if Redis is configured and available
+        // Queue check is only added if queue driver is not 'sync'
         // RabbitMQ check is only added if the class exists
         if (class_exists('PhpAmqpLib\Connection\AMQPStreamConnection')) {
             $this->assertArrayHasKey('rabbitmq', $data['checks']);

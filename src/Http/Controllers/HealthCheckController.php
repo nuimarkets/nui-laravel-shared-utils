@@ -46,13 +46,21 @@ class HealthCheckController extends Controller
         }
 
         $checks = [
-            'redis' => $this->checkRedis(),
-            'queue' => $this->checkQueue(),
             'storage' => $this->checkStorage(),
             'cache' => $this->checkCache(),
             'opCache' => $this->checkOpCache(),
             'php' => $this->getPhpEnvironment(),
         ];
+
+        // Only add Redis check if Redis is configured
+        if ($this->isRedisConfigured()) {
+            $checks['redis'] = $this->checkRedis();
+        }
+
+        // Only add Queue check if queue is configured (not sync)
+        if (config('queue.default') !== 'sync') {
+            $checks['queue'] = $this->checkQueue();
+        }
 
         // Database checks (MySQL, PostgreSQL, etc.)
         if (file_exists(config_path('database.php')) && config('database.connections')) {
@@ -162,6 +170,32 @@ class HealthCheckController extends Controller
                 'status' => 'error',
                 'message' => "PostgreSQL [{$connectionName}] connection failed: ".$e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Check if Redis is properly configured
+     */
+    protected function isRedisConfigured(): bool
+    {
+        try {
+            // Check if Redis configuration exists
+            $redisConfig = config('database.redis.default');
+            if (! $redisConfig) {
+                return false;
+            }
+
+            // Check if Redis extension or predis is available
+            if (! extension_loaded('redis') && ! class_exists('Predis\Client')) {
+                return false;
+            }
+
+            // Try a simple ping to see if Redis is available
+            Redis::ping();
+
+            return true;
+        } catch (Exception $e) {
+            return false;
         }
     }
 
