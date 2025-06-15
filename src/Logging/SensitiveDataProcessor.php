@@ -31,7 +31,7 @@ class SensitiveDataProcessor
      * Process log record - compatible with both Monolog 2.x and 3.x
      *
      * @param  array|\Monolog\LogRecord  $record
-     * @return array|\Monolog\LogRecord
+     * @return array|\Monolog\LogRecord Returns array for Monolog 2.x or LogRecord instance for Monolog 3.x
      */
     public function __invoke($record)
     {

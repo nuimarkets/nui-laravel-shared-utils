@@ -46,6 +46,47 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('application/json', $processed['context']['headers']['Content-Type']);
     }
 
+    public function test_redacts_authorization_header_with_monolog_3_log_record()
+    {
+        // Skip this test if Monolog 3 is not available
+        if (! class_exists('\Monolog\LogRecord')) {
+            $this->markTestSkipped('Monolog 3 LogRecord class not available');
+        }
+
+        // Create a LogRecord with headers containing Authorization token
+        $logRecord = new \Monolog\LogRecord(
+            datetime: new \DateTimeImmutable(),
+            channel: 'test',
+            level: \Monolog\Level::Info,
+            message: 'HTTP request made',
+            context: [
+                'headers' => [
+                    'Authorization' => 'Bearer secret-token-12345',
+                    'Content-Type' => 'application/json',
+                    'User-Agent' => 'TestClient/1.0',
+                ],
+            ],
+            extra: []
+        );
+
+        $processed = $this->processor->__invoke($logRecord);
+
+        // Assert that the returned value is a LogRecord instance
+        $this->assertInstanceOf('\Monolog\LogRecord', $processed);
+
+        // Assert that Authorization header is redacted
+        $this->assertEquals('[REDACTED]', $processed->context['headers']['Authorization']);
+        
+        // Assert that other headers remain unchanged
+        $this->assertEquals('application/json', $processed->context['headers']['Content-Type']);
+        $this->assertEquals('TestClient/1.0', $processed->context['headers']['User-Agent']);
+
+        // Assert that other LogRecord properties remain unchanged
+        $this->assertEquals('HTTP request made', $processed->message);
+        $this->assertEquals('test', $processed->channel);
+        $this->assertEquals(\Monolog\Level::Info, $processed->level);
+    }
+
     public function test_redacts_password_fields()
     {
         $record = $this->createLogRecord([
@@ -154,5 +195,53 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals([], $processed['context']);
         $this->assertEquals([], $processed['extra']);
         $this->assertEquals('Test message', $processed['message']);
+    }
+
+    public function test_processes_monolog_3_log_record_object()
+    {
+        // Skip this test if Monolog 3 is not available
+        if (! class_exists('\Monolog\LogRecord')) {
+            $this->markTestSkipped('Monolog 3 LogRecord class not available');
+        }
+
+        // Create a real LogRecord object with sensitive data
+        $logRecord = new \Monolog\LogRecord(
+            datetime: new \DateTimeImmutable(),
+            channel: 'test',
+            level: \Monolog\Level::Info,
+            message: 'Test message with sensitive data',
+            context: [
+                'user_id' => 123,
+                'password' => 'secret-password',
+                'api_token' => 'secret-token-abc123',
+                'normal_field' => 'should-remain',
+            ],
+            extra: [
+                'secret_key' => 'extra-secret',
+                'authorization' => 'Bearer token-xyz789',
+                'safe_field' => 'should-remain',
+            ]
+        );
+
+        $processed = $this->processor->__invoke($logRecord);
+
+        // Assert that the returned value is a LogRecord instance
+        $this->assertInstanceOf('\Monolog\LogRecord', $processed);
+
+        // Assert that sensitive data in context is redacted
+        $this->assertEquals(123, $processed->context['user_id']);
+        $this->assertEquals('[REDACTED]', $processed->context['password']);
+        $this->assertEquals('[REDACTED]', $processed->context['api_token']);
+        $this->assertEquals('should-remain', $processed->context['normal_field']);
+
+        // Assert that sensitive data in extra is redacted
+        $this->assertEquals('[REDACTED]', $processed->extra['secret_key']);
+        $this->assertEquals('[REDACTED]', $processed->extra['authorization']);
+        $this->assertEquals('should-remain', $processed->extra['safe_field']);
+
+        // Assert that other properties remain unchanged
+        $this->assertEquals('Test message with sensitive data', $processed->message);
+        $this->assertEquals('test', $processed->channel);
+        $this->assertEquals(\Monolog\Level::Info, $processed->level);
     }
 }

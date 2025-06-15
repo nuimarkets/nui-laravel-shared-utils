@@ -57,8 +57,8 @@ class HealthCheckController extends Controller
             $checks['redis'] = $this->checkRedis();
         }
 
-        // Only add Queue check if queue is configured (not sync)
-        if (config('queue.default') !== 'sync') {
+        // Only add Queue check if queue is configured (not sync or null)
+        if (config('queue.default') && config('queue.default') !== 'sync') {
             $checks['queue'] = $this->checkQueue();
         }
 
