@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: *
+    branches: [ "**" ]
 
 jobs:
   test:
@@ -16,10 +16,6 @@ jobs:
         php-version: [8.3]
         laravel-version: [9.*, 10.*]
         dependency-version: [prefer-lowest, prefer-stable]
-        exclude:
-          - laravel-version: 10.*
-            php-version: 8.2
-            dependency-version: prefer-lowest
 
     name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} - ${{ matrix.dependency-version }}
 
@@ -57,3 +53,32 @@ jobs:
 
     - name: Execute tests
       run: composer test-all
+
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    name: Code Quality
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.3
+        extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv
+        coverage: none
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.composer/cache/files
+        key: dependencies-php-8.3-composer-${{ hashFiles('composer.json') }}
+        restore-keys: |
+          dependencies-php-8.3-composer-
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-interaction
+
+    - name: Check code formatting with Laravel Pint
+      run: composer lint
