@@ -23,10 +23,6 @@ class SensitiveDataProcessor implements ProcessorInterface
         'secret',
     ];
 
-    /**
-     * @param array $record
-     * @return array
-     */
     public function __invoke(array $record): array
     {
         if (isset($record['context'])) {
@@ -42,9 +38,6 @@ class SensitiveDataProcessor implements ProcessorInterface
 
     /**
      * Recursively sanitize sensitive data in arrays
-     *
-     * @param array $data
-     * @return array
      */
     protected function sanitizeData(array $data): array
     {
@@ -53,6 +46,7 @@ class SensitiveDataProcessor implements ProcessorInterface
             foreach ($this->redactKeys as $sensitiveKey) {
                 if (str_contains(strtolower($key), $sensitiveKey)) {
                     $data[$key] = '[REDACTED]';
+
                     continue 2; // Skip to next main array element
                 }
             }

@@ -15,10 +15,10 @@ class RequestMetricsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->middleware = new RequestMetrics();
+        $this->middleware = new RequestMetrics;
     }
 
-    public function testHandleLogsRequestMetrics()
+    public function test_handle_logs_request_metrics()
     {
 
         $request = Request::create('api/test', 'POST');
@@ -31,11 +31,10 @@ class RequestMetricsTest extends TestCase
 
         // Act
         $response = $this->middleware->handle($request, function ($req) {
-            return new Response();
+            return new Response;
         });
 
         // Assert
         $this->assertEquals(200, $response->getStatusCode());
     }
-
 }

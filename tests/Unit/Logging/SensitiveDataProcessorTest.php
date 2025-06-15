@@ -12,7 +12,7 @@ class SensitiveDataProcessorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->processor = new SensitiveDataProcessor();
+        $this->processor = new SensitiveDataProcessor;
     }
 
     /**
@@ -26,7 +26,7 @@ class SensitiveDataProcessorTest extends TestCase
             'level' => 200, // INFO level
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => $extra,
         ];
     }
@@ -36,8 +36,8 @@ class SensitiveDataProcessorTest extends TestCase
         $record = $this->createLogRecord([
             'headers' => [
                 'Authorization' => 'Bearer secret-token-12345',
-                'Content-Type' => 'application/json'
-            ]
+                'Content-Type' => 'application/json',
+            ],
         ]);
 
         $processed = $this->processor->__invoke($record);
@@ -53,8 +53,8 @@ class SensitiveDataProcessorTest extends TestCase
                 'email' => 'user@example.com',
                 'password' => 'super-secret-password',
                 'password_confirmation' => 'super-secret-password',
-                'old_password' => 'old-secret'
-            ]
+                'old_password' => 'old-secret',
+            ],
         ]);
 
         $processed = $this->processor->__invoke($record);
@@ -73,8 +73,8 @@ class SensitiveDataProcessorTest extends TestCase
                 'secret_key' => 'secret-value',
                 'access_token' => 'token-abcdef',
                 'auth_token' => 'auth-123',
-                'regular_field' => 'not-redacted'
-            ]
+                'regular_field' => 'not-redacted',
+            ],
         ]);
 
         $processed = $this->processor->__invoke($record);
@@ -83,7 +83,7 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('[REDACTED]', $processed['context']['config']['access_token']);
         $this->assertEquals('[REDACTED]', $processed['context']['config']['auth_token']);
         $this->assertEquals('not-redacted', $processed['context']['config']['regular_field']);
-        
+
         // Note: api_key doesn't contain 'token', 'authorization', 'password', or 'secret' as substring
         // so it should not be redacted based on the current implementation
         $this->assertEquals('key-12345', $processed['context']['config']['api_key']);
@@ -97,10 +97,10 @@ class SensitiveDataProcessorTest extends TestCase
                     'email' => 'test@example.com',
                     'credentials' => [
                         'password' => 'nested-secret',
-                        'api_token' => 'nested-token'
-                    ]
-                ]
-            ]
+                        'api_token' => 'nested-token',
+                    ],
+                ],
+            ],
         ]);
 
         $processed = $this->processor->__invoke($record);
@@ -117,8 +117,8 @@ class SensitiveDataProcessorTest extends TestCase
             'action' => 'login',
             'metadata' => [
                 'ip_address' => '192.168.1.1',
-                'user_agent' => 'Mozilla/5.0'
-            ]
+                'user_agent' => 'Mozilla/5.0',
+            ],
         ]);
 
         $processed = $this->processor->__invoke($record);
@@ -135,8 +135,8 @@ class SensitiveDataProcessorTest extends TestCase
             [],
             [
                 'secret_key' => 'should-be-redacted',
-                'normal_field' => 'should-remain'
-            ]
+                'normal_field' => 'should-remain',
+            ],
         );
 
         $processed = $this->processor->__invoke($record);

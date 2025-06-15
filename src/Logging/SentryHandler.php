@@ -2,10 +2,10 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Logging;
 
-use Nuimarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Logger;
 use Monolog\LogRecord;
+use Nuimarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
 use Sentry\Severity;
 use Sentry\State\Scope;
 
@@ -19,7 +19,7 @@ use function Sentry\configureScope;
 class SentryHandler extends AbstractProcessingHandler
 {
     /**
-     * @param LogRecord|array $record
+     * @param  LogRecord|array  $record
      */
     protected function write($record): void
     {
@@ -41,11 +41,11 @@ class SentryHandler extends AbstractProcessingHandler
                 if (isset($context['exception'])
                     && $context['exception'] instanceof BadHttpRequestException
                 ) {
-                    if (!empty($context['exception']->getTags())) {
+                    if (! empty($context['exception']->getTags())) {
                         $scope->setTags($context['exception']->getTags());
                     }
 
-                    if (!empty($context['exception']->getExtra())) {
+                    if (! empty($context['exception']->getExtra())) {
                         $scope->setExtras($context['exception']->getExtra());
                     }
                 }
@@ -55,12 +55,11 @@ class SentryHandler extends AbstractProcessingHandler
             // If there's an exception in the context, capture it
             if (isset($context['exception']) && $context['exception'] instanceof \Throwable) {
                 // Report on the previous otherwise everything in sentry will show as BadHttpRequestException
-                if ($context['exception'] instanceof BadHttpRequestException && !empty($context['exception']->getPrevious())) {
+                if ($context['exception'] instanceof BadHttpRequestException && ! empty($context['exception']->getPrevious())) {
                     captureException($context['exception']->getPrevious());
                 } else {
                     captureException($context['exception']);
                 }
-
 
             } else {
                 // todo For Monolog 3.x, level is an object, for 2.x it's an integer

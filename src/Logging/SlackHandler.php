@@ -2,8 +2,8 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Logging;
 
-use Monolog\Logger;
 use Monolog\Handler\SlackWebhookHandler;
+use Monolog\Logger;
 
 /**
  * Slack Handler
@@ -32,14 +32,13 @@ use Monolog\Handler\SlackWebhookHandler;
  */
 class SlackHandler extends SlackWebhookHandler
 {
-
     protected bool $disabled = false;
 
     /**
      * Create a new SlackHandler instance.
      *
      * @param  string  $webhookUrl  The Slack webhook URL.
-     * @param  int     $level       The minimum logging level.
+     * @param  int  $level  The minimum logging level.
      * @return void
      */
     public function __construct($webhookUrl, $level)
@@ -50,13 +49,14 @@ class SlackHandler extends SlackWebhookHandler
             $this->disabled = true;
             // Still set the level property so isHandling(...) can compare if needed
             $this->level = $level;
+
             return;
         }
 
         parent::__construct(
             $webhookUrl,
             null,
-            config('app.name') . '.' . config('app.env'),
+            config('app.name').'.'.config('app.env'),
             true,
             null,
             false,

@@ -2,13 +2,13 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Exceptions;
 
-use Illuminate\Support\Facades\Log;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -76,7 +76,7 @@ class BaseErrorHandler extends ExceptionHandler
                 ? app('api.error_format')
                 : config('api.error_format', 'jsonapi');
 
-            if ($format === "legacy") {
+            if ($format === 'legacy') {
                 // In “legacy” mode, return:
                 //
                 //  {
@@ -89,10 +89,11 @@ class BaseErrorHandler extends ExceptionHandler
                 //    ]
                 //  }
                 $errorsByField = $e->errors();
+
                 // $e->errors() is already an array: field → [messages…]
                 return [
                     'status' => $status,
-                    'title'  => $title,
+                    'title' => $title,
                     'errors' => $errorsByField,
                 ];
             }
@@ -148,10 +149,10 @@ class BaseErrorHandler extends ExceptionHandler
                 if ($e->getPrevious()) {
                     $error['previous'] = $this->getExceptionTrace($e->getPrevious());
                 }
-                if (!empty($e->getTags())) {
+                if (! empty($e->getTags())) {
                     $error['tags'] = $e->getTags();
                 }
-                if (!empty($e->getExtra())) {
+                if (! empty($e->getExtra())) {
                     $error['extra'] = $e->getExtra();
                 }
             }
@@ -180,7 +181,7 @@ class BaseErrorHandler extends ExceptionHandler
         //
         // 5) ADD DEBUG INFO (STACK TRACE) IF APP IS IN DEBUG & NOT UNIT TESTING
         //
-        if ($this->shouldShowDebugInfo() && !($e instanceof ValidationException)) {
+        if ($this->shouldShowDebugInfo() && ! ($e instanceof ValidationException)) {
             $errors[] = $this->getExceptionTrace($e);
         }
 
@@ -196,7 +197,7 @@ class BaseErrorHandler extends ExceptionHandler
      */
     protected function shouldShowDebugInfo(): bool
     {
-        return config('app.debug') && !app()->runningUnitTests();
+        return config('app.debug') && ! app()->runningUnitTests();
     }
 
     /**
@@ -218,7 +219,7 @@ class BaseErrorHandler extends ExceptionHandler
      */
     public function report(Throwable $e): void
     {
-        if (!$this->shouldReport($e)) {
+        if (! $this->shouldReport($e)) {
             return;
         }
 
@@ -242,7 +243,7 @@ class BaseErrorHandler extends ExceptionHandler
     {
         $errorData = $this->getFormattedError($e);
 
-        if (!$this->shouldReport($e)) {
+        if (! $this->shouldReport($e)) {
             Log::info(class_basename($e), $errorData['errors']);
         }
 
@@ -262,6 +263,7 @@ class BaseErrorHandler extends ExceptionHandler
     {
         // $e->errorInfo[0] is the SQLSTATE code (e.g. "22P02")
         $sqlState = $e->errorInfo[0] ?? null;
+
         return $sqlState === '22P02';
     }
 }

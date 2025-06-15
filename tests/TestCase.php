@@ -45,9 +45,7 @@ abstract class TestCase extends Orchestra
     /**
      * Helper to dump output for debugging tests
      *
-     * @param mixed $data
-     * @param string|null $label
-     * @return void
+     * @param  mixed  $data
      */
     protected function dump_output($data, ?string $label = null): void
     {

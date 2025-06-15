@@ -22,8 +22,8 @@
     "php-amqplib/php-amqplib": "Required for RabbitMQ health checks (~3.5.0)"
   },
   "scripts": {
-    "format": "php-cs-fixer fix",
-    "lint": "php-cs-fixer fix --dry-run --diff",
+    "format": "pint",
+    "lint": "pint --test",
     "test": "phpunit --filter",
     "test-all": "phpunit",
     "test-coverage": "phpunit --coverage-html coverage"
@@ -31,7 +31,7 @@
   "require-dev": {
     "phpunit/phpunit": "^9.0",
     "orchestra/testbench": "^7.50",
-    "friendsofphp/php-cs-fixer": "^3.66.1"
+    "laravel/pint": "^1.0"
   },
   "autoload": {
     "psr-4": {

@@ -2,7 +2,6 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Http\Controllers;
 
-
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Artisan;
@@ -14,7 +13,6 @@ use Illuminate\Support\Facades\Redis;
  */
 class ClearLadaAndResponseCacheController extends Controller
 {
-
     protected function isAuthorizedForDetailedInfo(): bool
     {
         $allowedEnvs = ['local', 'development'];
@@ -26,13 +24,11 @@ class ClearLadaAndResponseCacheController extends Controller
 
     /**
      * clears lada-cache
-     *
-     * * @return JsonResponse
      */
     public function clearCache(): JsonResponse
     {
 
-        if (!$this->isAuthorizedForDetailedInfo()) {
+        if (! $this->isAuthorizedForDetailedInfo()) {
             return new JsonResponse([
                 'status' => 'restricted',
                 'message' => 'Not available',
@@ -46,7 +42,7 @@ class ClearLadaAndResponseCacheController extends Controller
         $prefix = config('database.redis.options.prefix');
 
         $ladaPattern = 'lada:*';
-        $responseCachePattern =  'responsecache:*';
+        $responseCachePattern = 'responsecache:*';
 
         $ladaKeysBefore = $connection->command('KEYS', [$ladaPattern]);
         $responseKeysBefore = $connection->command('KEYS', [$responseCachePattern]);
@@ -55,7 +51,6 @@ class ClearLadaAndResponseCacheController extends Controller
 
         $ladaAvailable = class_exists('Spiritix\LadaCache\Cache');
         $responseCacheAvailable = class_exists('Spatie\ResponseCache\Facades\ResponseCache');
-
 
         if ($ladaAvailable) {
             Artisan::call('lada-cache:flush');
@@ -71,14 +66,14 @@ class ClearLadaAndResponseCacheController extends Controller
         $ladaKeysAfter = $connection->command('KEYS', [$ladaPattern]);
         $responseKeysAfter = $connection->command('KEYS', [$responseCachePattern]);
 
-        $msg = "Cache clearing skipped. Lada and response caching not found";
+        $msg = 'Cache clearing skipped. Lada and response caching not found';
 
         if ($ladaAvailable && $responseCacheAvailable) {
-            $msg = "Lada cache and response cache cleared";
+            $msg = 'Lada cache and response cache cleared';
         } elseif ($ladaAvailable) {
-            $msg = "Lada cache cleared";
+            $msg = 'Lada cache cleared';
         } elseif ($responseCacheAvailable) {
-            $msg = "Response cache cleared";
+            $msg = 'Response cache cleared';
         }
 
         $detail = [

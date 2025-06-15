@@ -11,6 +11,7 @@ class TestJob implements ShouldQueue
 {
     use InteractsWithQueue;
     use Queueable;
+
     public function handle(): void
     {
         Log::info('Test queue job processed');

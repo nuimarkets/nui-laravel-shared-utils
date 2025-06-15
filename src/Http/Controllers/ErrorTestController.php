@@ -19,8 +19,7 @@ class ErrorTestController extends Controller
 {
     /**
      * Test (Error handling)
-     * @param Request $request
-     * @return JsonResponse
+     *
      * @throws ValidationException
      * @throws BindingResolutionException
      */
@@ -32,7 +31,7 @@ class ErrorTestController extends Controller
 
         switch ($exceptionTest) {
             case '500':
-                throw new \Exception();
+                throw new \Exception;
             case '400':
             case 'BadRequestHttpException':
                 throw new BadRequestHttpException('Test BadRequestHttpException'); // Symfony
@@ -41,7 +40,7 @@ class ErrorTestController extends Controller
             case 'BadHttpRequestException500':
                 throw new BaseHttpRequestException('Test BaseHttpRequestException (500)', 500);
             case 'BadHttpRequestExceptionPrevious':
-                $exception = new \PDOException("testing 123");
+                $exception = new \PDOException('testing 123');
                 throw new BaseHttpRequestException(
                     'Test BaseHttpRequestException (Previous)',
                     500,
@@ -54,7 +53,7 @@ class ErrorTestController extends Controller
                     ],
                 );
             case '404':
-                throw new NotFoundHttpException(); // Symfony
+                throw new NotFoundHttpException; // Symfony
             case '422':
             case 'ValidationException':
                 throw ValidationException::withMessages([
@@ -62,14 +61,16 @@ class ErrorTestController extends Controller
                 ]);
             case 'baseValidationException':
 
-                $requestClass = new class extends BaseFormRequest {
+                $requestClass = new class extends BaseFormRequest
+                {
                     public function rules(): array
                     {
                         return [
-                            "testField" => "required|string",
-                            "optionalField" => "string",
+                            'testField' => 'required|string',
+                            'optionalField' => 'string',
                         ];
                     }
+
                     public function authorize(): bool
                     {
                         return true;
@@ -97,5 +98,4 @@ class ErrorTestController extends Controller
 
         return new JsonResponse([]);
     }
-
 }
