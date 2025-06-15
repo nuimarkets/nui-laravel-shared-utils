@@ -1,11 +1,12 @@
 <?php
 
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Route as RoutingRoute;
 use Nuimarkets\LaravelSharedUtils\Http\Middleware\RequestMetrics;
-use Orchestra\Testbench\TestCase;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class RequestMetricsTest extends TestCase
 {
@@ -37,8 +38,4 @@ class RequestMetricsTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    protected function getPackageProviders($app): array
-    {
-        return [];
-    }
 }
