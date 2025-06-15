@@ -70,6 +70,11 @@ class HealthCheckController extends Controller
                     continue;
                 }
 
+                // Skip connections without a driver configured
+                if (! isset($connConfig['driver'])) {
+                    continue;
+                }
+
                 switch ($connConfig['driver']) {
                     case 'mysql':
                         $checks[$connName] = $this->checkMysql($connName);
