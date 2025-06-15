@@ -2,8 +2,6 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Logging;
 
-use Monolog\Processor\ProcessorInterface;
-
 /**
  * Log Processor for sanitizing sensitive data in log records
  *
@@ -12,8 +10,12 @@ use Monolog\Processor\ProcessorInterface;
  * in logging output.
  *
  * Compatible with both Monolog 2.x (array records) and 3.x (LogRecord objects)
+ *
+ * Note: Does not implement ProcessorInterface directly due to incompatible
+ * method signatures between Monolog 2.x and 3.x. Monolog accepts any callable
+ * as a processor, so this works without implementing the interface.
  */
-class SensitiveDataProcessor implements ProcessorInterface
+class SensitiveDataProcessor
 {
     /**
      * Keys that should be redacted in logging for security
