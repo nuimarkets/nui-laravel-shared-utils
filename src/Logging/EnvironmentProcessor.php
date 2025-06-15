@@ -17,7 +17,7 @@ class EnvironmentProcessor implements ProcessorInterface
             'hostname' => gethostname(),
         ];
 
-        if (!empty(env('GIT_COMMIT'))) {
+        if (! empty(env('GIT_COMMIT'))) {
             // Git info
             $extraInfo['git.commit'] = env('GIT_COMMIT');
             $extraInfo['git.branch'] = env('GIT_BRANCH');

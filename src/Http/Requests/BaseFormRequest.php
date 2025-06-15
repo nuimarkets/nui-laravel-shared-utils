@@ -2,15 +2,14 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Base Form Request - logging & error handling bits
- *
  */
 abstract class BaseFormRequest extends FormRequest
 {
@@ -30,27 +29,24 @@ abstract class BaseFormRequest extends FormRequest
     {
         parent::validateResolved();
 
-        Log::debug(class_basename(get_class($this)) . ".rules()", [
+        Log::debug(class_basename(get_class($this)).'.rules()', [
             'data' => $this->all(),
             'headers' => $this->headers->all(),
-            'route' => $this->method() . ' ' . $this->url(),
+            'route' => $this->method().' '.$this->url(),
         ]);
 
     }
 
     protected function failedValidation(Validator $validator)
     {
-        Log::debug(class_basename(get_class($this)) . ".failedValidation");
+        Log::debug(class_basename(get_class($this)).'.failedValidation');
 
         throw new HttpResponseException(new JsonResponse([
             'errors' => $validator->errors(),
         ], 422));
     }
 
-
     abstract public function authorize(): bool;
 
     abstract public function rules(): array;
-
-
 }

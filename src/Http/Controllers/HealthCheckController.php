@@ -38,7 +38,7 @@ class HealthCheckController extends Controller
     public function detailed(): JsonResponse
     {
 
-        if (!$this->isAuthorizedForDetailedInfo()) {
+        if (! $this->isAuthorizedForDetailedInfo()) {
             return new JsonResponse([
                 'status' => 'restricted',
                 'message' => 'Access to detailed information is restricted',
@@ -46,19 +46,32 @@ class HealthCheckController extends Controller
         }
 
         $checks = [
-            'redis' => $this->checkRedis(),
-            'queue' => $this->checkQueue(),
             'storage' => $this->checkStorage(),
             'cache' => $this->checkCache(),
             'opCache' => $this->checkOpCache(),
             'php' => $this->getPhpEnvironment(),
         ];
 
+        // Only add Redis check if Redis is configured
+        if ($this->isRedisConfigured()) {
+            $checks['redis'] = $this->checkRedis();
+        }
+
+        // Only add Queue check if queue is configured (not sync or null)
+        if (config('queue.default') && config('queue.default') !== 'sync') {
+            $checks['queue'] = $this->checkQueue();
+        }
+
         // Database checks (MySQL, PostgreSQL, etc.)
         if (file_exists(config_path('database.php')) && config('database.connections')) {
             foreach (config('database.connections') as $connName => $connConfig) {
                 // skip any testing schemas
                 if (Str::contains($connName, 'test')) {
+                    continue;
+                }
+
+                // Skip connections without a driver configured
+                if (! isset($connConfig['driver'])) {
                     continue;
                 }
 
@@ -94,6 +107,7 @@ class HealthCheckController extends Controller
         // If any check failed, set overall status to error
         if (in_array('error', array_column($results['checks'], 'status'))) {
             $results['status'] = 'error';
+
             return new JsonResponse($results, 503);
         }
 
@@ -102,7 +116,7 @@ class HealthCheckController extends Controller
 
     /**
      * Check MySQL connection
-     * @param string $connectionName
+     *
      * @return string[]
      */
     protected function checkMysql(string $connectionName): array
@@ -115,26 +129,26 @@ class HealthCheckController extends Controller
             $duration = microtime(true) - $start;
 
             return [
-                'status'   => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
-                'message'  => "MySQL [{$connectionName}] connection successful",
+                'status' => 'ok',
+                'duration' => round($duration * 1000, 2).'ms',
+                'message' => "MySQL [{$connectionName}] connection successful",
             ];
         } catch (Exception $e) {
             Log::error("Health check failed: MySQL connection error for [{$connectionName}]", [
-                'error'      => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'connection' => $connectionName,
             ]);
 
             return [
-                'status'  => 'error',
-                'message' => "MySQL [{$connectionName}] connection failed: " . $e->getMessage(),
+                'status' => 'error',
+                'message' => "MySQL [{$connectionName}] connection failed: ".$e->getMessage(),
             ];
         }
     }
 
     /**
      * Check PostGreSQL connection
-     * @param string $connectionName
+     *
      * @return string[]
      */
     protected function checkPostgres(string $connectionName): array
@@ -147,24 +161,48 @@ class HealthCheckController extends Controller
             $duration = microtime(true) - $start;
 
             return [
-                'status'   => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
-                'message'  => "PostgreSQL [{$connectionName}] connection successful",
+                'status' => 'ok',
+                'duration' => round($duration * 1000, 2).'ms',
+                'message' => "PostgreSQL [{$connectionName}] connection successful",
             ];
         } catch (Exception $e) {
             Log::error("Health check failed: PostgreSQL connection error for [{$connectionName}]", [
-                'error'      => $e->getMessage(),
+                'error' => $e->getMessage(),
                 'connection' => $connectionName,
             ]);
 
             return [
-                'status'  => 'error',
-                'message' => "PostgreSQL [{$connectionName}] connection failed: " . $e->getMessage(),
+                'status' => 'error',
+                'message' => "PostgreSQL [{$connectionName}] connection failed: ".$e->getMessage(),
             ];
         }
     }
 
+    /**
+     * Check if Redis is properly configured
+     */
+    protected function isRedisConfigured(): bool
+    {
+        try {
+            // Check if Redis configuration exists
+            $redisConfig = config('database.redis.default');
+            if (! $redisConfig) {
+                return false;
+            }
 
+            // Check if Redis extension or predis is available
+            if (! extension_loaded('redis') && ! class_exists('Predis\Client')) {
+                return false;
+            }
+
+            // Try a simple ping to see if Redis is available
+            Redis::ping();
+
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
 
     /**
      * Check Redis connection
@@ -187,7 +225,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
+                'duration' => round($duration * 1000, 2).'ms',
                 'message' => 'Redis connection successful',
             ];
         } catch (Exception $e) {
@@ -197,7 +235,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'Redis connection failed: ' . $e->getMessage(),
+                'message' => 'Redis connection failed: '.$e->getMessage(),
             ];
         }
     }
@@ -214,7 +252,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
+                'duration' => round($duration * 1000, 2).'ms',
                 'message' => 'Queue connection successful',
             ];
         } catch (Exception $e) {
@@ -224,7 +262,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'Queue connection failed: ' . $e->getMessage(),
+                'message' => 'Queue connection failed: '.$e->getMessage(),
             ];
         }
     }
@@ -250,7 +288,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
+                'duration' => round($duration * 1000, 2).'ms',
                 'message' => 'Storage access successful',
             ];
         } catch (Exception $e) {
@@ -260,11 +298,10 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'Storage access failed: ' . $e->getMessage(),
+                'message' => 'Storage access failed: '.$e->getMessage(),
             ];
         }
     }
-
 
     protected function checkRabbitMQ(): array
     {
@@ -308,7 +345,7 @@ class HealthCheckController extends Controller
             // Create the connection with the appropriate class and parameters
             $connection = new $connectionClass(...$connectionParams);
 
-            if (!$connection->isConnected()) {
+            if (! $connection->isConnected()) {
                 throw new Exception('Failed to establish connection');
             }
 
@@ -316,7 +353,7 @@ class HealthCheckController extends Controller
             $channel = $connection->channel();
             $channel->confirm_select();
 
-            if (!$channel->is_open()) {
+            if (! $channel->is_open()) {
                 throw new Exception('Channel failed to open');
             }
 
@@ -325,7 +362,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
+                'duration' => round($duration * 1000, 2).'ms',
                 'message' => 'RabbitMQ connection successful',
                 'details' => [
                     'host' => config('rabbit.host'),
@@ -347,7 +384,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'RabbitMQ connection failed: ' . $e->getMessage(),
+                'message' => 'RabbitMQ connection failed: '.$e->getMessage(),
             ];
 
         } catch (Exception $e) {
@@ -357,7 +394,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'RabbitMQ check failed: ' . $e->getMessage(),
+                'message' => 'RabbitMQ check failed: '.$e->getMessage(),
             ];
 
         } finally {
@@ -370,7 +407,7 @@ class HealthCheckController extends Controller
                     $connection->close();
                 }
             } catch (Exception $e) {
-                Log::warning('RabbitMQ cleanup warning: ' . $e->getMessage());
+                Log::warning('RabbitMQ cleanup warning: '.$e->getMessage());
             }
         }
     }
@@ -396,7 +433,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2) . 'ms',
+                'duration' => round($duration * 1000, 2).'ms',
                 'message' => 'Cache system operational',
             ];
         } catch (Exception $e) {
@@ -406,7 +443,7 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'error',
-                'message' => 'Cache system failed: ' . $e->getMessage(),
+                'message' => 'Cache system failed: '.$e->getMessage(),
             ];
         }
     }
@@ -420,7 +457,7 @@ class HealthCheckController extends Controller
             'php_version' => phpversion(),
             'php_sapi' => php_sapi_name(),
             'memory_limit' => ini_get('memory_limit'),
-            'max_execution_time' => ini_get('max_execution_time') . ' seconds',
+            'max_execution_time' => ini_get('max_execution_time').' seconds',
             'loaded_extensions' => implode(', ', get_loaded_extensions()),
             'php_ini_paths' => [
                 'loaded_php_ini' => php_ini_loaded_file(),
@@ -449,14 +486,14 @@ class HealthCheckController extends Controller
                     'used_memory' => $this->formatBytes($opcacheStatus['memory_usage']['used_memory'] ?? 0),
                     'free_memory' => $this->formatBytes($opcacheStatus['memory_usage']['free_memory'] ?? 0),
                     'wasted_memory' => $this->formatBytes($opcacheStatus['memory_usage']['wasted_memory'] ?? 0),
-                    'current_wasted_percentage' => ($opcacheStatus['memory_usage']['current_wasted_percentage'] ?? 0) . '%',
+                    'current_wasted_percentage' => ($opcacheStatus['memory_usage']['current_wasted_percentage'] ?? 0).'%',
                 ],
                 'hit_rate' => ($opcacheStatus['opcache_statistics']['hits'] ?? 0) /
                     (($opcacheStatus['opcache_statistics']['hits'] ?? 0) +
-                        ($opcacheStatus['opcache_statistics']['misses'] ?? 1)) * 100 . '%',
+                        ($opcacheStatus['opcache_statistics']['misses'] ?? 1)) * 100 .'%',
                 'configuration' => [
                     'memory_consumption' => $this->formatBytes($opcacheConfig['directives']['opcache.memory_consumption'] ?? 0),
-                    'interned_strings_buffer' => ($opcacheConfig['directives']['opcache.interned_strings_buffer'] ?? 0) . 'MB',
+                    'interned_strings_buffer' => ($opcacheConfig['directives']['opcache.interned_strings_buffer'] ?? 0).'MB',
                     'max_accelerated_files' => $opcacheConfig['directives']['opcache.max_accelerated_files'] ?? 0,
                     'revalidate_freq' => $opcacheConfig['directives']['opcache.revalidate_freq'] ?? 0,
                     'fast_shutdown' => (bool) ($opcacheConfig['directives']['opcache.fast_shutdown'] ?? false),
@@ -480,7 +517,7 @@ class HealthCheckController extends Controller
         $pow = min($pow, count($units) - 1);
         $bytes /= (1 << (10 * $pow));
 
-        return round($bytes, $precision) . ' ' . $units[$pow];
+        return round($bytes, $precision).' '.$units[$pow];
     }
 
     /**

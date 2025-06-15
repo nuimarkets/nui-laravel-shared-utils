@@ -2,7 +2,6 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Services;
 
-use Illuminate\Support\Facades\Log;
 use Sentry\Event;
 
 /**
@@ -12,7 +11,6 @@ class SentryEventHandler
 {
     public static function before(Event $event): ?Event
     {
-
 
         if (env('GIT_COMMIT')) {
             $event->setTag('commit', env('GIT_COMMIT'));

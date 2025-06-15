@@ -2,6 +2,7 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Testing;
 
+use Exception;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Connectors\ConnectionFactory;
 use Illuminate\Database\DatabaseManager;
@@ -12,14 +13,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log;
 use Nuimarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
-use Exception;
 use PHPUnit\Runner\BeforeFirstTestHook;
 
 /**
  * DB Setup Extension for phpUnit to drop/create testing database with migrations run
  */
-class DBSetupExtension implements
-    BeforeFirstTestHook
+class DBSetupExtension implements BeforeFirstTestHook
 {
     use CreatesApplication;
 
@@ -29,7 +28,7 @@ class DBSetupExtension implements
     public function executeBeforeFirstTest(): void
     {
 
-        if (getenv("DB_SETUP") !== "1") {
+        if (getenv('DB_SETUP') !== '1') {
             return;
         }
 
@@ -37,8 +36,7 @@ class DBSetupExtension implements
 
         $app = $this->createApplication();
 
-        Log::warning("Running DB Setup (fresh DB + migrations/seeders)");
-
+        Log::warning('Running DB Setup (fresh DB + migrations/seeders)');
 
         $app->bootstrapWith([
             LoadConfiguration::class,
@@ -67,7 +65,7 @@ class DBSetupExtension implements
 
         $testing = Config::get('database.connections.testing');
 
-        Log::debug("Testing connection", [$testing]);
+        Log::debug('Testing connection', [$testing]);
 
         $this->runMigrations();
 
@@ -85,7 +83,7 @@ class DBSetupExtension implements
     protected function runMigrations(): void
     {
         try {
-            Log::info("Running migrate:fresh");
+            Log::info('Running migrate:fresh');
             Artisan::call('migrate:fresh');
         } catch (Exception $exception) {
             Log::error("Running 'migrate:fresh' failed", [
@@ -101,7 +99,7 @@ class DBSetupExtension implements
     protected function runSeeder(): void
     {
         try {
-            Log::info("Running db:seed");
+            Log::info('Running db:seed');
             Artisan::call('db:seed');
         } catch (Exception $exception) {
             Log::error("Running 'db:seed' failed", [
@@ -118,7 +116,7 @@ class DBSetupExtension implements
     {
 
         // Create a new connection without specifying a database
-        $tempConnection = Config::get('database.connections.' . env('DB_CONNECTION'));
+        $tempConnection = Config::get('database.connections.'.env('DB_CONNECTION'));
 
         // Temporarily set to null so it won't complain about missing DB :(
         $tempConnection['database'] = null;
@@ -129,14 +127,13 @@ class DBSetupExtension implements
 
     }
 
-
     protected function resetDatabase(): void
     {
 
-        $dbName = getenv("DB_DATABASE_TEST");
+        $dbName = getenv('DB_DATABASE_TEST');
 
         $connection = app('db')->connection();
-        $grammar    = $connection->getQueryGrammar();
+        $grammar = $connection->getQueryGrammar();
 
         log::debug("Resetting the test database $dbName ...");
 
@@ -161,7 +158,7 @@ class DBSetupExtension implements
     protected function verifyMigrations(): void
     {
         // Get all migration files and extract their base names
-        $migrationFiles = collect(glob(database_path('migrations') . '/*.php'))
+        $migrationFiles = collect(glob(database_path('migrations').'/*.php'))
             ->map(function ($path) {
                 return basename($path, '.php');
             })
@@ -180,12 +177,11 @@ class DBSetupExtension implements
 
         // Compare the latest migration file with the latest applied migration
         if ($latestFileMigration === $latestAppliedMigration) {
-            Log::info("Latest migration file matches the latest migration record.");
+            Log::info('Latest migration file matches the latest migration record.');
         } else {
-            Log::error("Latest migration file does not match the latest migration record.");
+            Log::error('Latest migration file does not match the latest migration record.');
             Log::error("Latest file migration: $latestFileMigration");
             Log::error("Latest applied migration: $latestAppliedMigration");
         }
     }
-
 }

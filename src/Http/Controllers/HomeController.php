@@ -13,9 +13,9 @@ class HomeController extends Controller
 {
     public function home(): JsonResponse
     {
-        $service = config('app.name') . '.' . config('app.env');
+        $service = config('app.name').'.'.config('app.env');
 
-        Log::info("home info", ['service' => $service]);
+        Log::info('home info', ['service' => $service]);
 
         $results = [
             'message' => $service,

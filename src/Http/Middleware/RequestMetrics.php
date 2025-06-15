@@ -26,7 +26,7 @@ class RequestMetrics
         $response = $next($request);
 
         // Skip logging on "/" it's used for health check
-        if ($request->path() == "/") {
+        if ($request->path() == '/') {
             return $response;
         }
 
@@ -45,5 +45,4 @@ class RequestMetrics
 
         return $response;
     }
-
 }

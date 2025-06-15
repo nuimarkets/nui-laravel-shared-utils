@@ -2,16 +2,16 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Console\Commands;
 
-use Illuminate\Queue\Console\WorkCommand as BaseWorkCommand;
-use Illuminate\Queue\Events\JobProcessing;
-use Illuminate\Queue\Events\JobProcessed;
-use Illuminate\Queue\Events\JobFailed;
-use Illuminate\Queue\QueueManager;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Queue\Worker;
-use Illuminate\Contracts\Events\Dispatcher;
-use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Queue\Console\WorkCommand as BaseWorkCommand;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\QueueManager;
+use Illuminate\Queue\Worker;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Run queue work jobs ensuring Log is used for all stdout
@@ -22,7 +22,6 @@ use Illuminate\Contracts\Cache\Repository as Cache;
  *   ScheduleRunCommand::class,
  *   WorkCommand::class,
  * ];
- *
  */
 class WorkCommand extends BaseWorkCommand
 {
@@ -65,7 +64,7 @@ class WorkCommand extends BaseWorkCommand
             $jobId = $job->getJobId() ?? $job->uuid() ?? null;
 
             $start = $startTimes[$jobId] ?? microtime(true);
-            $durationMs = (int)((microtime(true) - $start) * 1000);
+            $durationMs = (int) ((microtime(true) - $start) * 1000);
             unset($startTimes[$jobId]);
 
             Log::info('Queue job completed', [
@@ -81,7 +80,7 @@ class WorkCommand extends BaseWorkCommand
             $jobId = $job->getJobId() ?? $job->uuid() ?? null;
 
             $start = $startTimes[$jobId] ?? microtime(true);
-            $durationMs = (int)((microtime(true) - $start) * 1000);
+            $durationMs = (int) ((microtime(true) - $start) * 1000);
             unset($startTimes[$jobId]);
 
             Log::error('Queue job failed', [
@@ -94,15 +93,13 @@ class WorkCommand extends BaseWorkCommand
         });
     }
 
-
-
     public function handle(): ?int
     {
         $this->listenForEvents();
 
-        Log::withContext(["queue" => $this->option('queue') ?? 'default']);
+        Log::withContext(['queue' => $this->option('queue') ?? 'default']);
 
-        Log::info("Processing jobs from queue");
+        Log::info('Processing jobs from queue');
 
         return $this->runWorker(
             $this->argument('connection'),
@@ -113,11 +110,9 @@ class WorkCommand extends BaseWorkCommand
 
     protected function writeOutput($job, $status)
     {
-        Log::info("Queue job status update", [
+        Log::info('Queue job status update', [
             'job_class' => $job->resolveName(),
             'status' => $status,
         ]);
     }
-
-
 }

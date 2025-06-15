@@ -18,13 +18,13 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  *              tags: ['test' => 'tag'], extra: ['misc' => 123]);
  *
  *  Note it's recommended to NOT use $e->getMessage() for message to avoid exposing the internal exception info in response
- *
- * @package App\Exceptions
  */
 class BaseHttpRequestException extends HttpException
 {
     protected ?\Throwable $previous = null;
+
     protected array $tags = [];
+
     protected array $extra = [];
 
     public function __construct(string $message, int $statusCode = 400, ?\Throwable $previous = null, array $tags = [], array $extra = [])
@@ -42,7 +42,6 @@ class BaseHttpRequestException extends HttpException
         parent::__construct($statusCode, $message, $previous);
     }
 
-
     public function getExtra(): array
     {
         return $this->extra;
@@ -51,6 +50,7 @@ class BaseHttpRequestException extends HttpException
     public function withExtra(array $extra): self
     {
         $this->extra = $extra;
+
         return $this;
     }
 
@@ -59,11 +59,10 @@ class BaseHttpRequestException extends HttpException
         return $this->tags;
     }
 
-
     public function withTags(array $tags): self
     {
         $this->tags = $tags;
+
         return $this;
     }
-
 }

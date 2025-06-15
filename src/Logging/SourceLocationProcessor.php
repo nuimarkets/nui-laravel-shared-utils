@@ -14,12 +14,12 @@ class SourceLocationProcessor implements ProcessorInterface
 
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
 
-        $record['extra']['debug_trace'] = "Trace count: " . count($trace);
+        $record['extra']['debug_trace'] = 'Trace count: '.count($trace);
 
         $debugFrames = array_slice($trace, 0, 3);
         foreach ($debugFrames as $index => $frame) {
             if (isset($frame['file'])) {
-                $record['extra']['frame_' . $index] = str_replace(base_path(), '', $frame['file']);
+                $record['extra']['frame_'.$index] = str_replace(base_path(), '', $frame['file']);
             }
         }
 
@@ -27,8 +27,8 @@ class SourceLocationProcessor implements ProcessorInterface
         $sourceFrame = null;
         foreach ($trace as $frame) {
             if (isset($frame['file']) &&
-                !str_contains($frame['file'], 'vendor/laravel') &&
-                !str_contains($frame['file'], 'vendor/monolog')) {
+                ! str_contains($frame['file'], 'vendor/laravel') &&
+                ! str_contains($frame['file'], 'vendor/monolog')) {
                 $sourceFrame = $frame;
                 break;
             }
