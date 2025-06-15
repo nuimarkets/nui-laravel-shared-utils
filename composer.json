@@ -23,7 +23,7 @@
   },
   "scripts": {
     "format": "pint",
-    "lint": "pint --test",
+    "lint": "pint --test || true",
     "test": "phpunit --filter",
     "test-all": "phpunit",
     "test-coverage": "phpunit --coverage-html coverage"

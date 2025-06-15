@@ -55,7 +55,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         // Create a LogRecord with headers containing Authorization token
         $logRecord = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable(),
+            datetime: new \DateTimeImmutable,
             channel: 'test',
             level: \Monolog\Level::Info,
             message: 'HTTP request made',
@@ -76,7 +76,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         // Assert that Authorization header is redacted
         $this->assertEquals('[REDACTED]', $processed->context['headers']['Authorization']);
-        
+
         // Assert that other headers remain unchanged
         $this->assertEquals('application/json', $processed->context['headers']['Content-Type']);
         $this->assertEquals('TestClient/1.0', $processed->context['headers']['User-Agent']);
@@ -206,7 +206,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         // Create a real LogRecord object with sensitive data
         $logRecord = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable(),
+            datetime: new \DateTimeImmutable,
             channel: 'test',
             level: \Monolog\Level::Info,
             message: 'Test message with sensitive data',
