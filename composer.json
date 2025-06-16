@@ -13,7 +13,6 @@
   "prefer-stable": true,
   "require": {
     "php": "^8.2",
-    "bramus/monolog-colored-line-formatter": "~3.0.0|~3.1.0",
     "monolog/monolog": "^2.0|^3.0",
     "laravel/framework": "^8.0|^9.0|^10.0",
     "sentry/sentry-laravel": "^4.11"

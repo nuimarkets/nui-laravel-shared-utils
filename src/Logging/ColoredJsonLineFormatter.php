@@ -2,14 +2,15 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Logging;
 
-use Bramus\Monolog\Formatter\ColoredLineFormatter;
 use JsonSerializable;
+use Monolog\Formatter\FormatterInterface;
 use Monolog\Logger;
 
 /**
  * Formats log records as colored JSON lines with improved readability.
+ * Compatible with both Monolog 2.x and 3.x.
  */
-class ColoredJsonLineFormatter extends ColoredLineFormatter
+class ColoredJsonLineFormatter implements FormatterInterface
 {
     private const HEADER_FORMAT = "%-32s %-10s %s\n";
 
@@ -19,49 +20,98 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
 
     private const KEY_PADDING = 20;
 
-    public function format(array $record): string
+    // ANSI color codes for different log levels
+    private const COLOR_SCHEME = [
+        Logger::DEBUG => "\033[0;37m",     // Light gray
+        Logger::INFO => "\033[0;32m",      // Green
+        Logger::NOTICE => "\033[0;36m",    // Cyan
+        Logger::WARNING => "\033[0;33m",   // Yellow
+        Logger::ERROR => "\033[0;31m",     // Red
+        Logger::CRITICAL => "\033[1;31m",  // Bold red
+        Logger::ALERT => "\033[1;35m",     // Bold magenta
+        Logger::EMERGENCY => "\033[1;31m", // Bold red
+    ];
+
+    private const COLOR_RESET = "\033[0m";
+
+    /**
+     * Whether colors are enabled for this formatter
+     */
+    private bool $colorsEnabled;
+
+    public function __construct(bool $colorsEnabled = true)
     {
-        $colorScheme = $this->getColorScheme();
-        $className = $this->extractClassName($record);
+        $this->colorsEnabled = $colorsEnabled;
+    }
+
+    public function format($record): string
+    {
+        // Handle both Monolog 2.x (array) and 3.x (LogRecord) formats
+        $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
+        
+        $className = $this->extractClassName($record, $isLogRecord);
+
+        // Extract data based on record type
+        $levelName = $isLogRecord ? $record->level->getName() : $record['level_name'];
+        $message = $isLogRecord ? $record->message : $record['message'];
+        $level = $isLogRecord ? $record->level->value : $record['level'];
+        $context = $isLogRecord ? $record->context : $record['context'];
+        $extra = $isLogRecord ? $record->extra : $record['extra'];
 
         // Format and colorize header
         $headerLine = sprintf(
             self::HEADER_FORMAT,
             $className,
-            $record['level_name'],
-            $record['message'],
+            $levelName,
+            $message,
         );
 
-        $output = $this->colorize($headerLine, $record['level'], $colorScheme);
+        $output = $this->colorize($headerLine, $level);
 
         // Add context if present
-        if (! empty($record['context'])) {
-            $output .= $this->formatContext($record['context'], $colorScheme);
+        if (! empty($context)) {
+            $output .= $this->formatContext($context);
         }
 
-        if (! empty($record['extra']) && env('LOG_PRETTY_SHOW_EXTRA', false)) {
-            $output .= $this->formatContext($record['extra'], $colorScheme);
+        if (! empty($extra) && env('LOG_PRETTY_SHOW_EXTRA', false)) {
+            $output .= $this->formatContext($extra);
         }
 
         return $output."\n";
     }
 
-    private function extractClassName(array $record): string
+    public function formatBatch(array $records): string
     {
-        if (! isset($record['extra']['source_file'])) {
+        $message = '';
+        foreach ($records as $record) {
+            $message .= $this->format($record);
+        }
+
+        return $message;
+    }
+
+    private function extractClassName($record, bool $isLogRecord = null): string
+    {
+        if ($isLogRecord === null) {
+            $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
+        }
+
+        $extra = $isLogRecord ? $record->extra : $record['extra'];
+        
+        if (! isset($extra['source_file'])) {
             return '';
         }
 
-        $path = $record['extra']['source_file'];
+        $path = $extra['source_file'];
         $className = basename($path, '.php');
 
         return str_replace(['Trait', 'Interface', 'Abstract'], '', $className);
     }
 
-    private function formatContext(array $context, object $colorScheme): string
+    private function formatContext(array $context): string
     {
-        $debugColor = $colorScheme->getColorizeString(Logger::WARNING);
-        $reset = $colorScheme->getResetString();
+        $debugColor = $this->getColorForLevel(Logger::WARNING);
+        $reset = self::COLOR_RESET;
 
         $dataTree = $this->formatDataAsTree($context, 1);
         $lines = explode("\n", $dataTree);
@@ -71,7 +121,9 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
                 $truncated = strlen($line) > self::MAX_LINE_LENGTH;
                 $truncatedLine = substr($line, 0, self::MAX_LINE_LENGTH - ($truncated ? 3 : 0));
 
-                return $debugColor.$truncatedLine.($truncated ? '...' : '').$reset;
+                return $this->colorsEnabled 
+                    ? $debugColor.$truncatedLine.($truncated ? '...' : '').$reset
+                    : $truncatedLine.($truncated ? '...' : '');
             },
             $lines,
         );
@@ -79,11 +131,20 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
         return implode("\n", $coloredLines)."\n";
     }
 
-    private function colorize(string $text, int $level, object $colorScheme): string
+    private function colorize(string $text, int $level): string
     {
-        return $colorScheme->getColorizeString($level).
+        if (!$this->colorsEnabled) {
+            return $text;
+        }
+
+        return $this->getColorForLevel($level).
             $text.
-            $colorScheme->getResetString();
+            self::COLOR_RESET;
+    }
+
+    private function getColorForLevel(int $level): string
+    {
+        return self::COLOR_SCHEME[$level] ?? self::COLOR_SCHEME[Logger::INFO];
     }
 
     protected function formatDataAsTree(mixed $data, int $indent = 0): string
