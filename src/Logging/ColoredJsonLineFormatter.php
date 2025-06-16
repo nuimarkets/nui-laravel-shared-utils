@@ -6,6 +6,11 @@ use Bramus\Monolog\Formatter\ColoredLineFormatter;
 use JsonSerializable;
 use Monolog\Logger;
 
+// Compatibility check for Monolog 3.x LogRecord
+if (class_exists('Monolog\LogRecord')) {
+    use Monolog\LogRecord;
+}
+
 /**
  * Formats log records as colored JSON lines with improved readability.
  */
@@ -19,40 +24,56 @@ class ColoredJsonLineFormatter extends ColoredLineFormatter
 
     private const KEY_PADDING = 20;
 
-    public function format(array $record): string
+    public function format($record): string
     {
+        // Handle both Monolog 2.x (array) and 3.x (LogRecord) formats
+        $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
+        
         $colorScheme = $this->getColorScheme();
-        $className = $this->extractClassName($record);
+        $className = $this->extractClassName($record, $isLogRecord);
+
+        // Extract data based on record type
+        $levelName = $isLogRecord ? $record->level->getName() : $record['level_name'];
+        $message = $isLogRecord ? $record->message : $record['message'];
+        $level = $isLogRecord ? $record->level->value : $record['level'];
+        $context = $isLogRecord ? $record->context : $record['context'];
+        $extra = $isLogRecord ? $record->extra : $record['extra'];
 
         // Format and colorize header
         $headerLine = sprintf(
             self::HEADER_FORMAT,
             $className,
-            $record['level_name'],
-            $record['message'],
+            $levelName,
+            $message,
         );
 
-        $output = $this->colorize($headerLine, $record['level'], $colorScheme);
+        $output = $this->colorize($headerLine, $level, $colorScheme);
 
         // Add context if present
-        if (! empty($record['context'])) {
-            $output .= $this->formatContext($record['context'], $colorScheme);
+        if (! empty($context)) {
+            $output .= $this->formatContext($context, $colorScheme);
         }
 
-        if (! empty($record['extra']) && env('LOG_PRETTY_SHOW_EXTRA', false)) {
-            $output .= $this->formatContext($record['extra'], $colorScheme);
+        if (! empty($extra) && env('LOG_PRETTY_SHOW_EXTRA', false)) {
+            $output .= $this->formatContext($extra, $colorScheme);
         }
 
         return $output."\n";
     }
 
-    private function extractClassName(array $record): string
+    private function extractClassName($record, bool $isLogRecord = null): string
     {
-        if (! isset($record['extra']['source_file'])) {
+        if ($isLogRecord === null) {
+            $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
+        }
+
+        $extra = $isLogRecord ? $record->extra : $record['extra'];
+        
+        if (! isset($extra['source_file'])) {
             return '';
         }
 
-        $path = $record['extra']['source_file'];
+        $path = $extra['source_file'];
         $className = basename($path, '.php');
 
         return str_replace(['Trait', 'Interface', 'Abstract'], '', $className);
