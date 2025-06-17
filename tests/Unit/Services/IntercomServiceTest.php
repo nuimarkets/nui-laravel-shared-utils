@@ -106,6 +106,8 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_returns_false_when_disabled(): void
     {
+        Http::fake();
+
         Config::set('intercom.enabled', false);
         $service = new IntercomService;
 
@@ -117,6 +119,8 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_returns_false_with_empty_user_id(): void
     {
+        Http::fake();
+
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
@@ -134,6 +138,8 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_returns_false_with_empty_event(): void
     {
+        Http::fake();
+
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
@@ -151,6 +157,8 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_returns_false_with_whitespace_only_parameters(): void
     {
+        Http::fake();
+
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
@@ -280,6 +288,8 @@ class IntercomServiceTest extends TestCase
 
     public function test_batch_track_events_returns_empty_when_disabled(): void
     {
+        Http::fake();
+
         Config::set('intercom.enabled', false);
         $service = new IntercomService;
 
