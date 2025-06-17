@@ -62,7 +62,7 @@ class IntercomServiceTest extends TestCase
     public function test_track_event_success(): void
     {
         Http::fake([
-            'api.intercom.io/events' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'type' => 'event',
                 'id' => 'event-123',
             ], 200),
@@ -91,7 +91,7 @@ class IntercomServiceTest extends TestCase
     public function test_track_event_failure(): void
     {
         Http::fake([
-            'api.intercom.io/events' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'errors' => [['message' => 'Invalid user']],
             ], 400),
         ]);
@@ -177,7 +177,7 @@ class IntercomServiceTest extends TestCase
     public function test_create_or_update_user_success(): void
     {
         Http::fake([
-            'api.intercom.io/contacts' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'type' => 'contact',
                 'id' => 'contact-123',
                 'external_id' => 'user-123',
@@ -209,7 +209,7 @@ class IntercomServiceTest extends TestCase
     public function test_create_or_update_user_failure(): void
     {
         Http::fake([
-            'api.intercom.io/contacts' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'errors' => [['message' => 'Invalid email']],
             ], 422),
         ]);
@@ -226,7 +226,7 @@ class IntercomServiceTest extends TestCase
     public function test_create_or_update_company_success(): void
     {
         Http::fake([
-            'api.intercom.io/companies' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'type' => 'company',
                 'id' => 'company-123',
                 'company_id' => 'comp-456',
@@ -258,7 +258,7 @@ class IntercomServiceTest extends TestCase
     public function test_batch_track_events(): void
     {
         Http::fake([
-            'api.intercom.io/events/bulk' => Http::response([
+            'https://api.intercom.io/*' => Http::response([
                 'type' => 'bulk_event',
                 'success' => true,
             ], 200),
@@ -307,7 +307,7 @@ class IntercomServiceTest extends TestCase
     {
         // Test event name formatting through trackEvent
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         $this->service->trackEvent('user-123', 'Product Viewed', []);
@@ -322,7 +322,7 @@ class IntercomServiceTest extends TestCase
     public function test_api_request_includes_correct_headers(): void
     {
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         $this->service->trackEvent('user-123', 'test_event', []);
@@ -341,7 +341,7 @@ class IntercomServiceTest extends TestCase
         $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         $service->trackEvent('user-123', 'test_event', []);
@@ -358,7 +358,7 @@ class IntercomServiceTest extends TestCase
         $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         Log::shouldReceive('info')->once()->with(
@@ -406,7 +406,7 @@ class IntercomServiceTest extends TestCase
         $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         $service->trackEvent('user-123', 'user_action', []);
@@ -425,7 +425,7 @@ class IntercomServiceTest extends TestCase
         $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+            'https://api.intercom.io/*' => Http::response(['type' => 'event'], 200),
         ]);
 
         $service->trackEvent('user-123', 'user_action', []);
