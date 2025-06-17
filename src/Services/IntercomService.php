@@ -28,7 +28,7 @@ class IntercomService
         $this->config = config('intercom', []);
         $this->baseUrl = $this->config['base_url'] ?? 'https://api.intercom.io';
         $this->token = $this->config['token'] ?? '';
-        $this->apiVersion = $this->config['api_version'] ?? '2.11';
+        $this->apiVersion = $this->config['api_version'] ?? '2.13';
         $this->enabled = $this->config['enabled'] ?? false;
         $this->serviceName = $this->config['service_name'] ?? config('app.name', 'connect-service');
 
@@ -44,7 +44,21 @@ class IntercomService
      */
     public function trackEvent(string $userId, string $event, array $properties = []): bool
     {
+        Log::info('Intercom trackEvent called', [
+            'user_id' => $userId,
+            'event' => $event,
+            'enabled' => $this->isEnabled(),
+            'service' => $this->serviceName,
+            'token_set' => !empty($this->token)
+        ]);
+
         if (! $this->isEnabled()) {
+            Log::warning('Intercom track event not enabled', [
+                'enabled_config' => $this->enabled,
+                'token_empty' => empty($this->token),
+                'config' => $this->config
+            ]);
+
             return false;
         }
 
@@ -273,7 +287,7 @@ class IntercomService
      */
     private function formatEventName(string $event): string
     {
-        $prefix = $this->config['event_prefix'] ?? 'connect';
+        $prefix = $this->config['event_prefix'] ?? '';
 
         // Ensure consistent naming
         $event = strtolower($event);
