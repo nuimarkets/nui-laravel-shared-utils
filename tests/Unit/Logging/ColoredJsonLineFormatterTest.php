@@ -2,9 +2,9 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
+use Monolog\Logger;
 use Nuimarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
 use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
-use Monolog\Logger;
 
 class ColoredJsonLineFormatterTest extends TestCase
 {
@@ -13,7 +13,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->formatter = new ColoredJsonLineFormatter();
+        $this->formatter = new ColoredJsonLineFormatter;
     }
 
     /** @test */
@@ -26,9 +26,9 @@ class ColoredJsonLineFormatterTest extends TestCase
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [
-                'source_file' => '/path/to/TestClass.php'
+                'source_file' => '/path/to/TestClass.php',
             ],
         ];
 
@@ -44,13 +44,13 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_formats_monolog_3_log_record_correctly()
     {
-        if (!class_exists('Monolog\LogRecord')) {
+        if (! class_exists('Monolog\LogRecord')) {
             $this->markTestSkipped('Monolog 3 LogRecord class not available');
         }
 
         // Monolog 3.x LogRecord format
         $record = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable(),
+            datetime: new \DateTimeImmutable,
             channel: 'test',
             level: \Monolog\Level::Info,
             message: 'Test message',
@@ -76,7 +76,7 @@ class ColoredJsonLineFormatterTest extends TestCase
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [],
         ];
 
@@ -97,9 +97,9 @@ class ColoredJsonLineFormatterTest extends TestCase
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [
-                'source_file' => '/app/src/Services/UserServiceTrait.php'
+                'source_file' => '/app/src/Services/UserServiceTrait.php',
             ],
         ];
 
@@ -119,7 +119,7 @@ class ColoredJsonLineFormatterTest extends TestCase
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [],
         ];
 
@@ -139,17 +139,17 @@ class ColoredJsonLineFormatterTest extends TestCase
             'context' => [
                 'user' => [
                     'id' => 123,
-                    'name' => 'John Doe'
+                    'name' => 'John Doe',
                 ],
                 'metadata' => [
                     'action' => 'login',
-                    'ip' => '192.168.1.1'
-                ]
+                    'ip' => '192.168.1.1',
+                ],
             ],
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [],
         ];
 
@@ -181,7 +181,7 @@ class ColoredJsonLineFormatterTest extends TestCase
                 'level' => $levelData['level'],
                 'level_name' => $levelData['name'],
                 'channel' => 'test',
-                'datetime' => new \DateTimeImmutable(),
+                'datetime' => new \DateTimeImmutable,
                 'extra' => [],
             ];
 
@@ -208,9 +208,9 @@ class ColoredJsonLineFormatterTest extends TestCase
                 'level' => Logger::INFO,
                 'level_name' => 'INFO',
                 'channel' => 'test',
-                'datetime' => new \DateTimeImmutable(),
+                'datetime' => new \DateTimeImmutable,
                 'extra' => [
-                    'source_file' => "/app/src/{$fileName}"
+                    'source_file' => "/app/src/{$fileName}",
                 ],
             ];
 
@@ -228,7 +228,7 @@ class ColoredJsonLineFormatterTest extends TestCase
             'level' => Logger::INFO,
             'level_name' => 'INFO',
             'channel' => 'test',
-            'datetime' => new \DateTimeImmutable(),
+            'datetime' => new \DateTimeImmutable,
             'extra' => [],
         ];
 
