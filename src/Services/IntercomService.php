@@ -64,7 +64,6 @@ class IntercomService
 
         try {
             $eventData = [
-                'user_id' => $userId,
                 'event_name' => $this->formatEventName($event),
                 'created_at' => time(),
                 'metadata' => array_merge($properties, [
@@ -73,6 +72,13 @@ class IntercomService
                     'environment' => config('app.env', 'production'),
                 ]),
             ];
+
+            // Use email field if userId looks like an email, otherwise use user_id
+            if (filter_var($userId, FILTER_VALIDATE_EMAIL)) {
+                $eventData['email'] = $userId;
+            } else {
+                $eventData['user_id'] = $userId;
+            }
 
             $response = $this->makeApiRequest('POST', '/events', $eventData);
 
