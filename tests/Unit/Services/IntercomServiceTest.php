@@ -96,6 +96,7 @@ class IntercomServiceTest extends TestCase
             ], 400),
         ]);
 
+        Log::shouldReceive('info')->once();
         Log::shouldReceive('warning')->once();
 
         $result = $this->service->trackEvent('user-123', 'product_viewed', []);
@@ -109,6 +110,57 @@ class IntercomServiceTest extends TestCase
         $service = new IntercomService;
 
         $result = $service->trackEvent('user-123', 'test_event', []);
+
+        $this->assertFalse($result);
+        Http::assertNothingSent();
+    }
+
+    public function test_track_event_returns_false_with_empty_user_id(): void
+    {
+        Log::shouldReceive('warning')->once()->with(
+            'Intercom trackEvent called with empty userId or event',
+            [
+                'user_id' => '',
+                'event' => 'test_event',
+                'service' => 'connect-service-test',
+            ]
+        );
+
+        $result = $this->service->trackEvent('', 'test_event', []);
+
+        $this->assertFalse($result);
+        Http::assertNothingSent();
+    }
+
+    public function test_track_event_returns_false_with_empty_event(): void
+    {
+        Log::shouldReceive('warning')->once()->with(
+            'Intercom trackEvent called with empty userId or event',
+            [
+                'user_id' => 'user-123',
+                'event' => '',
+                'service' => 'connect-service-test',
+            ]
+        );
+
+        $result = $this->service->trackEvent('user-123', '', []);
+
+        $this->assertFalse($result);
+        Http::assertNothingSent();
+    }
+
+    public function test_track_event_returns_false_with_whitespace_only_parameters(): void
+    {
+        Log::shouldReceive('warning')->once()->with(
+            'Intercom trackEvent called with empty userId or event',
+            [
+                'user_id' => '   ',
+                'event' => '   ',
+                'service' => 'connect-service-test',
+            ]
+        );
+
+        $result = $this->service->trackEvent('   ', '   ', []);
 
         $this->assertFalse($result);
         Http::assertNothingSent();
@@ -198,9 +250,9 @@ class IntercomServiceTest extends TestCase
     public function test_batch_track_events(): void
     {
         Http::fake([
-            'api.intercom.io/events' => Http::response([
-                'type' => 'event',
-                'id' => 'event-123',
+            'api.intercom.io/events/bulk' => Http::response([
+                'type' => 'bulk_event',
+                'success' => true,
             ], 200),
         ]);
 
@@ -223,7 +275,7 @@ class IntercomServiceTest extends TestCase
         $this->assertTrue($results[0]['success']);
         $this->assertTrue($results[1]['success']);
 
-        Http::assertSentCount(2);
+        Http::assertSentCount(1); // Now expects only 1 bulk request
     }
 
     public function test_batch_track_events_returns_empty_when_disabled(): void
@@ -300,6 +352,17 @@ class IntercomServiceTest extends TestCase
         ]);
 
         Log::shouldReceive('info')->once()->with(
+            'Intercom trackEvent called',
+            \Mockery::on(function ($context) {
+                return $context['user_id'] === 'user-123' &&
+                       $context['event'] === 'test_event' &&
+                       $context['enabled'] === true &&
+                       $context['service'] === 'connect-service-test' &&
+                       $context['token_set'] === true;
+            })
+        );
+
+        Log::shouldReceive('info')->once()->with(
             'Intercom event tracked',
             \Mockery::on(function ($context) {
                 return $context['user_id'] === 'user-123' &&
@@ -318,6 +381,7 @@ class IntercomServiceTest extends TestCase
             throw new \Exception('Network error');
         });
 
+        Log::shouldReceive('info')->once();
         Log::shouldReceive('warning')->once();
 
         $result = $this->service->trackEvent('user-123', 'test_event', []);

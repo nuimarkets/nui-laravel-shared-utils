@@ -44,19 +44,30 @@ class IntercomService
      */
     public function trackEvent(string $userId, string $event, array $properties = []): bool
     {
+        // Guard clause: Check for empty userId or event
+        if (empty(trim($userId)) || empty(trim($event))) {
+            Log::warning('Intercom trackEvent called with empty userId or event', [
+                'user_id' => $userId,
+                'event' => $event,
+                'service' => $this->serviceName,
+            ]);
+
+            return false;
+        }
+
         Log::info('Intercom trackEvent called', [
             'user_id' => $userId,
             'event' => $event,
             'enabled' => $this->isEnabled(),
             'service' => $this->serviceName,
-            'token_set' => !empty($this->token)
+            'token_set' => ! empty($this->token),
         ]);
 
         if (! $this->isEnabled()) {
             Log::warning('Intercom track event not enabled', [
                 'enabled_config' => $this->enabled,
                 'token_empty' => empty($this->token),
-                'config' => $this->config
+                'config' => $this->config,
             ]);
 
             return false;
@@ -222,7 +233,7 @@ class IntercomService
     }
 
     /**
-     * Batch track multiple events
+     * Batch track multiple events using Intercom's bulk endpoint
      */
     public function batchTrackEvents(array $events): array
     {
@@ -231,24 +242,94 @@ class IntercomService
         }
 
         $results = [];
-        $batchSize = $this->config['batch_size'] ?? 50;
+        // Intercom supports up to 1000 events per bulk request
+        $batchSize = min($this->config['batch_size'] ?? 50, 1000);
 
         foreach (array_chunk($events, $batchSize) as $batch) {
-            foreach ($batch as $event) {
-                $success = $this->trackEvent(
-                    $event['user_id'] ?? '',
-                    $event['event'] ?? '',
-                    $event['properties'] ?? []
-                );
-
-                $results[] = [
-                    'event' => $event,
-                    'success' => $success,
-                ];
-            }
+            $batchResult = $this->sendBatchToIntercom($batch);
+            $results = array_merge($results, $batchResult);
         }
 
         return $results;
+    }
+
+    /**
+     * Send a batch of events to Intercom's bulk endpoint
+     */
+    private function sendBatchToIntercom(array $events): array
+    {
+        try {
+            $bulkData = [
+                'events' => [],
+            ];
+
+            foreach ($events as $event) {
+                $eventData = [
+                    'event_name' => $this->formatEventName($event['event'] ?? ''),
+                    'created_at' => time(),
+                    'metadata' => array_merge($event['properties'] ?? [], [
+                        'service' => $this->serviceName,
+                        'version' => config('app.version', '1.0.0'),
+                        'environment' => config('app.env', 'production'),
+                    ]),
+                ];
+
+                $userId = $event['user_id'] ?? '';
+
+                // Use email field if userId looks like an email, otherwise use user_id
+                if (filter_var($userId, FILTER_VALIDATE_EMAIL)) {
+                    $eventData['email'] = $userId;
+                } else {
+                    $eventData['user_id'] = $userId;
+                }
+
+                $bulkData['events'][] = $eventData;
+            }
+
+            $response = $this->makeApiRequest('POST', '/events/bulk', $bulkData);
+
+            if ($response->successful()) {
+                $this->logSuccess('Intercom bulk events tracked', [
+                    'event_count' => count($events),
+                    'response_status' => $response->status(),
+                ]);
+
+                // Return success for all events in this batch
+                return array_map(function ($event) {
+                    return [
+                        'event' => $event,
+                        'success' => true,
+                    ];
+                }, $events);
+            } else {
+                $this->logError('Intercom bulk events failed', [
+                    'event_count' => count($events),
+                    'response_status' => $response->status(),
+                    'response_body' => $response->body(),
+                ]);
+
+                // Return failure for all events in this batch
+                return array_map(function ($event) {
+                    return [
+                        'event' => $event,
+                        'success' => false,
+                    ];
+                }, $events);
+            }
+        } catch (\Throwable $e) {
+            $this->logError('Intercom bulk events exception', [
+                'event_count' => count($events),
+                'error' => $e->getMessage(),
+            ]);
+
+            // Return failure for all events in this batch
+            return array_map(function ($event) {
+                return [
+                    'event' => $event,
+                    'success' => false,
+                ];
+            }, $events);
+        }
     }
 
     /**

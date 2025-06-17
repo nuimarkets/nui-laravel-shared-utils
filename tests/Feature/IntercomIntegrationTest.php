@@ -127,7 +127,7 @@ class IntercomIntegrationTest extends TestCase
     public function test_batch_event_processing(): void
     {
         Http::fake([
-            'https://api.intercom.io/events' => Http::response(['status' => 'ok'], 200),
+            'https://api.intercom.io/events/bulk' => Http::response(['status' => 'ok'], 200),
         ]);
 
         $service = new IntercomService;
@@ -151,7 +151,7 @@ class IntercomIntegrationTest extends TestCase
         $this->assertTrue($results[0]['success']);
         $this->assertTrue($results[1]['success']);
 
-        Http::assertSentCount(2);
+        Http::assertSentCount(1); // Now expects only 1 bulk request
     }
 
     public function test_user_and_company_management(): void
