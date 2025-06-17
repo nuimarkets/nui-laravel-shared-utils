@@ -12,23 +12,15 @@ class IntercomListener implements ShouldQueue
 {
     use InteractsWithQueue;
 
-    private IntercomService $intercomService;
-
-    /**
-     * Create the event listener.
-     */
-    public function __construct(IntercomService $intercomService)
-    {
-        $this->intercomService = $intercomService;
-    }
-
     /**
      * Handle the event.
      */
     public function handle(IntercomEvent $event): void
     {
+        $intercomService = app(IntercomService::class);
+
         // Only process if Intercom is enabled
-        if (! $this->intercomService->isEnabled()) {
+        if (! $intercomService->isEnabled()) {
             return;
         }
 
@@ -40,7 +32,7 @@ class IntercomListener implements ShouldQueue
             }
 
             // Track the event
-            $success = $this->intercomService->trackEvent(
+            $success = $intercomService->trackEvent(
                 $event->userId,
                 $event->event,
                 $properties
@@ -48,15 +40,15 @@ class IntercomListener implements ShouldQueue
 
             if (! $success) {
                 Log::warning('Intercom event tracking failed', [
-                    'service' => $this->intercomService->getServiceName(),
+                    'service' => $intercomService->getServiceName(),
                     'user_id' => $event->userId,
                     'event' => $event->event,
                     'tenant_id' => $event->tenantId,
                 ]);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Intercom listener exception', [
-                'service' => $this->intercomService->getServiceName(),
+                'service' => $intercomService->getServiceName(),
                 'user_id' => $event->userId,
                 'event' => $event->event,
                 'error' => $e->getMessage(),
@@ -73,8 +65,10 @@ class IntercomListener implements ShouldQueue
      */
     public function failed(IntercomEvent $event, \Throwable $exception): void
     {
+        $intercomService = app(IntercomService::class);
+
         Log::error('Intercom listener job failed', [
-            'service' => $this->intercomService->getServiceName(),
+            'service' => $intercomService->getServiceName(),
             'user_id' => $event->userId,
             'event' => $event->event,
             'tenant_id' => $event->tenantId,

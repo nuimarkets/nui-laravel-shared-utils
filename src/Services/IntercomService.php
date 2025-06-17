@@ -265,7 +265,7 @@ class IntercomService
 
         return Http::withHeaders($this->getHeaders())
             ->timeout($timeout)
-            ->$method($url, $data);
+            ->{strtolower($method)}($url, $data);
     }
 
     /**

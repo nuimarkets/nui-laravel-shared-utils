@@ -20,7 +20,8 @@ class IntercomListenerTest extends TestCase
         parent::setUp();
 
         $this->mockIntercomService = Mockery::mock(IntercomService::class);
-        $this->listener = new IntercomListener($this->mockIntercomService);
+        $this->app->instance(IntercomService::class, $this->mockIntercomService);
+        $this->listener = new IntercomListener;
     }
 
     protected function tearDown(): void
@@ -54,6 +55,8 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_handle_skips_processing_when_service_is_disabled(): void
@@ -69,6 +72,8 @@ class IntercomListenerTest extends TestCase
             ->shouldNotReceive('trackEvent');
 
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_handle_adds_tenant_id_to_properties_when_present(): void
@@ -95,6 +100,8 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_handle_does_not_add_tenant_id_when_not_present(): void
@@ -120,6 +127,8 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_handle_logs_warning_when_tracking_fails(): void
@@ -157,6 +166,8 @@ class IntercomListenerTest extends TestCase
             );
 
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_handle_logs_error_and_continues_when_exception_occurs(): void
@@ -191,6 +202,8 @@ class IntercomListenerTest extends TestCase
 
         // Should not throw exception
         $this->listener->handle($event);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 
     public function test_failed_logs_job_failure(): void
@@ -222,5 +235,7 @@ class IntercomListenerTest extends TestCase
             );
 
         $this->listener->failed($event, $exception);
+
+        $this->assertTrue(true); // Assert the method completed without throwing exceptions
     }
 }

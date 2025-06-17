@@ -61,7 +61,7 @@ class IntercomIntegrationTest extends TestCase
         Http::fake([
             'https://api.intercom.io/events' => Http::response(['status' => 'ok'], 200),
         ]);
-        
+
         // Create real service and listener instances
         $service = new IntercomService;
         $listener = new IntercomListener($service);
@@ -129,7 +129,7 @@ class IntercomIntegrationTest extends TestCase
         Http::fake([
             'https://api.intercom.io/events' => Http::response(['status' => 'ok'], 200),
         ]);
-        
+
         $service = new IntercomService;
 
         $events = [
@@ -160,12 +160,12 @@ class IntercomIntegrationTest extends TestCase
             'https://api.intercom.io/contacts' => Http::response([
                 'type' => 'contact',
                 'id' => 'contact-123',
-                'external_id' => 'user-123'
+                'external_id' => 'user-123',
             ], 200),
             'https://api.intercom.io/companies' => Http::response([
                 'type' => 'company',
                 'id' => 'company-456',
-                'company_id' => 'company-789'
+                'company_id' => 'company-789',
             ], 200),
         ]);
 
