@@ -4,15 +4,17 @@ namespace Nuimarkets\LaravelSharedUtils\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Log;
 
 class IntercomEvent
 {
     use Dispatchable, SerializesModels;
 
     public string $userId;
+
     public string $event;
+
     public array $properties;
+
     public ?string $tenantId;
 
     /**

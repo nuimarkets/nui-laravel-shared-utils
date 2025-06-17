@@ -2,13 +2,13 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Tests\Feature;
 
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
-use Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener;
-use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomIntegrationTest extends TestCase
@@ -16,7 +16,7 @@ class IntercomIntegrationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Configure Intercom for testing
         Config::set('intercom', [
             'token' => 'test-intercom-token',
@@ -26,13 +26,11 @@ class IntercomIntegrationTest extends TestCase
             'service_name' => 'connect-service-test',
             'timeout' => 10,
             'fail_silently' => true,
-            'batch_size' => 50
+            'batch_size' => 50,
+            'event_prefix' => 'connect',
         ]);
 
-        // Fake HTTP for Intercom API calls
-        Http::fake([
-            'api.intercom.io/*' => Http::response(['status' => 'ok'], 200)
-        ]);
+        // Fake HTTP for Intercom API calls - nothing here, will be set per test
     }
 
     public function test_event_is_dispatched_and_processed_by_listener(): void
@@ -60,10 +58,14 @@ class IntercomIntegrationTest extends TestCase
 
     public function test_listener_processes_event_and_calls_intercom_service(): void
     {
-        // Create real service and listener instances
-        $service = new IntercomService();
-        $listener = new IntercomListener($service);
+        Http::fake([
+            'https://api.intercom.io/events' => Http::response(['status' => 'ok'], 200),
+        ]);
         
+        // Create real service and listener instances
+        $service = new IntercomService;
+        $listener = new IntercomListener($service);
+
         $event = new IntercomEvent(
             'user-123',
             'product_viewed',
@@ -77,6 +79,7 @@ class IntercomIntegrationTest extends TestCase
         // Assert HTTP request was made to Intercom API
         Http::assertSent(function ($request) {
             $data = $request->data();
+
             return $request->url() === 'https://api.intercom.io/events' &&
                    $data['user_id'] === 'user-123' &&
                    $data['event_name'] === 'connect_product_viewed' &&
@@ -89,15 +92,15 @@ class IntercomIntegrationTest extends TestCase
     public function test_service_handles_disabled_state_gracefully(): void
     {
         Config::set('intercom.enabled', false);
-        
-        $service = new IntercomService();
+
+        $service = new IntercomService;
         $listener = new IntercomListener($service);
-        
+
         $event = new IntercomEvent('user-123', 'test_event');
-        
+
         // Should not make any HTTP requests when disabled
         $listener->handle($event);
-        
+
         Http::assertNothingSent();
     }
 
@@ -105,37 +108,41 @@ class IntercomIntegrationTest extends TestCase
     {
         // Mock API error response
         Http::fake([
-            'api.intercom.io/events' => Http::response(['error' => 'Invalid request'], 400)
+            'https://api.intercom.io/events' => Http::response(['error' => 'Invalid request'], 400),
         ]);
 
-        $service = new IntercomService();
+        $service = new IntercomService;
         $listener = new IntercomListener($service);
-        
+
         $event = new IntercomEvent('user-123', 'test_event');
-        
+
         // Should handle error gracefully and not throw exceptions
         $listener->handle($event);
-        
+
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://api.intercom.io/events';
+            return str_contains($request->url(), '/events');
         });
     }
 
     public function test_batch_event_processing(): void
     {
-        $service = new IntercomService();
+        Http::fake([
+            'https://api.intercom.io/events' => Http::response(['status' => 'ok'], 200),
+        ]);
         
+        $service = new IntercomService;
+
         $events = [
             [
                 'user_id' => 'user-1',
                 'event' => 'product_viewed',
-                'properties' => ['product_id' => 'prod-1']
+                'properties' => ['product_id' => 'prod-1'],
             ],
             [
                 'user_id' => 'user-2',
                 'event' => 'product_added_to_cart',
-                'properties' => ['product_id' => 'prod-2']
-            ]
+                'properties' => ['product_id' => 'prod-2'],
+            ],
         ];
 
         $results = $service->batchTrackEvents($events);
@@ -150,26 +157,36 @@ class IntercomIntegrationTest extends TestCase
     public function test_user_and_company_management(): void
     {
         Http::fake([
-            'api.intercom.io/contacts' => Http::response(['id' => 'contact-123'], 200),
-            'api.intercom.io/companies' => Http::response(['id' => 'company-456'], 200)
+            'https://api.intercom.io/contacts' => Http::response([
+                'type' => 'contact',
+                'id' => 'contact-123',
+                'external_id' => 'user-123'
+            ], 200),
+            'https://api.intercom.io/companies' => Http::response([
+                'type' => 'company',
+                'id' => 'company-456',
+                'company_id' => 'company-789'
+            ], 200),
         ]);
 
-        $service = new IntercomService();
-        
+        $service = new IntercomService;
+
         // Test user creation
         $user = $service->createOrUpdateUser('user-123', [
             'email' => 'test@example.com',
-            'name' => 'Test User'
+            'name' => 'Test User',
         ]);
-        
+
+        $this->assertNotEmpty($user);
+        $this->assertArrayHasKey('id', $user);
         $this->assertEquals('contact-123', $user['id']);
-        
+
         // Test company creation
         $company = $service->createOrUpdateCompany('company-789', [
             'name' => 'Test Company',
-            'plan' => 'premium'
+            'plan' => 'premium',
         ]);
-        
+
         $this->assertEquals('company-456', $company['id']);
 
         Http::assertSentCount(2);

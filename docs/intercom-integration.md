@@ -1,6 +1,6 @@
 # Intercom Integration
 
-The `nuimarkets/laravel-shared-utils` package provides a complete Intercom integration for the Connect Platform ecosystem.
+Shared Intercom package
 
 ## Features
 
@@ -24,10 +24,11 @@ cp vendor/nuimarkets/laravel-shared-utils/config/intercom.php config/
 INTERCOM_ENABLED=true
 INTERCOM_TOKEN=your_intercom_access_token
 INTERCOM_API_VERSION=2.13
-INTERCOM_SERVICE_NAME=connect-product
+INTERCOM_SERVICE_NAME=xyz
 INTERCOM_TIMEOUT=10
 INTERCOM_FAIL_SILENTLY=true
 INTERCOM_BATCH_SIZE=50
+INTERCOM_EVENT_PREFIX=nui
 ```
 
 ### 3. Service Registration
@@ -172,9 +173,9 @@ $results = $intercomService->batchTrackEvents($events);
 
 ## Event Naming Convention
 
-Events are automatically prefixed with `connect_` and formatted:
-- `product_viewed` → `connect_product_viewed`
-- `User Registered` → `connect_user_registered`
+Events are automatically prefixed with your configured prefix and formatted:
+- `product_viewed` → `myapp_product_viewed` (with `INTERCOM_EVENT_PREFIX=myapp`)
+- `product_viewed` → `product_viewed` (with `INTERCOM_EVENT_PREFIX=` empty)
 
 ## Required Request Parameters
 

@@ -2,10 +2,10 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Http\Controllers\Traits;
 
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
-use Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
 use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class TracksIntercomEventsTest extends TestCase
@@ -22,7 +22,7 @@ class TracksIntercomEventsTest extends TestCase
     {
         $request = Request::create('/test', 'GET', [
             'userID' => 'user-123',
-            'tenant_uuid' => 'tenant-789'
+            'tenant_uuid' => 'tenant-789',
         ]);
         $request->headers->set('User-Agent', 'Mozilla/5.0');
 
@@ -42,7 +42,7 @@ class TracksIntercomEventsTest extends TestCase
     {
         $request = Request::create('/test', 'GET', ['userID' => 'user-123'], [], [], [
             'HTTP_USER_AGENT' => 'Mozilla/5.0',
-            'REMOTE_ADDR' => '192.168.1.1'
+            'REMOTE_ADDR' => '192.168.1.1',
         ]);
 
         $this->trackProductView('prod-456', [], $request);
@@ -78,7 +78,7 @@ class TracksIntercomEventsTest extends TestCase
     {
         $request = Request::create('/test', 'GET', [
             'userID' => 'user-123',
-            'tenant_uuid' => 'tenant-789'
+            'tenant_uuid' => 'tenant-789',
         ]);
 
         $this->trackEvent('user_logged_in', ['source' => 'web'], $request);

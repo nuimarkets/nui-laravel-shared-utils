@@ -25,7 +25,7 @@ class IntercomEventTest extends TestCase
         $properties = [
             'product_id' => 'prod-456',
             'category' => 'meat',
-            'price' => 25.99
+            'price' => 25.99,
         ];
 
         $event = new IntercomEvent(
@@ -60,13 +60,13 @@ class IntercomEventTest extends TestCase
                 'name' => 'Premium Beef',
                 'attributes' => [
                     'weight' => '2kg',
-                    'grade' => 'A'
-                ]
+                    'grade' => 'A',
+                ],
             ],
             'user_context' => [
                 'referrer' => 'search',
-                'session_duration' => 300
-            ]
+                'session_duration' => 300,
+            ],
         ];
 
         $event = new IntercomEvent(

@@ -2,11 +2,11 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Listeners;
 
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
-use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 
 class IntercomListener implements ShouldQueue
 {
@@ -28,7 +28,7 @@ class IntercomListener implements ShouldQueue
     public function handle(IntercomEvent $event): void
     {
         // Only process if Intercom is enabled
-        if (!$this->intercomService->isEnabled()) {
+        if (! $this->intercomService->isEnabled()) {
             return;
         }
 
@@ -46,12 +46,12 @@ class IntercomListener implements ShouldQueue
                 $properties
             );
 
-            if (!$success) {
+            if (! $success) {
                 Log::warning('Intercom event tracking failed', [
                     'service' => $this->intercomService->getServiceName(),
                     'user_id' => $event->userId,
                     'event' => $event->event,
-                    'tenant_id' => $event->tenantId
+                    'tenant_id' => $event->tenantId,
                 ]);
             }
         } catch (\Exception $e) {
@@ -60,7 +60,7 @@ class IntercomListener implements ShouldQueue
                 'user_id' => $event->userId,
                 'event' => $event->event,
                 'error' => $e->getMessage(),
-                'tenant_id' => $event->tenantId
+                'tenant_id' => $event->tenantId,
             ]);
 
             // Don't fail the job, just log the error
@@ -78,7 +78,7 @@ class IntercomListener implements ShouldQueue
             'user_id' => $event->userId,
             'event' => $event->event,
             'tenant_id' => $event->tenantId,
-            'error' => $exception->getMessage()
+            'error' => $exception->getMessage(),
         ]);
     }
 }

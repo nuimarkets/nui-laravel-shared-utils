@@ -2,22 +2,23 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Listeners;
 
+use Illuminate\Support\Facades\Log;
+use Mockery;
 use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
 use Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener;
 use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
-use Illuminate\Support\Facades\Log;
 use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
-use Mockery;
 
 class IntercomListenerTest extends TestCase
 {
     private $mockIntercomService;
+
     private IntercomListener $listener;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->mockIntercomService = Mockery::mock(IntercomService::class);
         $this->listener = new IntercomListener($this->mockIntercomService);
     }
@@ -151,7 +152,7 @@ class IntercomListenerTest extends TestCase
                     'service' => 'connect-service-test',
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',
-                    'tenant_id' => 'tenant-789'
+                    'tenant_id' => 'tenant-789',
                 ]
             );
 
@@ -184,7 +185,7 @@ class IntercomListenerTest extends TestCase
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',
                     'error' => 'Network timeout',
-                    'tenant_id' => null
+                    'tenant_id' => null,
                 ]
             );
 
@@ -216,7 +217,7 @@ class IntercomListenerTest extends TestCase
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',
                     'tenant_id' => 'tenant-789',
-                    'error' => 'Job processing failed'
+                    'error' => 'Job processing failed',
                 ]
             );
 

@@ -2,12 +2,11 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Services;
 
-use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 use Illuminate\Http\Client\Request;
-use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomServiceTest extends TestCase
@@ -17,7 +16,7 @@ class IntercomServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Mock config for testing
         Config::set('intercom', [
             'token' => 'test-token',
@@ -27,23 +26,18 @@ class IntercomServiceTest extends TestCase
             'service_name' => 'connect-service-test',
             'timeout' => 10,
             'fail_silently' => true,
-            'events' => [
-                'prefix' => 'test_'
-            ],
-            'features' => [
-                'detailed_logging' => false
-            ],
-            'batch_size' => 50
+            'batch_size' => 50,
+            'event_prefix' => 'connect',
         ]);
 
-        $this->service = new IntercomService();
+        $this->service = new IntercomService;
     }
 
     public function test_service_initializes_with_config(): void
     {
         $this->assertTrue($this->service->isEnabled());
         $this->assertEquals('connect-service-test', $this->service->getServiceName());
-        
+
         $config = $this->service->getConfig();
         $this->assertEquals('test-token', $config['token']);
         $this->assertEquals('https://api.intercom.io', $config['base_url']);
@@ -52,16 +46,16 @@ class IntercomServiceTest extends TestCase
     public function test_service_disabled_when_no_token(): void
     {
         Config::set('intercom.token', '');
-        $service = new IntercomService();
-        
+        $service = new IntercomService;
+
         $this->assertFalse($service->isEnabled());
     }
 
     public function test_service_disabled_when_not_enabled(): void
     {
         Config::set('intercom.enabled', false);
-        $service = new IntercomService();
-        
+        $service = new IntercomService;
+
         $this->assertFalse($service->isEnabled());
     }
 
@@ -70,20 +64,20 @@ class IntercomServiceTest extends TestCase
         Http::fake([
             'api.intercom.io/events' => Http::response([
                 'type' => 'event',
-                'id' => 'event-123'
-            ], 200)
+                'id' => 'event-123',
+            ], 200),
         ]);
 
         $result = $this->service->trackEvent('user-123', 'product_viewed', [
             'product_id' => 'prod-456',
-            'category' => 'meat'
+            'category' => 'meat',
         ]);
 
         $this->assertTrue($result);
 
         Http::assertSent(function (Request $request) {
             $data = $request->data();
-            
+
             return $request->url() === 'https://api.intercom.io/events' &&
                    $request->method() === 'POST' &&
                    $data['user_id'] === 'user-123' &&
@@ -98,8 +92,8 @@ class IntercomServiceTest extends TestCase
     {
         Http::fake([
             'api.intercom.io/events' => Http::response([
-                'errors' => [['message' => 'Invalid user']]
-            ], 400)
+                'errors' => [['message' => 'Invalid user']],
+            ], 400),
         ]);
 
         Log::shouldReceive('warning')->once();
@@ -112,7 +106,7 @@ class IntercomServiceTest extends TestCase
     public function test_track_event_returns_false_when_disabled(): void
     {
         Config::set('intercom.enabled', false);
-        $service = new IntercomService();
+        $service = new IntercomService;
 
         $result = $service->trackEvent('user-123', 'test_event', []);
 
@@ -126,14 +120,14 @@ class IntercomServiceTest extends TestCase
             'api.intercom.io/contacts' => Http::response([
                 'type' => 'contact',
                 'id' => 'contact-123',
-                'external_id' => 'user-123'
-            ], 200)
+                'external_id' => 'user-123',
+            ], 200),
         ]);
 
         $result = $this->service->createOrUpdateUser('user-123', [
             'email' => 'test@example.com',
             'name' => 'Test User',
-            'custom_field' => 'custom_value'
+            'custom_field' => 'custom_value',
         ]);
 
         $this->assertNotEmpty($result);
@@ -141,7 +135,7 @@ class IntercomServiceTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $data = $request->data();
-            
+
             return $request->url() === 'https://api.intercom.io/contacts' &&
                    $request->method() === 'POST' &&
                    $data['external_id'] === 'user-123' &&
@@ -156,14 +150,14 @@ class IntercomServiceTest extends TestCase
     {
         Http::fake([
             'api.intercom.io/contacts' => Http::response([
-                'errors' => [['message' => 'Invalid email']]
-            ], 422)
+                'errors' => [['message' => 'Invalid email']],
+            ], 422),
         ]);
 
         Log::shouldReceive('warning')->once();
 
         $result = $this->service->createOrUpdateUser('user-123', [
-            'email' => 'invalid-email'
+            'email' => 'invalid-email',
         ]);
 
         $this->assertEmpty($result);
@@ -175,14 +169,14 @@ class IntercomServiceTest extends TestCase
             'api.intercom.io/companies' => Http::response([
                 'type' => 'company',
                 'id' => 'company-123',
-                'company_id' => 'comp-456'
-            ], 200)
+                'company_id' => 'comp-456',
+            ], 200),
         ]);
 
         $result = $this->service->createOrUpdateCompany('comp-456', [
             'name' => 'Test Company',
             'plan' => 'premium',
-            'custom_field' => 'custom_value'
+            'custom_field' => 'custom_value',
         ]);
 
         $this->assertNotEmpty($result);
@@ -190,7 +184,7 @@ class IntercomServiceTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $data = $request->data();
-            
+
             return $request->url() === 'https://api.intercom.io/companies' &&
                    $request->method() === 'POST' &&
                    $data['company_id'] === 'comp-456' &&
@@ -206,21 +200,21 @@ class IntercomServiceTest extends TestCase
         Http::fake([
             'api.intercom.io/events' => Http::response([
                 'type' => 'event',
-                'id' => 'event-123'
-            ], 200)
+                'id' => 'event-123',
+            ], 200),
         ]);
 
         $events = [
             [
                 'user_id' => 'user-1',
                 'event' => 'product_viewed',
-                'properties' => ['product_id' => 'prod-1']
+                'properties' => ['product_id' => 'prod-1'],
             ],
             [
                 'user_id' => 'user-2',
                 'event' => 'product_searched',
-                'properties' => ['query' => 'beef']
-            ]
+                'properties' => ['query' => 'beef'],
+            ],
         ];
 
         $results = $this->service->batchTrackEvents($events);
@@ -235,10 +229,10 @@ class IntercomServiceTest extends TestCase
     public function test_batch_track_events_returns_empty_when_disabled(): void
     {
         Config::set('intercom.enabled', false);
-        $service = new IntercomService();
+        $service = new IntercomService;
 
         $events = [
-            ['user_id' => 'user-1', 'event' => 'test', 'properties' => []]
+            ['user_id' => 'user-1', 'event' => 'test', 'properties' => []],
         ];
 
         $results = $service->batchTrackEvents($events);
@@ -251,13 +245,14 @@ class IntercomServiceTest extends TestCase
     {
         // Test event name formatting through trackEvent
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200)
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
         ]);
 
         $this->service->trackEvent('user-123', 'Product Viewed', []);
 
         Http::assertSent(function (Request $request) {
             $data = $request->data();
+
             return $data['event_name'] === 'connect_product_viewed';
         });
     }
@@ -265,7 +260,7 @@ class IntercomServiceTest extends TestCase
     public function test_api_request_includes_correct_headers(): void
     {
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200)
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
         ]);
 
         $this->service->trackEvent('user-123', 'test_event', []);
@@ -281,10 +276,10 @@ class IntercomServiceTest extends TestCase
     public function test_api_request_timeout_configuration(): void
     {
         Config::set('intercom.timeout', 30);
-        $service = new IntercomService();
+        $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200)
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
         ]);
 
         $service->trackEvent('user-123', 'test_event', []);
@@ -298,10 +293,10 @@ class IntercomServiceTest extends TestCase
     public function test_logging_behavior_with_detailed_logging_enabled(): void
     {
         Config::set('intercom.features.detailed_logging', true);
-        $service = new IntercomService();
+        $service = new IntercomService;
 
         Http::fake([
-            'api.intercom.io/events' => Http::response(['type' => 'event'], 200)
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
         ]);
 
         Log::shouldReceive('info')->once()->with(
@@ -328,5 +323,43 @@ class IntercomServiceTest extends TestCase
         $result = $this->service->trackEvent('user-123', 'test_event', []);
 
         $this->assertFalse($result);
+    }
+
+    public function test_event_prefix_is_configurable(): void
+    {
+        // Test with custom prefix
+        Config::set('intercom.event_prefix', 'myapp');
+        $service = new IntercomService;
+
+        Http::fake([
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+        ]);
+
+        $service->trackEvent('user-123', 'user_action', []);
+
+        Http::assertSent(function (Request $request) {
+            $data = $request->data();
+
+            return $data['event_name'] === 'myapp_user_action';
+        });
+    }
+
+    public function test_event_prefix_can_be_empty(): void
+    {
+        // Test with empty prefix
+        Config::set('intercom.event_prefix', '');
+        $service = new IntercomService;
+
+        Http::fake([
+            'api.intercom.io/events' => Http::response(['type' => 'event'], 200),
+        ]);
+
+        $service->trackEvent('user-123', 'user_action', []);
+
+        Http::assertSent(function (Request $request) {
+            $data = $request->data();
+
+            return $data['event_name'] === 'user_action';
+        });
     }
 }

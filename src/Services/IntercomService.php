@@ -4,18 +4,23 @@ declare(strict_types=1);
 
 namespace Nuimarkets\LaravelSharedUtils\Services;
 
+use Exception;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\Client\Response;
-use Exception;
 
 class IntercomService
 {
     private string $baseUrl;
+
     private string $token;
+
     private string $apiVersion;
+
     private bool $enabled;
+
     private string $serviceName;
+
     private array $config;
 
     public function __construct()
@@ -26,10 +31,10 @@ class IntercomService
         $this->apiVersion = $this->config['api_version'] ?? '2.11';
         $this->enabled = $this->config['enabled'] ?? false;
         $this->serviceName = $this->config['service_name'] ?? config('app.name', 'connect-service');
-        
+
         if (empty($this->token) && $this->enabled) {
             Log::warning('Intercom token not configured but service is enabled', [
-                'service' => $this->serviceName
+                'service' => $this->serviceName,
             ]);
         }
     }
@@ -39,7 +44,7 @@ class IntercomService
      */
     public function trackEvent(string $userId, string $event, array $properties = []): bool
     {
-        if (!$this->isEnabled()) {
+        if (! $this->isEnabled()) {
             return false;
         }
 
@@ -51,8 +56,8 @@ class IntercomService
                 'metadata' => array_merge($properties, [
                     'service' => $this->serviceName,
                     'version' => config('app.version', '1.0.0'),
-                    'environment' => config('app.env', 'production')
-                ])
+                    'environment' => config('app.env', 'production'),
+                ]),
             ];
 
             $response = $this->makeApiRequest('POST', '/events', $eventData);
@@ -61,24 +66,27 @@ class IntercomService
                 $this->logSuccess('Intercom event tracked', [
                     'user_id' => $userId,
                     'event' => $event,
-                    'response_status' => $response->status()
+                    'response_status' => $response->status(),
                 ]);
+
                 return true;
             } else {
                 $this->logError('Failed to track Intercom event', [
                     'user_id' => $userId,
                     'event' => $event,
                     'status' => $response->status(),
-                    'error' => $response->body()
+                    'error' => $response->body(),
                 ]);
+
                 return false;
             }
         } catch (Exception $e) {
             $this->logError('Intercom event exception', [
                 'user_id' => $userId,
                 'event' => $event,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -88,7 +96,7 @@ class IntercomService
      */
     public function createOrUpdateUser(string $userId, array $attributes = []): array
     {
-        if (!$this->isEnabled()) {
+        if (! $this->isEnabled()) {
             return [];
         }
 
@@ -97,8 +105,8 @@ class IntercomService
                 'external_id' => $userId,
                 'custom_attributes' => array_merge($attributes, [
                     'last_request_at' => time(),
-                    'service_last_active' => $this->serviceName
-                ])
+                    'service_last_active' => $this->serviceName,
+                ]),
             ];
 
             // Add basic attributes if provided
@@ -108,29 +116,32 @@ class IntercomService
                     unset($userData['custom_attributes'][$field]);
                 }
             }
-            
+
             $response = $this->makeApiRequest('POST', '/contacts', $userData);
 
             if ($response->successful()) {
-                $contact = $response->json();
+                $contact = $response->json() ?? [];
                 $this->logSuccess('Intercom user created/updated', [
                     'user_id' => $userId,
-                    'intercom_id' => $contact['id'] ?? null
+                    'intercom_id' => $contact['id'] ?? null,
                 ]);
+
                 return $contact;
             } else {
                 $this->logError('Failed to create/update Intercom user', [
                     'user_id' => $userId,
                     'status' => $response->status(),
-                    'error' => $response->body()
+                    'error' => $response->body(),
                 ]);
+
                 return [];
             }
         } catch (Exception $e) {
             $this->logError('Intercom user exception', [
                 'user_id' => $userId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return [];
         }
     }
@@ -140,7 +151,7 @@ class IntercomService
      */
     public function createOrUpdateCompany(string $companyId, array $attributes = []): array
     {
-        if (!$this->isEnabled()) {
+        if (! $this->isEnabled()) {
             return [];
         }
 
@@ -149,8 +160,8 @@ class IntercomService
                 'company_id' => $companyId,
                 'custom_attributes' => array_merge($attributes, [
                     'last_active_service' => $this->serviceName,
-                    'updated_at' => time()
-                ])
+                    'updated_at' => time(),
+                ]),
             ];
 
             // Add basic attributes if provided
@@ -160,29 +171,32 @@ class IntercomService
                     unset($companyData['custom_attributes'][$field]);
                 }
             }
-            
+
             $response = $this->makeApiRequest('POST', '/companies', $companyData);
 
             if ($response->successful()) {
-                $company = $response->json();
+                $company = $response->json() ?? [];
                 $this->logSuccess('Intercom company created/updated', [
                     'company_id' => $companyId,
-                    'intercom_id' => $company['id'] ?? null
+                    'intercom_id' => $company['id'] ?? null,
                 ]);
+
                 return $company;
             } else {
                 $this->logError('Failed to create/update Intercom company', [
                     'company_id' => $companyId,
                     'status' => $response->status(),
-                    'error' => $response->body()
+                    'error' => $response->body(),
                 ]);
+
                 return [];
             }
         } catch (Exception $e) {
             $this->logError('Intercom company exception', [
                 'company_id' => $companyId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return [];
         }
     }
@@ -192,13 +206,13 @@ class IntercomService
      */
     public function batchTrackEvents(array $events): array
     {
-        if (!$this->isEnabled()) {
+        if (! $this->isEnabled()) {
             return [];
         }
 
         $results = [];
         $batchSize = $this->config['batch_size'] ?? 50;
-        
+
         foreach (array_chunk($events, $batchSize) as $batch) {
             foreach ($batch as $event) {
                 $success = $this->trackEvent(
@@ -206,14 +220,14 @@ class IntercomService
                     $event['event'] ?? '',
                     $event['properties'] ?? []
                 );
-                
+
                 $results[] = [
                     'event' => $event,
-                    'success' => $success
+                    'success' => $success,
                 ];
             }
         }
-        
+
         return $results;
     }
 
@@ -222,7 +236,7 @@ class IntercomService
      */
     public function isEnabled(): bool
     {
-        return $this->enabled && !empty($this->token);
+        return $this->enabled && ! empty($this->token);
     }
 
     /**
@@ -247,7 +261,7 @@ class IntercomService
     private function makeApiRequest(string $method, string $endpoint, array $data = []): Response
     {
         $timeout = $this->config['timeout'] ?? 10;
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
         return Http::withHeaders($this->getHeaders())
             ->timeout($timeout)
@@ -259,13 +273,18 @@ class IntercomService
      */
     private function formatEventName(string $event): string
     {
-        $prefix = 'connect_';
-        
+        $prefix = $this->config['event_prefix'] ?? 'connect';
+
         // Ensure consistent naming
         $event = strtolower($event);
         $event = str_replace(' ', '_', $event);
-        
-        return $prefix . $event;
+
+        // Add underscore separator if prefix doesn't end with one
+        if ($prefix && ! str_ends_with($prefix, '_')) {
+            $prefix .= '_';
+        }
+
+        return $prefix.$event;
     }
 
     /**
@@ -274,7 +293,7 @@ class IntercomService
     private function getHeaders(): array
     {
         return [
-            'Authorization' => 'Bearer ' . $this->token,
+            'Authorization' => 'Bearer '.$this->token,
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
             'Intercom-Version' => $this->apiVersion,
@@ -295,7 +314,7 @@ class IntercomService
     private function logError(string $message, array $context = []): void
     {
         $failSilently = $this->config['fail_silently'] ?? true;
-        
+
         if ($failSilently) {
             Log::warning($message, array_merge($context, ['service' => $this->serviceName]));
         } else {

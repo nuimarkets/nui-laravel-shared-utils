@@ -48,7 +48,7 @@ class ColoredJsonLineFormatter implements FormatterInterface
     {
         // Handle both Monolog 2.x (array) and 3.x (LogRecord) formats
         $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
-        
+
         $className = $this->extractClassName($record, $isLogRecord);
 
         // Extract data based on record type
@@ -90,14 +90,14 @@ class ColoredJsonLineFormatter implements FormatterInterface
         return $message;
     }
 
-    private function extractClassName($record, bool $isLogRecord = null): string
+    private function extractClassName($record, ?bool $isLogRecord = null): string
     {
         if ($isLogRecord === null) {
             $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
         }
 
         $extra = $isLogRecord ? $record->extra : $record['extra'];
-        
+
         if (! isset($extra['source_file'])) {
             return '';
         }
@@ -121,7 +121,7 @@ class ColoredJsonLineFormatter implements FormatterInterface
                 $truncated = strlen($line) > self::MAX_LINE_LENGTH;
                 $truncatedLine = substr($line, 0, self::MAX_LINE_LENGTH - ($truncated ? 3 : 0));
 
-                return $this->colorsEnabled 
+                return $this->colorsEnabled
                     ? $debugColor.$truncatedLine.($truncated ? '...' : '').$reset
                     : $truncatedLine.($truncated ? '...' : '');
             },
@@ -133,7 +133,7 @@ class ColoredJsonLineFormatter implements FormatterInterface
 
     private function colorize(string $text, int $level): string
     {
-        if (!$this->colorsEnabled) {
+        if (! $this->colorsEnabled) {
             return $text;
         }
 

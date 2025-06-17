@@ -2,9 +2,8 @@
 
 namespace Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits;
 
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
 
 trait TracksIntercomEvents
 {
@@ -13,12 +12,12 @@ trait TracksIntercomEvents
      */
     protected function trackProductView(string $productId, array $productDetails = [], ?Request $request = null): void
     {
-        if (!$request) {
+        if (! $request) {
             return;
         }
 
         $userId = $request->get('userID');
-        if (!$userId) {
+        if (! $userId) {
             return;
         }
 
@@ -40,12 +39,12 @@ trait TracksIntercomEvents
      */
     protected function trackEvent(string $event, array $properties = [], ?Request $request = null): void
     {
-        if (!$request) {
+        if (! $request) {
             return;
         }
 
         $userId = $request->get('userID');
-        if (!$userId) {
+        if (! $userId) {
             return;
         }
 
@@ -67,12 +66,12 @@ trait TracksIntercomEvents
      */
     protected function trackUserAction(string $action, string $resourceType, string $resourceId, array $metadata = [], ?Request $request = null): void
     {
-        if (!$request) {
+        if (! $request) {
             return;
         }
 
         $eventName = sprintf('%s_%s', $resourceType, $action);
-        
+
         $properties = [
             'resource_type' => $resourceType,
             'resource_id' => $resourceId,
