@@ -246,4 +246,95 @@ class IncludesParserTest extends TestCase
         
         $parser->debug();
     }
+
+    // Enhanced validation and edge case tests
+
+    public function test_handles_empty_include_parameter()
+    {
+        $parser = $this->createParser(['include' => '']);
+        
+        $this->assertFalse($parser->isIncluded('users'));
+        $this->assertEquals([], $parser->getIncludes());
+    }
+
+    public function test_handles_empty_exclude_parameter()
+    {
+        $parser = $this->createParser(['include' => 'users,permissions', 'exclude' => '']);
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+    }
+
+    public function test_filters_out_empty_strings_from_parameters()
+    {
+        $parser = $this->createParser(['include' => 'users,,permissions,', 'exclude' => ',tenant,']);
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+        $this->assertFalse($parser->isIncluded('tenant'));
+        
+        $includes = $parser->getIncludes();
+        $this->assertNotContains('', $includes);
+    }
+
+    public function test_handles_excessive_whitespace()
+    {
+        $parser = $this->createParser(['include' => '  users  ,   permissions   ,  tenant  ']);
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+        $this->assertTrue($parser->isIncluded('tenant'));
+        $this->assertFalse($parser->isIncluded('  users  '));
+    }
+
+    public function test_validates_parameter_length()
+    {
+        $longString = str_repeat('a', 256); // 256 characters, exceeds limit
+        $parser = $this->createParser(['include' => "users,{$longString},permissions"]);
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+        $this->assertFalse($parser->isIncluded($longString));
+    }
+
+    public function test_handles_non_string_parameters()
+    {
+        $request = Request::create('/test', 'GET', ['include' => ['array', 'parameter']]);
+        $parser = new IncludesParser($request);
+        
+        $this->assertFalse($parser->isIncluded('array'));
+        $this->assertFalse($parser->isIncluded('parameter'));
+    }
+
+    public function test_handles_null_parameters()
+    {
+        $request = Request::create('/test', 'GET', ['include' => null, 'exclude' => null]);
+        $parser = new IncludesParser($request);
+        
+        $this->assertEquals([], $parser->getIncludes());
+    }
+
+    public function test_disabled_includes_performance_optimization()
+    {
+        $parser = $this->createParser(['include' => 'users,permissions,tenant,admin']);
+        $parser->addDisabledInclude('admin');
+        $parser->addDisabledInclude('sensitive_data');
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+        $this->assertTrue($parser->isIncluded('tenant'));
+        $this->assertFalse($parser->isIncluded('admin'));
+        $this->assertFalse($parser->isIncluded('sensitive_data'));
+    }
+
+    public function test_preserves_original_behavior_with_valid_input()
+    {
+        $parser = $this->createParser(['include' => 'users,permissions', 'exclude' => 'addresses']);
+        $parser->addDefaultInclude('tenant');
+        
+        $this->assertTrue($parser->isIncluded('users'));
+        $this->assertTrue($parser->isIncluded('permissions'));
+        $this->assertTrue($parser->isIncluded('tenant'));
+        $this->assertFalse($parser->isIncluded('addresses'));
+    }
 }

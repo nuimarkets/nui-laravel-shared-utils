@@ -37,24 +37,42 @@ class IncludesParser
     {
         $this->included = $this->includeByDefault;
 
+        // Process includes with validation and sanitization
         if ($this->request->has('include')) {
-            $includes = explode(',', $this->request->input('include'));
-            foreach ($includes as $include) {
-                $this->included[trim($include)] = true;
+            $includeParam = $this->request->input('include');
+            if (is_string($includeParam) && $includeParam !== '') {
+                $includes = $this->sanitizeParameterList($includeParam);
+                $this->included = array_merge(
+                    $this->included,
+                    array_fill_keys($includes, true)
+                );
             }
         }
 
+        // Process excludes with validation and sanitization
         if ($this->request->has('exclude')) {
-            $excludes = explode(',', $this->request->input('exclude'));
-            foreach ($excludes as $exclude) {
-                unset($this->included[trim($exclude)]);
+            $excludeParam = $this->request->input('exclude');
+            if (is_string($excludeParam) && $excludeParam !== '') {
+                $excludes = $this->sanitizeParameterList($excludeParam);
+                foreach ($excludes as $exclude) {
+                    unset($this->included[$exclude]);
+                }
             }
         }
 
-        // Remove any disabled includes
-        foreach ($this->disabledIncludes as $disabled => $_) {
-            unset($this->included[$disabled]);
-        }
+        // Remove any disabled includes (using array_diff_key for performance)
+        $this->included = array_diff_key($this->included, $this->disabledIncludes);
+    }
+
+    /**
+     * Sanitize and filter parameter list from comma-separated string
+     */
+    private function sanitizeParameterList(string $parameterString): array
+    {
+        return array_filter(
+            array_map('trim', explode(',', $parameterString)),
+            fn($item) => $item !== '' && is_string($item) && strlen($item) <= 255
+        );
     }
 
     /**
