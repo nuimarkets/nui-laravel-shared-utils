@@ -58,3 +58,7 @@ composer require nuimarkets/laravel-shared-utils
 * `HealthCheckController` - Detailed Health Checks
 * `RequestMetrics` - Request Metrics
 
+### Support
+
+* `IncludesParser` - Connect Platform include/exclude parameter parser for API response transformation
+

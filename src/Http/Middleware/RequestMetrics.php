@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Http\Middleware;
+namespace NuiMarkets\LaravelSharedUtils\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;

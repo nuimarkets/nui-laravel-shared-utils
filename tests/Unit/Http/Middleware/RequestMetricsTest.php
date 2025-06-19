@@ -1,12 +1,12 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Http\Middleware;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Route as RoutingRoute;
-use Nuimarkets\LaravelSharedUtils\Http\Middleware\RequestMetrics;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Http\Middleware\RequestMetrics;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class RequestMetricsTest extends TestCase
 {

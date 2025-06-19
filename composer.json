@@ -36,12 +36,12 @@
   },
   "autoload": {
     "psr-4": {
-      "Nuimarkets\\LaravelSharedUtils\\": "src/"
+      "NuiMarkets\\LaravelSharedUtils\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "Nuimarkets\\LaravelSharedUtils\\Tests\\": "tests/"
+      "NuiMarkets\\LaravelSharedUtils\\Tests\\": "tests/"
     }
   }
 }

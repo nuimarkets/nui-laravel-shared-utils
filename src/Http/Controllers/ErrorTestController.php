@@ -1,14 +1,14 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Http\Controllers;
+namespace NuiMarkets\LaravelSharedUtils\Http\Controllers;
 
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
-use Nuimarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
-use Nuimarkets\LaravelSharedUtils\Http\Requests\BaseFormRequest;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
+use NuiMarkets\LaravelSharedUtils\Http\Requests\BaseFormRequest;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
