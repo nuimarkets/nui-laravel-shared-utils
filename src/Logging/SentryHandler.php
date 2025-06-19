@@ -1,11 +1,11 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Logging;
+namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Logger;
 use Monolog\LogRecord;
-use Nuimarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
 use Sentry\Severity;
 use Sentry\State\Scope;
 

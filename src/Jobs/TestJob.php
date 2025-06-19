@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Jobs;
+namespace NuiMarkets\LaravelSharedUtils\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;

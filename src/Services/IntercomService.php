@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Nuimarkets\LaravelSharedUtils\Services;
+namespace NuiMarkets\LaravelSharedUtils\Services;
 
 use Exception;
 use Illuminate\Http\Client\Response;

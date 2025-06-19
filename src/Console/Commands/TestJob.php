@@ -1,10 +1,10 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Console\Commands;
+namespace NuiMarkets\LaravelSharedUtils\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Nuimarkets\LaravelSharedUtils\Jobs\TestJob as Job;
+use NuiMarkets\LaravelSharedUtils\Jobs\TestJob as Job;
 
 class TestJob extends Command
 {
