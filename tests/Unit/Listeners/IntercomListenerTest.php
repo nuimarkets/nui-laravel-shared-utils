@@ -1,13 +1,13 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Listeners;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Listeners;
 
 use Illuminate\Support\Facades\Log;
 use Mockery;
-use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
-use NuiMarkets\LaravelSharedUtils\Listeners\IntercomListener;
-use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomListenerTest extends TestCase
 {

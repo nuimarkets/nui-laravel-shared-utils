@@ -1,12 +1,12 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Http\Controllers\Traits;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Http\Controllers\Traits;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
-use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
-use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class TracksIntercomEventsTest extends TestCase
 {

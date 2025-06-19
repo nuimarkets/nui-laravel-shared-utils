@@ -1,12 +1,12 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Listeners;
+namespace Nuimarkets\LaravelSharedUtils\Listeners;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
-use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
-use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
 
 class IntercomListener implements ShouldQueue
 {

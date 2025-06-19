@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Services;
+namespace Nuimarkets\LaravelSharedUtils\Services;
 
 use Sentry\Event;
 

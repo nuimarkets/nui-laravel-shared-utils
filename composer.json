@@ -16,7 +16,8 @@
     "monolog/monolog": "^2.0|^3.0",
     "laravel/framework": "^8.0|^9.0|^10.0",
     "sentry/sentry-laravel": "^4.11",
-    "guzzlehttp/guzzle": "^7.0"
+    "guzzlehttp/guzzle": "^7.0",
+    "swisnl/json-api-client": "^2.2"
   },
   "suggest": {
     "php-amqplib/php-amqplib": "Required for RabbitMQ health checks (~3.5.0)"
@@ -36,12 +37,17 @@
   },
   "autoload": {
     "psr-4": {
-      "NuiMarkets\\LaravelSharedUtils\\": "src/"
+      "Nuimarkets\\LaravelSharedUtils\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "NuiMarkets\\LaravelSharedUtils\\Tests\\": "tests/"
+      "Nuimarkets\\LaravelSharedUtils\\Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "allow-plugins": {
+      "php-http/discovery": true
     }
   }
 }

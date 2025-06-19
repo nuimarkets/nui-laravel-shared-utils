@@ -1,13 +1,13 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Services;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Services;
 
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomServiceTest extends TestCase
 {

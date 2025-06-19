@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Support;
+namespace Nuimarkets\LaravelSharedUtils\Support;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;

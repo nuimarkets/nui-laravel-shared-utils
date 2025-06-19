@@ -1,9 +1,9 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
-use NuiMarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class SensitiveDataProcessorTest extends TestCase
 {
