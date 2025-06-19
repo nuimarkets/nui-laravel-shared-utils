@@ -4,8 +4,8 @@ namespace Tests\Unit\Support;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use NuiMarkets\LaravelSharedUtils\Support\IncludesParser;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Support\IncludesParser;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IncludesParserTest extends TestCase
 {

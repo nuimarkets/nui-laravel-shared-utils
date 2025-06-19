@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Http\Requests;
+namespace Nuimarkets\LaravelSharedUtils\Http\Requests;
 
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,11 +19,11 @@ abstract class BaseFormRequest extends FormRequest
      * Validates and logs the request data.
      *
      * IMPORTANT: This method logs raw request data and MUST be used in conjunction with
-     * NuiMarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor
+     * Nuimarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor
      * to ensure sensitive data is properly redacted in logs.
      * The processor must be configured in the logging stack
      *
-     * @see NuiMarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor
+     * @see Nuimarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor
      */
     public function validateResolved(): void
     {

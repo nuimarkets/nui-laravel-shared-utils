@@ -1,9 +1,9 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Events;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Events;
 
-use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomEventTest extends TestCase
 {

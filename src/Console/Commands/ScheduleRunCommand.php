@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Console\Commands;
+namespace Nuimarkets\LaravelSharedUtils\Console\Commands;
 
 use Illuminate\Console\Application;
 use Illuminate\Console\Events\ScheduledTaskFailed;

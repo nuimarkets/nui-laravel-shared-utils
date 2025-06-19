@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests;
+namespace Nuimarkets\LaravelSharedUtils\Tests;
 
 use Orchestra\Testbench\TestCase as Orchestra;
 

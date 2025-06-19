@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Logging;
+namespace Nuimarkets\LaravelSharedUtils\Logging;
 
 /**
  * Log Processor for sanitizing sensitive data in log records

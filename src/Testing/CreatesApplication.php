@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Testing;
+namespace Nuimarkets\LaravelSharedUtils\Testing;
 
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;

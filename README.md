@@ -13,23 +13,43 @@ composer require nuimarkets/laravel-shared-utils
 ```
 
 
+## Documentation
+
+### RemoteRepository
+📖 **[Complete RemoteRepository Documentation](docs/RemoteRepository.md)**
+
+The `RemoteRepository` is a comprehensive solution for service-to-service API communication with enhanced error handling, performance monitoring, and caching capabilities.
+
+**Key Features:**
+- JSON API client integration with automatic retry logic
+- ValidationException handling for malformed responses  
+- Performance monitoring with ProfilingTrait
+- Intelligent caching for single items and collections
+- Multi-config fallback system (jsonapi → pxc → remote)
+- Microservice architecture compatibility
+
 ## Classes
+
+### RemoteRepositories
+
+* `RemoteRepository` - **[📖 Full Documentation](docs/RemoteRepository.md)** - Abstract base class for external API communication with enhanced error handling, performance monitoring, and caching
 
 ### Console
 
 * `ScheduleRunCommand` - Run scheduled tasks ensuring Log is used for all stdout
-* `TestFailedJob` - 
-* `TestJob` - 
+* `TestFailedJob` - Test failed job command for queue testing
+* `TestJob` - Test job command for queue testing
 * `WorkCommand` - Run queue work jobs ensuring Log is used for all stdout
 
 ### Jobs
 
-* `TestFailedJob` - 
-* `TestJob` - 
+* `TestFailedJob` - Test job that intentionally fails for testing purposes
+* `TestJob` - Basic test job for queue testing
 
 ### Services
 
 * `SentryEventHandler` - Sentry Event Handler
+* `IntercomService` - Intercom API integration for user analytics and event tracking
 
 ### Testing
 
@@ -39,13 +59,14 @@ composer require nuimarkets/laravel-shared-utils
 
 * `BaseErrorHandler` - Base Error Handler
 * `BaseHttpRequestException` - Main Exception handler for something gone wrong in the request
+* `RemoteServiceException` - Exception for remote service communication failures
 
 ### Logging
 
 * `SensitiveDataProcessor` - Log Processor for sanitizing sensitive data in log records
 * `EnvironmentProcessor` - Log Processor for environment info etc
 * `SlackHandler` - Slack Handler
-* `ColoredJsonLineFormatter` - Formats log records as colored JSON lines with improved readability.
+* `ColoredJsonLineFormatter` - Formats log records as colored JSON lines with improved readability
 * `SentryHandler` - Sentry Error Handler with support for tags and exceptions
 * `SourceLocationProcessor` - Log Processor for PHP Source Location
 
@@ -57,8 +78,11 @@ composer require nuimarkets/laravel-shared-utils
 * `HomeController` - Home Route (hello/health check)
 * `HealthCheckController` - Detailed Health Checks
 * `RequestMetrics` - Request Metrics
+* `TracksIntercomEvents` - Controller trait for Intercom event tracking
 
 ### Support
 
-* `IncludesParser` - Connect Platform include/exclude parameter parser for API response transformation
+* `IncludesParser` - Include/exclude parameter parser for API response transformation
+* `SimpleDocument` - JSON API document implementation for non-JSON API request bodies
+* `ProfilingTrait` - Performance monitoring trait with timing and logging capabilities
 

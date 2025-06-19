@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Http\Controllers;
+namespace Nuimarkets\LaravelSharedUtils\Http\Controllers;
 
 use Exception;
 use Illuminate\Http\JsonResponse;

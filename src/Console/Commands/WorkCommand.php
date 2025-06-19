@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Console\Commands;
+namespace Nuimarkets\LaravelSharedUtils\Console\Commands;
 
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Debug\ExceptionHandler;

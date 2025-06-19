@@ -1,11 +1,11 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Console;
+namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Console;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
-use NuiMarkets\LaravelSharedUtils\Console\Commands\TestJob;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Nuimarkets\LaravelSharedUtils\Console\Commands\TestJob;
+use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
 
 class TestJobTest extends TestCase
 {
@@ -32,7 +32,7 @@ class TestJobTest extends TestCase
         $this->assertNull($result);
 
         // Verify that a job was dispatched
-        Queue::assertPushed(\NuiMarkets\LaravelSharedUtils\Jobs\TestJob::class);
+        Queue::assertPushed(\Nuimarkets\LaravelSharedUtils\Jobs\TestJob::class);
     }
 
     public function test_command_has_correct_signature_and_description()
@@ -52,6 +52,6 @@ class TestJobTest extends TestCase
         $command->handle();
 
         // Verify the correct job class was dispatched
-        Queue::assertPushed(\NuiMarkets\LaravelSharedUtils\Jobs\TestJob::class);
+        Queue::assertPushed(\Nuimarkets\LaravelSharedUtils\Jobs\TestJob::class);
     }
 }

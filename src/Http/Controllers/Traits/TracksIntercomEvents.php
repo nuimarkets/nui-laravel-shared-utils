@@ -1,9 +1,9 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits;
+namespace Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits;
 
 use Illuminate\Http\Request;
-use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
+use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
 
 trait TracksIntercomEvents
 {
