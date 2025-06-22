@@ -7,10 +7,10 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * IncludesParser - Connect Platform Include Parser
- * 
+ *
  * Provides advanced API response transformation capabilities beyond standard Laravel/Fractal includes.
  * Enables fine-grained control over what data is returned in API responses across all Connect microservices.
- * 
+ *
  * Features:
  * - Custom include parameters (e.g., 'shortdata' for lightweight responses)
  * - Include/exclude query parameter support
@@ -21,8 +21,11 @@ use Illuminate\Support\Facades\Log;
 class IncludesParser
 {
     private array $includeByDefault = [];
+
     private array $disabledIncludes = [];
+
     private ?array $included = null;
+
     private Request $request;
 
     public function __construct(Request $request)
@@ -71,7 +74,7 @@ class IncludesParser
     {
         return array_filter(
             array_map('trim', explode(',', $parameterString)),
-            fn($item) => $item !== '' && is_string($item) && strlen($item) <= 255
+            fn ($item) => $item !== '' && is_string($item) && strlen($item) <= 255
         );
     }
 
@@ -119,7 +122,7 @@ class IncludesParser
         if (is_null($this->included)) {
             $this->parse();
         }
-        
+
         return isset($this->included[$include]);
     }
 
@@ -128,7 +131,7 @@ class IncludesParser
      */
     public function isNotIncluded(string $include): bool
     {
-        return !$this->isIncluded($include);
+        return ! $this->isIncluded($include);
     }
 
     /**
@@ -139,7 +142,7 @@ class IncludesParser
         if (is_null($this->included)) {
             $this->parse();
         }
-        
+
         return array_keys($this->included);
     }
 

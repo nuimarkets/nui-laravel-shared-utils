@@ -3,16 +3,14 @@
 namespace Nuimarkets\LaravelSharedUtils\Support;
 
 use Illuminate\Support\Arr;
-use Swis\JsonApi\Client\Interfaces\ItemDocumentInterface;
 use Swis\JsonApi\Client\Document;
+use Swis\JsonApi\Client\Interfaces\ItemDocumentInterface;
 
 /**
  * Class SimpleDocument
  * We don't use JSON+API format for most request bodies.
  * This class overrides toArray to return a simple array
  * rather than a JSON+API formatted one.
- *
- * @package Nuimarkets\LaravelSharedUtils\Support
  */
 class SimpleDocument extends Document implements ItemDocumentInterface
 {
@@ -23,7 +21,7 @@ class SimpleDocument extends Document implements ItemDocumentInterface
     {
         $document = [];
 
-        if (!empty($this->getData())) {
+        if (! empty($this->getData())) {
             $jsonApiArray = $this->data->toJsonApiArray();
             $document = Arr::get($jsonApiArray, 'attributes', []);
         }
