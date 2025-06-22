@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Log;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
+use Swis\JsonApi\Client\Document;
+use Swis\JsonApi\Client\Error as JsonApiError;
+use Swis\JsonApi\Client\ErrorCollection;
 use Swis\JsonApi\Client\Exceptions\ValidationException;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\DocumentInterface;
@@ -288,7 +291,23 @@ abstract class RemoteRepository
                             \Sentry\captureMessage($msg);
                             $this->profileEnd(__METHOD__, $startTime);
 
-                            return (object) ['error' => $msg];
+                            // Create a proper Document with the error to match return type
+                            $errorDocument = new Document;
+                            $errorCollection = new ErrorCollection;
+                            $jsonApiError = new JsonApiError(
+                                null, // id
+                                null, // links
+                                '400', // status
+                                'recoverable_error', // code
+                                null, // title
+                                $msg, // detail
+                                null, // source
+                                null  // meta
+                            );
+                            $errorCollection->push($jsonApiError);
+                            $errorDocument->setErrors($errorCollection);
+
+                            return $errorDocument;
                         }
                     }
                     $this->handleApiErrors($res, $url);

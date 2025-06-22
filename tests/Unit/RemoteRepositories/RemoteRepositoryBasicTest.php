@@ -407,6 +407,55 @@ class RemoteRepositoryBasicTest extends TestCase
         $this->assertEquals('https://app.example.com', $repository->getConfiguredBaseUri());
     }
 
+    public function test_recoverable_error_returns_document_interface()
+    {
+        $mockClient = $this->createMock(DocumentClientInterface::class);
+        $mockMachineTokenService = $this->createMockMachineTokenService();
+
+        // Mock a response with a recoverable error
+        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
+
+        $mockError = new \Swis\JsonApi\Client\Error(
+            null, // id
+            null, // links
+            null, // status
+            null, // code
+            null, // title
+            'Duplicate active delivery address codes found for customer 123' // detail
+        );
+
+        $errorCollection = new \Swis\JsonApi\Client\ErrorCollection;
+        $errorCollection->push($mockError);
+
+        $mockResponse->method('hasErrors')->willReturn(true);
+        $mockResponse->method('getErrors')->willReturn($errorCollection);
+
+        $mockClient->expects($this->once())
+            ->method('get')
+            ->willReturn($mockResponse);
+
+        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        {
+            protected function filter(array $data)
+            {
+                return $data;
+            }
+
+            public function publicGet($url)
+            {
+                return $this->get($url);
+            }
+        };
+
+        $result = $repository->publicGet('/test-url');
+
+        // Verify it returns a DocumentInterface
+        $this->assertInstanceOf(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class, $result);
+        $this->assertTrue($result->hasErrors());
+        $this->assertEquals('recoverable_error', $result->getErrors()->first()->getCode());
+        $this->assertStringContainsString('Duplicate active delivery address codes found', $result->getErrors()->first()->getDetail());
+    }
+
     public function test_get_configured_base_uri_uses_legacy_fallback_when_new_config_missing()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
