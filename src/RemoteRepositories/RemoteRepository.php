@@ -384,16 +384,22 @@ abstract class RemoteRepository
                 $res = $this->client->post($url, $data, $this->headers);
 
                 if ($res->hasErrors()) {
+                    $errorDetails = array_map(
+                        static fn ($e) => $e->getDetail() ?? '',
+                        $res->getErrors()->toArray()
+                    );
+
                     Log::error('Error calling service', [
                         'url' => $url,
-                        'errors' => array_map(
-                            static fn ($e) => $e->getDetail() ?? '', $res->getErrors()->toArray()
-                        ),
+                        'errors' => $errorDetails,
                     ]);
+
                     foreach ($res->getErrors() as $error) {
                         \Sentry\captureMessage($error->getDetail() ?? '');
                     }
-                    throw new RemoteServiceException('Error calling service. Returned: ');
+
+                    $errorMessage = 'Error calling service. Returned: '.implode('; ', $errorDetails);
+                    throw new RemoteServiceException($errorMessage);
                 }
 
                 $this->profileEnd(__METHOD__, $startTime);
