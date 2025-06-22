@@ -24,15 +24,17 @@ Add the following to your `config/app.php`:
 
 ```php
 'remote_repository' => [
-    'base_uri' => env('REMOTE_REPOSITORY_BASE_URI'),
+    'base_uri' => env('API_GATEWAY_ENDPOINT'),  // Use existing API_GATEWAY_ENDPOINT
     'max_url_length' => env('REMOTE_REPOSITORY_MAX_URL_LENGTH', 2048),
-    'log_requests' => env('REMOTE_REPOSITORY_LOG_REQUESTS', false),
+    'log_requests' => env('REMOTE_REPOSITORY_LOG_REQUESTS', true),  // Enable logging by default
     'recoverable_error_patterns' => [
         'Duplicate active delivery address codes found',
         // Add your custom patterns here
     ],
 ],
 ```
+
+**💡 Pro Tip**: Use `API_GATEWAY_ENDPOINT` for the base URI to maintain consistency with existing Connect platform services. The defaults (2048 for max_url_length, true for log_requests) are sensible for most use cases.
 
 #### Legacy Configuration Fallback
 
@@ -49,16 +51,29 @@ For backward compatibility, the following legacy configuration keys are still su
 
 #### Migration Steps
 
-1. Add the new configuration structure to your `config/app.php`
-2. Copy your existing values from the legacy configuration files
-3. Update your `.env` file with the new environment variables:
+1. **Add the new configuration structure to your `config/app.php`** (see example above)
+2. **Use existing environment variable**: If your project already has `API_GATEWAY_ENDPOINT`, you're done! No new .env variables needed.
+3. **Optional environment variables** (only set if you want to override defaults):
+   ```bash
+   # Only add these if you want to override the defaults
+   REMOTE_REPOSITORY_MAX_URL_LENGTH=4096    # Default: 2048
+   REMOTE_REPOSITORY_LOG_REQUESTS=false     # Default: true
    ```
-   REMOTE_REPOSITORY_BASE_URI=https://your-api-endpoint.com
-   REMOTE_REPOSITORY_MAX_URL_LENGTH=2048
-   REMOTE_REPOSITORY_LOG_REQUESTS=false
-   ```
-4. Test your application to ensure everything works correctly
-5. Remove the old configuration files once migration is complete
+4. **Update RemoteRepository implementations**:
+   - Fix method calls: `cacheSingle()` → `cacheOne()`
+   - Remove redundant method overrides that duplicate base class functionality
+   - Clean up unused imports
+5. **Test your application** to ensure everything works correctly
+6. **Remove legacy config** - Comment out or remove old configuration keys from `pxc.php`, `jsonapi.php`, etc.
+
+#### Quick Migration Checklist
+
+- ✅ Add `remote_repository` config to `config/app.php`
+- ✅ Verify `API_GATEWAY_ENDPOINT` is set in `.env`
+- ✅ Update RemoteRepository method calls (`cacheSingle` → `cacheOne`)
+- ✅ Run tests to verify functionality
+- ✅ Remove/comment legacy config keys
+- ✅ Clean up unused imports
 
 
 ## Documentation
