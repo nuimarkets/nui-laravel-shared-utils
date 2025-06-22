@@ -1,9 +1,9 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Exceptions;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Exceptions;
 
-use Nuimarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class RemoteServiceExceptionTest extends TestCase
 {

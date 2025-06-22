@@ -1,15 +1,15 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Feature;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
-use Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener;
-use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
+use NuiMarkets\LaravelSharedUtils\Listeners\IntercomListener;
+use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class IntercomIntegrationTest extends TestCase
 {

@@ -1,10 +1,10 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
-use Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
-use Nuimarkets\LaravelSharedUtils\Support\SimpleDocument;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
+use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\ItemInterface;
 use Swis\JsonApi\Client\Item;
@@ -15,8 +15,8 @@ class RemoteRepositoryBasicTest extends TestCase
     {
         parent::setUp();
 
-        // Set a default base URI for tests
-        config(['remote.base_uri' => 'https://test.example.com']);
+        // Set a default base URI for tests using the new config structure
+        config(['app.remote_repository.base_uri' => 'https://test.example.com']);
     }
 
     public function test_remote_repository_class_exists()
@@ -59,7 +59,7 @@ class RemoteRepositoryBasicTest extends TestCase
         $reflection = new \ReflectionClass(RemoteRepository::class);
         $traits = $reflection->getTraitNames();
 
-        $this->assertContains('Nuimarkets\LaravelSharedUtils\Support\ProfilingTrait', $traits);
+        $this->assertContains('NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait', $traits);
     }
 
     public function test_make_request_body_creates_simple_document()
@@ -97,7 +97,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
         $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
 
-        $this->expectException(\Nuimarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
+        $this->expectException(\NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
         $this->expectExceptionMessage('Failed to create request body: Data must be an array or object, string given');
 
         $repository->makeRequestBody('invalid string data');
@@ -110,7 +110,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
         $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
 
-        $this->expectException(\Nuimarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
+        $this->expectException(\NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
         $this->expectExceptionMessage('Failed to create request body: Data must be an array or object, NULL given');
 
         $repository->makeRequestBody(null);
@@ -280,7 +280,7 @@ class RemoteRepositoryBasicTest extends TestCase
         };
 
         // Test the method exists and is callable
-        $this->assertTrue(method_exists($repository, 'testIsValidUrlPath'));
+        $this->assertTrue(method_exists($repository, 'test_is_valid_url_path'));
     }
 
     public function test_configuration_fallback_methods_exist()
@@ -357,12 +357,13 @@ class RemoteRepositoryBasicTest extends TestCase
         $mockMachineTokenService = $this->createMockMachineTokenService();
 
         // Clear all possible config values
+        config(['app.remote_repository.base_uri' => null]);
         config(['jsonapi.base_uri' => null]);
         config(['pxc.base_api_uri' => null]);
         config(['remote.base_uri' => null]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No remote service base URI configured. Checked the following config keys: jsonapi.base_uri, pxc.base_api_uri, remote.base_uri. Please set one of these configuration values.');
+        $this->expectExceptionMessage('No remote service base URI configured. Checked the following config keys: app.remote_repository.base_uri, jsonapi.base_uri, pxc.base_api_uri, remote.base_uri. Please set one of these configuration values.');
 
         new class($mockClient, $mockMachineTokenService) extends RemoteRepository
         {
@@ -379,11 +380,45 @@ class RemoteRepositoryBasicTest extends TestCase
         $mockMachineTokenService = $this->createMockMachineTokenService();
 
         // Set different values for each config key
+        config(['app.remote_repository.base_uri' => 'https://app.example.com']);
         config(['jsonapi.base_uri' => 'https://jsonapi.example.com']);
         config(['pxc.base_api_uri' => 'https://pxc.example.com']);
         config(['remote.base_uri' => 'https://remote.example.com']);
 
-        // Test that constructor uses the first available URI
+        // Test that constructor uses the new standardized config
+        $mockClient->expects($this->once())
+            ->method('setBaseUri')
+            ->with('https://app.example.com');
+
+        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        {
+            protected function filter(array $data)
+            {
+                return $data;
+            }
+
+            public function getConfiguredBaseUri(): string
+            {
+                return parent::getConfiguredBaseUri();
+            }
+        };
+
+        // Should use the new config location
+        $this->assertEquals('https://app.example.com', $repository->getConfiguredBaseUri());
+    }
+
+    public function test_get_configured_base_uri_uses_legacy_fallback_when_new_config_missing()
+    {
+        $mockClient = $this->createMock(DocumentClientInterface::class);
+        $mockMachineTokenService = $this->createMockMachineTokenService();
+
+        // Clear new config but set legacy configs
+        config(['app.remote_repository.base_uri' => null]);
+        config(['jsonapi.base_uri' => 'https://jsonapi.example.com']);
+        config(['pxc.base_api_uri' => 'https://pxc.example.com']);
+        config(['remote.base_uri' => 'https://remote.example.com']);
+
+        // Test that constructor uses the first legacy fallback
         $mockClient->expects($this->once())
             ->method('setBaseUri')
             ->with('https://jsonapi.example.com');
@@ -401,7 +436,7 @@ class RemoteRepositoryBasicTest extends TestCase
             }
         };
 
-        // Should use the first one (jsonapi.base_uri)
+        // Should use the first legacy fallback (jsonapi.base_uri)
         $this->assertEquals('https://jsonapi.example.com', $repository->getConfiguredBaseUri());
     }
 

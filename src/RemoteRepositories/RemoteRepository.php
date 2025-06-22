@@ -1,12 +1,12 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\RemoteRepositories;
+namespace NuiMarkets\LaravelSharedUtils\RemoteRepositories;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Nuimarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
-use Nuimarkets\LaravelSharedUtils\Support\ProfilingTrait;
-use Nuimarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
+use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
+use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
 use Swis\JsonApi\Client\Exceptions\ValidationException;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\DocumentInterface;
@@ -119,7 +119,7 @@ abstract class RemoteRepository
      */
     protected function getRecoverableErrorPatterns(): array
     {
-        return $this->recoverableErrorPatterns ?: config('remote.recoverable_error_patterns', [
+        return $this->recoverableErrorPatterns ?: config('app.remote_repository.recoverable_error_patterns', [
             'Duplicate active delivery address codes found',
         ]);
     }
@@ -129,17 +129,27 @@ abstract class RemoteRepository
      */
     protected function getConfiguredBaseUri(): string
     {
-        $configKeys = [
+        // Primary configuration location (standardized)
+        $baseUri = config('app.remote_repository.base_uri');
+        if ($baseUri !== null) {
+            return $baseUri;
+        }
+
+        // Legacy fallback configuration keys for backward compatibility
+        // TODO: Remove these fallbacks after Connect projects have been migrated
+        $legacyConfigKeys = [
             'jsonapi.base_uri',
             'pxc.base_api_uri',
             'remote.base_uri',
         ];
 
-        $missingKeys = [];
+        $missingKeys = ['app.remote_repository.base_uri'];
 
-        foreach ($configKeys as $key) {
+        foreach ($legacyConfigKeys as $key) {
             $value = config($key);
             if ($value !== null) {
+                Log::warning("Using deprecated config key '{$key}'. Please migrate to 'app.remote_repository.base_uri'");
+
                 return $value;
             }
             $missingKeys[] = $key;
@@ -170,7 +180,7 @@ abstract class RemoteRepository
         }
 
         // Then check the length constraint
-        $maxLength = config('pxc.max_url_length', 2048);
+        $maxLength = config('app.remote_repository.max_url_length', config('pxc.max_url_length', 2048));
 
         return strlen($urlPath) < ($maxLength - $this->getBaseUrlLength());
     }
@@ -264,7 +274,7 @@ abstract class RemoteRepository
 
         while (true) {
             try {
-                if (config('pxc.api_log_requests')) {
+                if (config('app.remote_repository.log_requests', config('pxc.api_log_requests', false))) {
                     Log::debug('API GET', ['url' => $url]);
                 }
 
@@ -362,7 +372,7 @@ abstract class RemoteRepository
 
         while (true) {
             try {
-                if (config('pxc.api_log_requests')) {
+                if (config('app.remote_repository.log_requests', config('pxc.api_log_requests', false))) {
                     Log::info('Request Debug', [
                         'url' => $url,
                         'body' => $this->client->encode($data),

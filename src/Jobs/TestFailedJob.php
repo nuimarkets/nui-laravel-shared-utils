@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Jobs;
+namespace NuiMarkets\LaravelSharedUtils\Jobs;
 
 use Illuminate\Queue\Jobs\Job;
 

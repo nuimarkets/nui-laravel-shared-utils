@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Logging;
+namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use Monolog\Processor\ProcessorInterface;
 

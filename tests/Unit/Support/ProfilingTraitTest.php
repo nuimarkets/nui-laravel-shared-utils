@@ -1,10 +1,10 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Support;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Support;
 
 use Illuminate\Support\Facades\Log;
-use Nuimarkets\LaravelSharedUtils\Support\ProfilingTrait;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class ProfilingTraitTest extends TestCase
 {

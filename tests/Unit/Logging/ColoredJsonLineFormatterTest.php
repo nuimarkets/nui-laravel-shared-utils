@@ -1,10 +1,10 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Logging;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
 use Monolog\Logger;
-use Nuimarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class ColoredJsonLineFormatterTest extends TestCase
 {

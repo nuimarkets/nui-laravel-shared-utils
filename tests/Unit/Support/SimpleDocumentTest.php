@@ -1,9 +1,9 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Unit\Support;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Support;
 
-use Nuimarkets\LaravelSharedUtils\Support\SimpleDocument;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Swis\JsonApi\Client\Interfaces\ItemInterface;
 use Swis\JsonApi\Client\Item;
 

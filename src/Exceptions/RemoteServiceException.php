@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Exceptions;
+namespace NuiMarkets\LaravelSharedUtils\Exceptions;
 
 use Exception;
 

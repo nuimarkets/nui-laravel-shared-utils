@@ -67,7 +67,7 @@ Extend the abstract `RemoteRepository` class and implement the required `filter(
 
 namespace App\RemoteRepositories;
 
-use Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 
 class ProductRepository extends RemoteRepository
 {
@@ -290,8 +290,8 @@ $allCached = $repository->query(); // Returns Collection
 ### Basic Test Setup
 
 ```php
-use Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class ProductRepositoryTest extends TestCase
 {
@@ -331,7 +331,7 @@ composer require nuimarkets/laravel-shared-utils
 use App\RemoteRepositories\RemoteRepository;
 
 // New
-use Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 ```
 
 #### Step 3: Update Inheritance
@@ -341,7 +341,7 @@ use Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 class ProductRepository extends App\RemoteRepositories\RemoteRepository
 
 // New  
-class ProductRepository extends Nuimarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository
+class ProductRepository extends NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository
 ```
 
 #### Step 4: Remove Local Implementation
@@ -352,10 +352,10 @@ Delete the local `app/RemoteRepositories/RemoteRepository.php` file.
 
 ```php
 // Update SimpleDocument import
-use Nuimarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
 
 // Update exception import
-use Nuimarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 ```
 
 ## API Reference

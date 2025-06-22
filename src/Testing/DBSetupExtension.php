@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Testing;
+namespace NuiMarkets\LaravelSharedUtils\Testing;
 
 use Exception;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log;
-use Nuimarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
 use PHPUnit\Runner\BeforeFirstTestHook;
 
 /**

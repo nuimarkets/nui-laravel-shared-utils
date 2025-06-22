@@ -1,9 +1,9 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Providers;
+namespace NuiMarkets\LaravelSharedUtils\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Nuimarkets\LaravelSharedUtils\Support\IncludesParser;
+use NuiMarkets\LaravelSharedUtils\Support\IncludesParser;
 
 /**
  * IncludesParserServiceProvider

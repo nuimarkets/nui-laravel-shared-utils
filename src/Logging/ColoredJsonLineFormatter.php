@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Logging;
+namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use JsonSerializable;
 use Monolog\Formatter\FormatterInterface;

@@ -1,6 +1,6 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Support;
+namespace NuiMarkets\LaravelSharedUtils\Support;
 
 use Illuminate\Support\Arr;
 use Swis\JsonApi\Client\Document;

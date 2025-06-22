@@ -1,12 +1,12 @@
 <?php
 
-namespace Nuimarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Nuimarkets\LaravelSharedUtils\Http\Controllers\HealthCheckController;
-use Nuimarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Http\Controllers\HealthCheckController;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class HealthCheckControllerTest extends TestCase
 {
