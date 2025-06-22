@@ -36,7 +36,7 @@ In `app/Providers/AppServiceProvider.php`:
 ```php
 public function register(): void
 {
-    $this->app->singleton(\Nuimarkets\LaravelSharedUtils\Services\IntercomService::class);
+    $this->app->singleton(\NuiMarkets\LaravelSharedUtils\Services\IntercomService::class);
 }
 ```
 
@@ -44,8 +44,8 @@ public function register(): void
 In `app/Providers/EventServiceProvider.php`:
 ```php
 protected $listen = [
-    \Nuimarkets\LaravelSharedUtils\Events\IntercomEvent::class => [
-        \Nuimarkets\LaravelSharedUtils\Listeners\IntercomListener::class,
+    \NuiMarkets\LaravelSharedUtils\Events\IntercomEvent::class => [
+        \NuiMarkets\LaravelSharedUtils\Listeners\IntercomListener::class,
     ],
 ];
 ```
@@ -54,7 +54,7 @@ protected $listen = [
 
 ### Controller Integration
 ```php
-use Nuimarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
+use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
 
 class ProductController extends Controller
 {
@@ -90,7 +90,7 @@ class ProductController extends Controller
 
 ### Direct Event Dispatching
 ```php
-use Nuimarkets\LaravelSharedUtils\Events\IntercomEvent;
+use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
 
 // Track custom events
 event(new IntercomEvent(
@@ -118,7 +118,7 @@ event(new IntercomEvent(
 
 ### Service Direct Usage
 ```php
-use Nuimarkets\LaravelSharedUtils\Services\IntercomService;
+use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
 
 class OrderService
 {
