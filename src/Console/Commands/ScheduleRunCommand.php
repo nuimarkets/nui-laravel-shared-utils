@@ -10,6 +10,7 @@ use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Console\Scheduling\ScheduleRunCommand as BaseScheduleRunCommand;
+use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\Log;
@@ -30,9 +31,26 @@ class ScheduleRunCommand extends BaseScheduleRunCommand
      * Run the scheduled tasks.
      *
      * This class ensures that Log is used for all stdout.
+     *
+     * Handle both Laravel 9 and 10 method signatures:
+     * Laravel 9: handle(Schedule, Dispatcher, ExceptionHandler)
+     * Laravel 10: handle(Schedule, Dispatcher, Cache, ExceptionHandler)
      */
-    public function handle(Schedule $schedule, Dispatcher $dispatcher, ExceptionHandler $handler): void
+    public function handle(...$arguments): void
     {
+        // Laravel 9: handle(Schedule $schedule, Dispatcher $dispatcher, ExceptionHandler $handler)
+        // Laravel 10: handle(Schedule $schedule, Dispatcher $dispatcher, Cache $cache, ExceptionHandler $handler)
+
+        $schedule = $arguments[0];
+        $dispatcher = $arguments[1];
+
+        if (count($arguments) === 3) {
+            // Laravel 9 signature
+            $handler = $arguments[2];
+        } else {
+            // Laravel 10 signature - skip cache, get handler
+            $handler = $arguments[3];
+        }
 
         $this->schedule = $schedule;
         $this->dispatcher = $dispatcher;
