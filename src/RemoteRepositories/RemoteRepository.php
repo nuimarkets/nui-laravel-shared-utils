@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\RemoteRepositories;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
@@ -45,7 +46,7 @@ abstract class RemoteRepository
      * @throws \InvalidArgumentException if machineTokenService is invalid
      * @throws \RuntimeException if token retrieval fails
      */
-    public function __construct(DocumentClientInterface $client, $machineTokenService)
+    public function __construct(DocumentClientInterface $client, MachineTokenServiceInterface $machineTokenService)
     {
         $this->validateMachineTokenService($machineTokenService);
 
@@ -63,21 +64,15 @@ abstract class RemoteRepository
     }
 
     /**
-     * Validate that the machine token service has the required method
+     * Validate that the machine token service is properly configured
      *
      * @throws \InvalidArgumentException
      */
-    protected function validateMachineTokenService($machineTokenService): void
+    protected function validateMachineTokenService(MachineTokenServiceInterface $machineTokenService): void
     {
         if (! is_object($machineTokenService)) {
             throw new \InvalidArgumentException(
                 'Machine token service must be an object, '.gettype($machineTokenService).' given'
-            );
-        }
-
-        if (! method_exists($machineTokenService, 'getToken')) {
-            throw new \InvalidArgumentException(
-                'Machine token service must implement getToken() method'
             );
         }
     }
