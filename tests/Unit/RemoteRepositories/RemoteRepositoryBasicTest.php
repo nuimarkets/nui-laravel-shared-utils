@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
+use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
@@ -493,9 +494,8 @@ class RemoteRepositoryBasicTest extends TestCase
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
 
-        // Test with non-object
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Machine token service must be an object, string given');
+        // Test with non-interface implementation - PHP will throw TypeError
+        $this->expectException(\TypeError::class);
 
         new class($mockClient, 'invalid') extends RemoteRepository
         {
@@ -513,8 +513,8 @@ class RemoteRepositoryBasicTest extends TestCase
 
         $invalidService = new \stdClass;
 
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Machine token service must implement getToken() method');
+        // Interface type hint ensures getToken() method exists at compile time
+        $this->expectException(\TypeError::class);
 
         new class($mockClient, $invalidService) extends RemoteRepository
         {
@@ -532,9 +532,9 @@ class RemoteRepositoryBasicTest extends TestCase
             ->method('setBaseUri')
             ->with($this->isType('string'));
 
-        $mockMachineTokenService = new class
+        $mockMachineTokenService = new class implements MachineTokenServiceInterface
         {
-            public function getToken()
+            public function getToken(): string
             {
                 throw new \Exception('Token service unavailable');
             }
@@ -560,9 +560,9 @@ class RemoteRepositoryBasicTest extends TestCase
             ->with($this->isType('string'));
 
         // Test with empty string token
-        $mockMachineTokenService = new class
+        $mockMachineTokenService = new class implements MachineTokenServiceInterface
         {
-            public function getToken()
+            public function getToken(): string
             {
                 return '   ';
             }
@@ -587,17 +587,16 @@ class RemoteRepositoryBasicTest extends TestCase
             ->method('setBaseUri')
             ->with($this->isType('string'));
 
-        // Test with non-string token
-        $mockMachineTokenService = new class
+        // Test with non-string token - TypeError from return type gets caught and wrapped
+        $mockMachineTokenService = new class implements MachineTokenServiceInterface
         {
-            public function getToken()
+            public function getToken(): string
             {
                 return ['invalid' => 'token'];
             }
         };
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Machine token service returned invalid token. Expected non-empty string, got: array');
+        $this->expectException(\TypeError::class);
 
         new class($mockClient, $mockMachineTokenService) extends RemoteRepository
         {
@@ -608,18 +607,18 @@ class RemoteRepositoryBasicTest extends TestCase
         };
     }
 
-    private function createMockMachineTokenService()
+    private function createMockMachineTokenService(): MachineTokenServiceInterface
     {
-        return new class
+        return new class implements MachineTokenServiceInterface
         {
-            public function getToken()
+            public function getToken(): string
             {
                 return 'test-token';
             }
         };
     }
 
-    private function createConcreteRepository($client, $machineTokenService)
+    private function createConcreteRepository($client, MachineTokenServiceInterface $machineTokenService)
     {
         // Set up client expectations if it's a mock
         if (method_exists($client, 'expects')) {
