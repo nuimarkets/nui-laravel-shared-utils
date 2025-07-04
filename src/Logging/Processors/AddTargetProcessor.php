@@ -2,7 +2,6 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Logging\Processors;
 
-use Monolog\Processor\ProcessorInterface;
 use Monolog\LogRecord;
 
 /**
@@ -11,8 +10,12 @@ use Monolog\LogRecord;
  * 
  * Background: This implementation fixed an issue where 42.2M logs were incorrectly
  * routed to log-connect-default-* instead of service-specific indexes.
+ * 
+ * Note: Does not implement ProcessorInterface directly due to incompatible
+ * method signatures between Monolog 2.x and 3.x. Monolog accepts any callable
+ * as a processor, so this works without implementing the interface.
  */
-class AddTargetProcessor implements ProcessorInterface
+class AddTargetProcessor
 {
     /**
      * The target service name for Elasticsearch routing
