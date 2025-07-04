@@ -169,7 +169,26 @@ class ErrorLoggerTest extends TestCase
                 return $context['validation_errors']['email'][0] === 'The email field is required.' &&
                        $context['error_count'] === 2 &&
                        $context['error_type'] === 'validation' &&
-                       $context['action'] === 'user_registration';
+                       $context['action'] === 'user_registration' &&
+                       $context['first_error'] === ['The email field is required.'];
+            })
+        );
+    }
+    
+    public function test_log_validation_error_with_empty_errors_array()
+    {
+        $errors = [];
+        
+        ErrorLogger::logValidationError($errors, ['action' => 'data_import']);
+        
+        Log::shouldHaveReceived('info')->once()->with(
+            'Validation failed',
+            \Mockery::on(function ($context) {
+                return $context['validation_errors'] === [] &&
+                       $context['error_count'] === 0 &&
+                       $context['error_type'] === 'validation' &&
+                       $context['action'] === 'data_import' &&
+                       $context['first_error'] === null; // Should be null, not false
             })
         );
     }

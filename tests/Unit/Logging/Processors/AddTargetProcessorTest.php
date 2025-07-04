@@ -189,4 +189,24 @@ class AddTargetProcessorTest extends TestCase
         $this->assertEquals('Warning message', $processed->message);
         $this->assertEquals(['custom' => 'extra'], $processed->extra);
     }
+    
+    public function test_throws_exception_for_invalid_input_type()
+    {
+        $processor = new AddTargetProcessor('connect-test');
+        
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('AddTargetProcessor expects array or LogRecord, string given');
+        
+        $processor('invalid string input');
+    }
+    
+    public function test_throws_exception_for_object_input()
+    {
+        $processor = new AddTargetProcessor('connect-test');
+        
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('AddTargetProcessor expects array or LogRecord, stdClass given');
+        
+        $processor(new \stdClass());
+    }
 }

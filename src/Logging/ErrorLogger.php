@@ -69,7 +69,7 @@ class ErrorLogger
             LogFields::VALIDATION_ERRORS => $errors,
             LogFields::ERROR_TYPE => 'validation',
             'error_count' => count($errors),
-            'first_error' => reset($errors),
+            'first_error' => !empty($errors) ? reset($errors) : null,
         ];
         
         // Add feature context if not provided

@@ -191,6 +191,34 @@ abstract class LogFields
                 'ENTITY_TOTAL' => self::ENTITY_TOTAL,
                 'ENTITY_COUNT' => self::ENTITY_COUNT,
             ],
+            'database' => [
+                'DB_CONNECTION' => self::DB_CONNECTION,
+                'DB_QUERY' => self::DB_QUERY,
+                'DB_ROWS_AFFECTED' => self::DB_ROWS_AFFECTED,
+            ],
+            'queue' => [
+                'QUEUE_NAME' => self::QUEUE_NAME,
+                'QUEUE_CONNECTION' => self::QUEUE_CONNECTION,
+                'JOB_ID' => self::JOB_ID,
+                'JOB_NAME' => self::JOB_NAME,
+                'JOB_ATTEMPTS' => self::JOB_ATTEMPTS,
+                'JOB_DELAY' => self::JOB_DELAY,
+                'JOB_TIMEOUT' => self::JOB_TIMEOUT,
+            ],
+            'cache' => [
+                'CACHE_KEY' => self::CACHE_KEY,
+                'CACHE_HIT' => self::CACHE_HIT,
+                'CACHE_TAGS' => self::CACHE_TAGS,
+                'CACHE_TTL' => self::CACHE_TTL,
+            ],
+            'audit' => [
+                'AUDIT_ACTION' => self::AUDIT_ACTION,
+                'AUDIT_USER_ID' => self::AUDIT_USER_ID,
+                'AUDIT_IP' => self::AUDIT_IP,
+                'AUDIT_USER_AGENT' => self::AUDIT_USER_AGENT,
+                'SECURITY_EVENT' => self::SECURITY_EVENT,
+                'SECURITY_THREAT_LEVEL' => self::SECURITY_THREAT_LEVEL,
+            ],
         ];
     }
     

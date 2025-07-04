@@ -48,6 +48,7 @@ class AddTargetProcessor
      * 
      * @param array|LogRecord $record The log record
      * @return array|LogRecord The processed log record
+     * @throws \InvalidArgumentException When record is not array or LogRecord
      */
     public function __invoke($record)
     {
@@ -56,7 +57,16 @@ class AddTargetProcessor
             return $this->processLogRecord($record);
         }
         
-        return $this->processArray($record);
+        if (is_array($record)) {
+            return $this->processArray($record);
+        }
+        
+        throw new \InvalidArgumentException(
+            sprintf(
+                'AddTargetProcessor expects array or LogRecord, %s given',
+                is_object($record) ? get_class($record) : gettype($record)
+            )
+        );
     }
     
     /**

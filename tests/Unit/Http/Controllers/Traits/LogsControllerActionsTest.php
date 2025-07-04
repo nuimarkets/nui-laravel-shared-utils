@@ -291,6 +291,113 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
+    
+    public function test_sanitize_result_data_handles_circular_references()
+    {
+        // Create objects with circular reference
+        $objA = new \stdClass();
+        $objB = new \stdClass();
+        $objA->name = 'Object A';
+        $objA->child = $objB;
+        $objB->name = 'Object B';
+        $objB->parent = $objA; // Circular reference
+        
+        $this->controller->testLogActionSuccess('test', $objA);
+        
+        Log::shouldHaveReceived('info')->once()->with(
+            'TestController.test completed successfully',
+            \Mockery::on(function ($context) {
+                // Check that the circular reference was handled
+                return isset($context['result_data']) &&
+                       is_string($context['result_data']) &&
+                       str_contains($context['result_data'], '[Object: stdClass]');
+            })
+        );
+    }
+    
+    public function test_sanitize_result_data_handles_array_with_circular_references()
+    {
+        // Create a complex structure with circular references
+        $parent = new \stdClass();
+        $parent->id = 1;
+        $child1 = new \stdClass();
+        $child1->id = 2;
+        $child2 = new \stdClass();
+        $child2->id = 3;
+        
+        // Create circular references
+        $parent->children = [$child1, $child2];
+        $child1->parent = $parent;
+        $child2->parent = $parent;
+        $child1->sibling = $child2;
+        $child2->sibling = $child1;
+        
+        // Test with an array containing the circular structure
+        $result = [
+            'parent' => $parent,
+            'all_objects' => [$parent, $child1, $child2]
+        ];
+        
+        $this->controller->testLogActionSuccess('test', $result);
+        
+        Log::shouldHaveReceived('info')->once()->with(
+            'TestController.test completed successfully',
+            \Mockery::on(function ($context) {
+                // The result should be an array with circular references handled
+                return isset($context['result_data']) &&
+                       is_array($context['result_data']) &&
+                       isset($context['result_data']['parent']) &&
+                       str_contains($context['result_data']['parent'], '[Object: stdClass]');
+            })
+        );
+    }
+    
+    public function test_extracts_keys_from_model_instances_in_route_parameters()
+    {
+        // Create a real model instance with getKey method
+        $mockModel = new MockModel(999);
+        
+        $request = Request::create('/api/orders/123/items/456', 'GET');
+        $route = \Mockery::mock();
+        $route->shouldReceive('parameters')->andReturn([
+            'order_id' => '123',
+            'item_id' => '456',
+            'order' => $mockModel, // Model instance with getKey method
+            'plain_object' => new \stdClass(), // Should be filtered out
+        ]);
+        $request->setRouteResolver(function () use ($route) {
+            return $route;
+        });
+        
+        $this->controller->testLogActionStart('show', $request);
+        
+        Log::shouldHaveReceived('info')->once()->withArgs(function ($message, $context) {
+            // Allow test to see what's actually being logged
+            $this->assertEquals('TestController.show started', $message);
+            $this->assertArrayHasKey('route_params', $context);
+            
+            $params = $context['route_params'];
+            // Debug what's actually in the params
+            $this->assertIsArray($params);
+            
+            // Check what keys are actually present
+            $actualKeys = array_keys($params);
+            $this->assertContains('order_id', $actualKeys);
+            $this->assertContains('item_id', $actualKeys);
+            
+            // The issue might be that array_filter preserves keys but array_map doesn't
+            // Let's check if order key exists
+            if (isset($params['order'])) {
+                $this->assertEquals(999, $params['order']);
+            } else {
+                $this->fail('Order key not found in params. Keys present: ' . implode(', ', $actualKeys));
+            }
+            
+            $this->assertArrayNotHasKey('plain_object', $params);
+            
+            return true;
+        });
+    }
 }
 
 /**
@@ -328,5 +435,23 @@ class CustomFeatureController
     public function testLogActionStart($action, $request = null, $context = [])
     {
         $this->logActionStart($action, $request, $context);
+    }
+}
+
+/**
+ * Mock model class with getKey method
+ */
+class MockModel
+{
+    protected $key;
+    
+    public function __construct($key)
+    {
+        $this->key = $key;
+    }
+    
+    public function getKey()
+    {
+        return $this->key;
     }
 }

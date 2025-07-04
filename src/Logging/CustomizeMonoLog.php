@@ -3,6 +3,9 @@
 namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use NuiMarkets\LaravelSharedUtils\Logging\Processors\AddTargetProcessor;
+use NuiMarkets\LaravelSharedUtils\Logging\SourceLocationProcessor;
+use NuiMarkets\LaravelSharedUtils\Logging\EnvironmentProcessor;
+use NuiMarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor;
 
 /**
  * Base Monolog customizer that can be extended by services.

@@ -188,26 +188,67 @@ trait LogsControllerActions
     {
         $params = $request->route() ? $request->route()->parameters() : [];
         
-        // Filter out model instances, keeping only IDs and scalars
-        return array_filter($params, function ($value) {
-            return is_scalar($value) || (is_object($value) && method_exists($value, 'getKey'));
-        });
+        $result = [];
+        foreach ($params as $key => $value) {
+            // Skip objects without getKey method
+            if (is_object($value) && !method_exists($value, 'getKey')) {
+                continue;
+            }
+            
+            // Extract key from objects with getKey method
+            if (is_object($value) && method_exists($value, 'getKey')) {
+                $result[$key] = $value->getKey();
+            } elseif (is_scalar($value)) {
+                // Keep scalar values as-is
+                $result[$key] = $value;
+            }
+        }
+        
+        return $result;
     }
     
     /**
      * Sanitize result data for logging.
      * 
      * @param mixed $result
+     * @param array $visitedObjects Reference to array tracking visited objects
      * @return mixed
      */
-    protected function sanitizeResultData($result)
+    protected function sanitizeResultData($result, array &$visitedObjects = [])
     {
-        if (is_object($result) && method_exists($result, 'toArray')) {
-            return $result->toArray();
+        // Handle non-objects and non-arrays directly
+        if (!is_object($result) && !is_array($result)) {
+            return $result;
         }
         
+        // Check for circular reference in objects
+        if (is_object($result)) {
+            $objectHash = spl_object_hash($result);
+            
+            // If we've already processed this object, return a placeholder
+            if (isset($visitedObjects[$objectHash])) {
+                return '[Circular Reference: ' . get_class($result) . ']';
+            }
+            
+            // Mark object as visited
+            $visitedObjects[$objectHash] = true;
+            
+            // Convert to array if possible
+            if (method_exists($result, 'toArray')) {
+                $result = $result->toArray();
+            } else {
+                // For objects without toArray, return class name to avoid issues
+                return '[Object: ' . get_class($result) . ']';
+            }
+        }
+        
+        // Process arrays recursively
         if (is_array($result)) {
-            return array_map([$this, 'sanitizeResultData'], $result);
+            $sanitized = [];
+            foreach ($result as $key => $value) {
+                $sanitized[$key] = $this->sanitizeResultData($value, $visitedObjects);
+            }
+            return $sanitized;
         }
         
         return $result;
