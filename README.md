@@ -126,6 +126,19 @@ The `RemoteRepository` is a comprehensive solution for service-to-service API co
 
 ### Logging
 
+📖 **[Complete Logging Integration Guide](docs/logging-integration.md)**
+
+**Comprehensive Logging Solution** - Battle-tested implementation from connect-order that fixed 42.2M logs routing to wrong Elasticsearch indexes.
+
+**Key Components:**
+* `LogFields` - Extensible base class for consistent field naming across services
+* `AddTargetProcessor` - Configurable processor for Elasticsearch routing (fixes index routing issues)
+* `RequestLoggingMiddleware` - Base middleware for automatic request context in all logs
+* `LogsControllerActions` - Trait for comprehensive controller action logging with minimal code
+* `ErrorLogger` - Centralized error logging with appropriate log levels and API error formatting
+* `CustomizeMonoLog` - Base Monolog customizer that services can extend
+
+**Existing Components:**
 * `SensitiveDataProcessor` - Log Processor for sanitizing sensitive data in log records
 * `EnvironmentProcessor` - Log Processor for environment info etc
 * `SlackHandler` - Slack Handler
