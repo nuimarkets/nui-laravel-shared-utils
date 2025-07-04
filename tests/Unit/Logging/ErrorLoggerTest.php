@@ -135,7 +135,19 @@ class ErrorLoggerTest extends TestCase
     public function test_database_connection_error_logs_as_critical()
     {
         $pdoException = new \PDOException('SQLSTATE[HY000] Connection refused');
-        $exception = new QueryException('mysql', 'select * from users', [], $pdoException);
+        
+        // Laravel 9 vs 10 compatibility - different constructor signatures
+        $reflection = new \ReflectionClass(QueryException::class);
+        $constructor = $reflection->getConstructor();
+        $params = $constructor->getParameters();
+        
+        if (count($params) === 4) {
+            // Laravel 10: __construct($connectionName, $sql, array $bindings, Throwable $previous)
+            $exception = new QueryException('mysql', 'select * from users', [], $pdoException);
+        } else {
+            // Laravel 9: __construct($sql, array $bindings, Throwable $previous)
+            $exception = new QueryException('select * from users', [], $pdoException);
+        }
         
         ErrorLogger::logException($exception);
         
