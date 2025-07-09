@@ -441,19 +441,15 @@ abstract class RemoteRepository
      */
     private function handleValidationException(ValidationException $e, string $url): void
     {
-        // Try to extract response body for analysis
-        $response = $e->getResponse() ?? null;
-        $responseBody = $response ? $response->getBody()->getContents() : 'No response body available';
-
-        Log::error('Remote API returned non-JSON API compliant response', [
+        // ValidationException doesn't have getResponse() method - log available information
+        Log::error('Remote API returned validation error', [
             'url' => $url,
-            'response_body' => $responseBody,
             'exception' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
         ]);
 
-        // Try to extract meaningful error message
-        $decoded = json_decode($responseBody, true);
-        $errorMessage = $this->extractErrorMessage($decoded);
+        // Extract meaningful error message from the exception
+        $errorMessage = $e->getMessage() ?: 'Remote API validation error';
 
         \Sentry\captureException($e);
         throw new RemoteServiceException($errorMessage, 0, $e);
