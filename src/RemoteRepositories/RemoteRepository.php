@@ -646,8 +646,8 @@ abstract class RemoteRepository
             // Send to Sentry for monitoring
             \Sentry\captureException($e);
 
-            // Return null to maintain backward compatibility
-            return null;
+            // Throw exception instead of returning null to prevent silent failures
+            throw new RemoteServiceException('Error in findByIds: ' . $e->getMessage(), 500, $e);
         }
     }
 
