@@ -67,7 +67,13 @@ abstract class RemoteRepository
             $this->headers['X-Request-ID'] = $requestId;
         }
         
-        // Add trace ID if available
+        // Add X-Ray trace header if available (preserves full trace context)
+        $traceHeader = $this->getCurrentTraceHeader();
+        if ($traceHeader) {
+            $this->headers['X-Amzn-Trace-Id'] = $traceHeader;
+        }
+        
+        // Add correlation ID as fallback for non-X-Ray scenarios
         $traceId = $this->getCurrentTraceId();
         if ($traceId) {
             $this->headers['X-Correlation-ID'] = $traceId;
@@ -697,6 +703,22 @@ abstract class RemoteRepository
                 return $matches[1];
             }
             return $traceHeader;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get the full X-Ray trace header for propagation to downstream services.
+     * This preserves the complete trace context including Parent and Sampled flags.
+     * 
+     * @return string|null
+     */
+    protected function getCurrentTraceHeader(): ?string
+    {
+        // Get full trace header to preserve X-Ray trace context
+        if (request() && request()->headers) {
+            return request()->headers->get('X-Amzn-Trace-Id');
         }
         
         return null;

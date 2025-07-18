@@ -91,6 +91,18 @@ The `RemoteRepository` is a comprehensive solution for service-to-service API co
 - Standardized configuration in `config/app.php` with legacy fallback support
 - Microservice architecture compatibility
 
+### Distributed Tracing
+📖 **[Complete Distributed Tracing Documentation](docs/distributed-tracing.md)**
+
+Enterprise-grade distributed tracing with AWS X-Ray integration for complete request correlation across microservice boundaries.
+
+**Key Features:**
+- AWS X-Ray native support with automatic trace propagation
+- Request ID continuity across service boundaries via RemoteRepository
+- Cross-service error correlation and retry loop debugging
+- CloudWatch/Elasticsearch compatibility with standardized field naming
+- Zero-configuration setup with backward compatibility
+
 ## Classes
 
 ### RemoteRepositories
@@ -131,9 +143,9 @@ The `RemoteRepository` is a comprehensive solution for service-to-service API co
 **Comprehensive Logging Solution** - Battle-tested implementation from connect-order that fixed 42.2M logs routing to wrong Elasticsearch indexes.
 
 **Key Components:**
-* `LogFields` - Extensible base class for consistent field naming across services
+* `LogFields` - **Enhanced with distributed tracing fields** - Extensible base class for consistent field naming across services
 * `AddTargetProcessor` - Configurable processor for Elasticsearch routing (fixes index routing issues)
-* `RequestLoggingMiddleware` - Base middleware for automatic request context in all logs
+* `RequestLoggingMiddleware` - **X-Ray trace capture enabled** - Base middleware for automatic request context and distributed tracing in all logs
 * `LogsControllerActions` - Trait for comprehensive controller action logging with minimal code
 * `ErrorLogger` - Centralized error logging with appropriate log levels and API error formatting
 * `CustomizeMonoLog` - Base Monolog customizer that services can extend

@@ -58,10 +58,11 @@ class RemoteRepositoryTracingTest extends TestCase
         $this->assertEquals('fallback-request-456', $headers['X-Request-ID']);
     }
     
-    public function test_extracts_trace_id_from_request_headers_as_fallback()
+    public function test_propagates_full_xray_trace_header_for_distributed_tracing()
     {
+        $fullTraceHeader = 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1';
         $request = Request::create('/api/test', 'GET');
-        $request->headers->set('X-Amzn-Trace-Id', 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1');
+        $request->headers->set('X-Amzn-Trace-Id', $fullTraceHeader);
         $this->app->instance('request', $request);
         
         $mockClient = $this->createMock(DocumentClientInterface::class);
@@ -75,14 +76,20 @@ class RemoteRepositoryTracingTest extends TestCase
         $headersProperty->setAccessible(true);
         $headers = $headersProperty->getValue($repository);
         
+        // Should propagate full X-Ray header for AWS trace continuity
+        $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
+        $this->assertEquals($fullTraceHeader, $headers['X-Amzn-Trace-Id']);
+        
+        // Should also set correlation ID with extracted trace ID
         $this->assertArrayHasKey('X-Correlation-ID', $headers);
         $this->assertEquals('1-67a92466-4b6aa15a05ffcd4c510de968', $headers['X-Correlation-ID']);
     }
     
     public function test_handles_malformed_trace_id_in_request_headers()
     {
+        $malformedHeader = 'MalformedTraceId';
         $request = Request::create('/api/test', 'GET');
-        $request->headers->set('X-Amzn-Trace-Id', 'MalformedTraceId');
+        $request->headers->set('X-Amzn-Trace-Id', $malformedHeader);
         $this->app->instance('request', $request);
         
         $mockClient = $this->createMock(DocumentClientInterface::class);
@@ -96,8 +103,13 @@ class RemoteRepositoryTracingTest extends TestCase
         $headersProperty->setAccessible(true);
         $headers = $headersProperty->getValue($repository);
         
+        // Should propagate malformed header as-is for X-Ray
+        $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
+        $this->assertEquals($malformedHeader, $headers['X-Amzn-Trace-Id']);
+        
+        // Should also set correlation ID (malformed headers become fallback values)
         $this->assertArrayHasKey('X-Correlation-ID', $headers);
-        $this->assertEquals('MalformedTraceId', $headers['X-Correlation-ID']);
+        $this->assertEquals($malformedHeader, $headers['X-Correlation-ID']);
     }
     
     protected function createMockTokenService(): MachineTokenServiceInterface
