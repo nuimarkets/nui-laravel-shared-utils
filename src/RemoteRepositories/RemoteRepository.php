@@ -60,6 +60,18 @@ abstract class RemoteRepository
             'Content-Type' => 'application/json',
             'Authorization' => 'Bearer '.$token,
         ];
+        
+        // Add request ID if available
+        $requestId = $this->getCurrentRequestId();
+        if ($requestId) {
+            $this->headers['X-Request-ID'] = $requestId;
+        }
+        
+        // Add trace ID if available
+        $traceId = $this->getCurrentTraceId();
+        if ($traceId) {
+            $this->headers['X-Correlation-ID'] = $traceId;
+        }
         $this->data = new Collection;
     }
 
@@ -654,6 +666,40 @@ abstract class RemoteRepository
     public function query(): Collection
     {
         return $this->data;
+    }
+
+    /**
+     * Get the current request ID from the log context.
+     * 
+     * @return string|null
+     */
+    protected function getCurrentRequestId(): ?string
+    {
+        // Fallback to request headers if available
+        if (request() && request()->headers) {
+            return request()->headers->get('X-Request-ID');
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get the current X-Ray trace ID from the log context.
+     * 
+     * @return string|null
+     */
+    protected function getCurrentTraceId(): ?string
+    {
+        // Fallback to request headers if available
+        if (request() && request()->headers) {
+            $traceHeader = request()->headers->get('X-Amzn-Trace-Id');
+            if ($traceHeader && preg_match('/Root=([^;]+)/', $traceHeader, $matches)) {
+                return $matches[1];
+            }
+            return $traceHeader;
+        }
+        
+        return null;
     }
 
     /**
