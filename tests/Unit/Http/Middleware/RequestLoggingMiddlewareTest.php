@@ -211,6 +211,82 @@ class RequestLoggingMiddlewareTest extends TestCase
             })
         );
     }
+    
+    public function test_captures_x_ray_trace_id_from_header()
+    {
+        $request = Request::create('/api/test', 'GET');
+        $request->headers->set('X-Amzn-Trace-Id', 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1');
+        
+        $response = new Response('Test', 200);
+        
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+        
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.trace_id'] === '1-67a92466-4b6aa15a05ffcd4c510de968' &&
+                       $context['request.amz_trace_id'] === 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1';
+            })
+        );
+    }
+    
+    public function test_handles_trace_id_without_root_prefix()
+    {
+        $request = Request::create('/api/test', 'GET');
+        $request->headers->set('X-Amzn-Trace-Id', '1-67a92466-4b6aa15a05ffcd4c510de968');
+        
+        $response = new Response('Test', 200);
+        
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+        
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.trace_id'] === '1-67a92466-4b6aa15a05ffcd4c510de968' &&
+                       $context['request.amz_trace_id'] === '1-67a92466-4b6aa15a05ffcd4c510de968';
+            })
+        );
+    }
+    
+    public function test_handles_missing_trace_id_header()
+    {
+        $request = Request::create('/api/test', 'GET');
+        // No X-Amzn-Trace-Id header set
+        
+        $response = new Response('Test', 200);
+        
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+        
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.trace_id'] === null &&
+                       $context['request.amz_trace_id'] === null;
+            })
+        );
+    }
+    
+    public function test_handles_malformed_trace_id_header()
+    {
+        $request = Request::create('/api/test', 'GET');
+        $request->headers->set('X-Amzn-Trace-Id', 'InvalidTraceIdFormat');
+        
+        $response = new Response('Test', 200);
+        
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+        
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.trace_id'] === 'InvalidTraceIdFormat' &&
+                       $context['request.amz_trace_id'] === 'InvalidTraceIdFormat';
+            })
+        );
+    }
 }
 
 /**

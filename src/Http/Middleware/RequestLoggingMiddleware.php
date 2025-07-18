@@ -87,6 +87,29 @@ abstract class RequestLoggingMiddleware
     }
     
     /**
+     * Extract and normalize AWS X-Ray trace ID from request headers.
+     * 
+     * @param Request $request
+     * @return string|null
+     */
+    protected function extractTraceId(Request $request): ?string
+    {
+        $traceHeader = $request->headers->get('X-Amzn-Trace-Id');
+        
+        if (!$traceHeader) {
+            return null;
+        }
+        
+        // AWS X-Ray trace ID format: "Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1"
+        // Extract just the trace ID part (remove "Root=" prefix and any additional segments)
+        if (preg_match('/Root=([^;]+)/', $traceHeader, $matches)) {
+            return $matches[1];
+        }
+        
+        return $traceHeader;
+    }
+    
+    /**
      * Build the base logging context.
      * 
      * @param Request $request
@@ -97,6 +120,8 @@ abstract class RequestLoggingMiddleware
     {
         return [
             LogFields::REQUEST_ID => $requestId,
+            LogFields::TRACE_ID => $this->extractTraceId($request),
+            LogFields::TRACE_ID_HEADER => $request->headers->get('X-Amzn-Trace-Id'),
             'request' => [
                 'method' => $request->method(),
                 'path' => $request->path(),

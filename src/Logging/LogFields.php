@@ -27,6 +27,10 @@ abstract class LogFields
     const REQUEST_QUERY = 'request.query';
     const REQUEST_BODY = 'request.body';
     
+    // Tracing and correlation fields
+    const TRACE_ID = 'request.trace_id';
+    const TRACE_ID_HEADER = 'request.amz_trace_id';
+    
     // User and organization fields  
     const USER_ID = 'user_id';
     const ORG_ID = 'org_id';
@@ -146,6 +150,8 @@ abstract class LogFields
                 'REQUEST_IP' => self::REQUEST_IP,
                 'REQUEST_USER_ID' => self::REQUEST_USER_ID,
                 'REQUEST_ORG_ID' => self::REQUEST_ORG_ID,
+                'TRACE_ID' => self::TRACE_ID,
+                'TRACE_ID_HEADER' => self::TRACE_ID_HEADER,
             ],
             'user' => [
                 'USER_ID' => self::USER_ID,
