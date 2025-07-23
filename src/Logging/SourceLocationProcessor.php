@@ -2,28 +2,60 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Logging;
 
-use Monolog\Processor\ProcessorInterface;
-
 /**
  * Log Processor for PHP Source Location
+ * 
+ * Generates debug trace information while preventing Elasticsearch field explosion
+ * by limiting the number of frame fields created.
+ * 
+ * Compatible with both Monolog 2.x (array records) and 3.x (LogRecord objects)
+ * 
+ * Note: Does not implement ProcessorInterface directly due to incompatible
+ * method signatures between Monolog 2.x and 3.x. Monolog accepts any callable
+ * as a processor, so this works without implementing the interface.
  */
-class SourceLocationProcessor implements ProcessorInterface
+class SourceLocationProcessor
 {
-    public function __invoke(array $record): array
+    private int $maxFrames;
+    private int $outputFrames;
+
+    /**
+     * Create a new SourceLocationProcessor
+     * 
+     * @param int $maxFrames Maximum frames to capture from backtrace (for source detection)
+     * @param int $outputFrames Maximum frame_N fields to output (for ES compatibility)
+     */
+    public function __construct(int $maxFrames = 10, int $outputFrames = 3)
     {
+        $this->maxFrames = max(1, $maxFrames);
+        $this->outputFrames = max(1, min($outputFrames, $maxFrames));
+    }
 
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+    /**
+     * Process log record to add source location information
+     * 
+     * @param array|\Monolog\LogRecord $record
+     * @return array|\Monolog\LogRecord
+     */
+    public function __invoke($record)
+    {
+        // Handle both Monolog 2.x (array) and 3.x (LogRecord object)
+        $isLogRecord = is_object($record);
+        $extra = $isLogRecord ? $record->extra : ($record['extra'] ?? []);
+        
+        // Limit backtrace to prevent ES field explosion and improve performance
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $this->maxFrames);
 
-        $record['extra']['debug_trace'] = 'Trace count: '.count($trace);
+        $extra['debug_trace'] = 'Trace count: '.count($trace);
 
-        $debugFrames = array_slice($trace, 0, 3);
+        $debugFrames = array_slice($trace, 0, $this->outputFrames);
         foreach ($debugFrames as $index => $frame) {
             if (isset($frame['file'])) {
-                $record['extra']['frame_'.$index] = str_replace(base_path(), '', $frame['file']);
+                $extra['frame_'.$index] = str_replace(base_path(), '', $frame['file']);
             }
         }
 
-        // Skip internal Laravel/Monolog frames
+        // Skip internal Laravel/Monolog frames to find actual source
         $sourceFrame = null;
         foreach ($trace as $frame) {
             if (isset($frame['file']) &&
@@ -35,10 +67,16 @@ class SourceLocationProcessor implements ProcessorInterface
         }
 
         if ($sourceFrame) {
-            $record['extra']['source_file'] = str_replace(base_path(), '', $sourceFrame['file']);
-            $record['extra']['source_line'] = $sourceFrame['line'];
+            $extra['source_file'] = str_replace(base_path(), '', $sourceFrame['file']);
+            $extra['source_line'] = $sourceFrame['line'];
         }
 
-        return $record;
+        // Return in the same format as received
+        if ($isLogRecord) {
+            return $record->with(extra: $extra);
+        } else {
+            $record['extra'] = $extra;
+            return $record;
+        }
     }
 }
