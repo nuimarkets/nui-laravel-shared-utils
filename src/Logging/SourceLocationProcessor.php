@@ -45,13 +45,16 @@ class SourceLocationProcessor
         
         // Limit backtrace to prevent field explosion and improve performance
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $this->maxFrames);
+        
+        // Safe fallback for base_path() when used outside Laravel
+        $base = function_exists('base_path') ? base_path() : '';
 
         $extra['debug_trace'] = 'Trace count: '.count($trace);
 
         $debugFrames = array_slice($trace, 0, $this->outputFrames);
         foreach ($debugFrames as $index => $frame) {
             if (isset($frame['file'])) {
-                $extra['frame_'.$index] = str_replace(base_path(), '', $frame['file']);
+                $extra['frame_'.$index] = str_replace($base, '', $frame['file']);
             }
         }
 
@@ -67,7 +70,7 @@ class SourceLocationProcessor
         }
 
         if ($sourceFrame) {
-            $extra['source_file'] = str_replace(base_path(), '', $sourceFrame['file']);
+            $extra['source_file'] = str_replace($base, '', $sourceFrame['file']);
             $extra['source_line'] = $sourceFrame['line'];
         }
 
