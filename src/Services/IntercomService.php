@@ -84,11 +84,11 @@ class IntercomService
                 ]),
             ];
 
-            // Use email field if userId looks like an email, otherwise use user_id
+            // Use email field if userId looks like an email, otherwise use external_id
             if (filter_var($userId, FILTER_VALIDATE_EMAIL)) {
                 $eventData['email'] = $userId;
             } else {
-                $eventData['user_id'] = $userId;
+                $eventData['external_id'] = $userId;
             }
 
             $response = $this->makeApiRequest('POST', '/events', $eventData);
@@ -276,11 +276,11 @@ class IntercomService
 
                 $userId = $event['user_id'] ?? '';
 
-                // Use email field if userId looks like an email, otherwise use user_id
+                // Use email field if userId looks like an email, otherwise use external_id
                 if (filter_var($userId, FILTER_VALIDATE_EMAIL)) {
                     $eventData['email'] = $userId;
                 } else {
-                    $eventData['user_id'] = $userId;
+                    $eventData['external_id'] = $userId;
                 }
 
                 $bulkData['events'][] = $eventData;
