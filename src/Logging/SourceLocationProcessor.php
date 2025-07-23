@@ -5,7 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 /**
  * Log Processor for PHP Source Location
  * 
- * Generates debug trace information while preventing Elasticsearch field explosion
+ * Generates debug trace information while preventing field explosion in log storage
  * by limiting the number of frame fields created.
  * 
  * Compatible with both Monolog 2.x (array records) and 3.x (LogRecord objects)
@@ -23,7 +23,7 @@ class SourceLocationProcessor
      * Create a new SourceLocationProcessor
      * 
      * @param int $maxFrames Maximum frames to capture from backtrace (for source detection)
-     * @param int $outputFrames Maximum frame_N fields to output (for ES compatibility)
+     * @param int $outputFrames Maximum frame_N fields to output (for log storage compatibility)
      */
     public function __construct(int $maxFrames = 10, int $outputFrames = 3)
     {
@@ -43,7 +43,7 @@ class SourceLocationProcessor
         $isLogRecord = is_object($record);
         $extra = $isLogRecord ? $record->extra : ($record['extra'] ?? []);
         
-        // Limit backtrace to prevent ES field explosion and improve performance
+        // Limit backtrace to prevent field explosion and improve performance
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $this->maxFrames);
 
         $extra['debug_trace'] = 'Trace count: '.count($trace);

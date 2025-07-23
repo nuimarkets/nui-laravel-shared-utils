@@ -7,7 +7,7 @@ use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class SourceLocationProcessorTest extends TestCase
 {
-    public function test_limits_frame_fields_to_prevent_es_explosion()
+    public function test_limits_frame_fields_to_prevent_field_explosion()
     {
         // Create processor with custom limits
         $processor = new SourceLocationProcessor(maxFrames: 5, outputFrames: 2);
