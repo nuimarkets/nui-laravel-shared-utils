@@ -81,7 +81,7 @@ class IntercomIntegrationTest extends TestCase
             $data = $request->data();
 
             return $request->url() === 'https://api.intercom.io/events' &&
-                   $data['user_id'] === 'user-123' &&
+                   $data['external_id'] === 'user-123' &&
                    $data['event_name'] === 'connect_product_viewed' &&
                    $data['metadata']['product_id'] === 'prod-456' &&
                    $data['metadata']['tenant_id'] === 'tenant-789' &&

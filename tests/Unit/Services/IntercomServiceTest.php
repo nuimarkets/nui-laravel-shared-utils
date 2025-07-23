@@ -80,7 +80,7 @@ class IntercomServiceTest extends TestCase
 
             return $request->url() === 'https://api.intercom.io/events' &&
                    $request->method() === 'POST' &&
-                   $data['user_id'] === 'user-123' &&
+                   $data['external_id'] === 'user-123' &&
                    $data['event_name'] === 'connect_product_viewed' &&
                    $data['metadata']['service'] === 'connect-service-test' &&
                    $data['metadata']['product_id'] === 'prod-456' &&
