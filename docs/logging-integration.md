@@ -227,19 +227,7 @@ If you're migrating from custom logging implementation:
 
 1. **Update imports** - Change from local classes to shared utils
 2. **Extend base classes** - Modify your existing classes to extend the shared base classes
-3. **Keep backward compatibility** - Use class aliases or extend your old classes from new ones
-4. **Test thoroughly** - Ensure all logging still works as expected
-
-Example migration approach for backward compatibility:
-
-```php
-// If you need to maintain backward compatibility, create an alias:
-namespace App\Logging;
-
-use App\Logging\OrderLogFields as ServiceLogFields;
-
-class_alias(ServiceLogFields::class, 'App\Logging\LogFields');
-```
+3. **Test thoroughly** - Ensure all logging still works as expected
 
 ## Benefits
 

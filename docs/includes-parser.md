@@ -358,13 +358,13 @@ The IncludesParser includes comprehensive test coverage:
    composer test
    ```
 
-### Backward Compatibility
+### Implementation Details
 
-The shared implementation maintains backward compatibility with existing usage patterns:
+The shared implementation provides:
 
-- Same method signatures (`isIncluded()`, `isNotIncluded()`, etc.)
-- Same query parameter format (`?include=`, `?exclude=`)
-- Same shortdata convention
+- Standard method signatures (`isIncluded()`, `isNotIncluded()`, etc.)
+- Query parameter format (`?include=`, `?exclude=`)
+- Shortdata convention support
 - Enhanced features (debug logging, additional methods)
 
 ## Troubleshooting

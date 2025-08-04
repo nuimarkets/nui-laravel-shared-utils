@@ -147,7 +147,6 @@ Route::get('/healthcheck', [HealthCheckController::class, 'check']);
 This package follows a **trait-based architecture** allowing you to:
 - Use only the components you need
 - Extend base classes for customization
-- Maintain backward compatibility
 - Integrate gradually into existing codebases
 
 ### No Service Provider Required
