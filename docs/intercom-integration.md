@@ -1,6 +1,21 @@
 # Intercom Integration
 
-Shared Intercom package
+## Overview
+
+This package provides a comprehensive Intercom integration for Laravel applications, enabling user analytics, event tracking, and customer engagement features. Intercom is a customer messaging platform that helps businesses communicate with their users through targeted messages, support chat, and behavioral analytics.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Installation & Configuration](#installation--configuration)
+- [Usage Examples](#usage-examples)
+- [Event Naming Convention](#event-naming-convention)
+- [Required Request Parameters](#required-request-parameters)
+- [Testing](#testing)
+- [Error Handling](#error-handling)
+- [Best Practices](#best-practices)
+- [Common Event Types](#common-event-types)
 
 ## Features
 
@@ -221,3 +236,25 @@ Event::assertDispatched(IntercomEvent::class);
 - `product_viewed`, `product_searched`, `product_added_to_cart`
 - `order_created`, `order_completed`, `order_cancelled`
 - `feature_used`, `subscription_upgraded`, `support_ticket_created`
+
+## Troubleshooting
+
+### Events Not Appearing in Intercom
+1. Verify `INTERCOM_ENABLED=true` in your `.env` file
+2. Check that `INTERCOM_TOKEN` is set correctly
+3. Review Laravel logs for any error messages
+4. Ensure queue workers are running if using queued events
+5. Check Intercom API rate limits
+
+### User Data Not Updating
+1. Verify the user exists in Intercom with the correct external_id
+2. Check that all required fields are being sent
+3. Review API response logs for validation errors
+
+## Next Steps
+
+After setting up Intercom integration:
+1. Configure user segments in Intercom dashboard
+2. Set up automated messages based on events
+3. Create custom attributes for your specific use cases
+4. Monitor event analytics to understand user behavior

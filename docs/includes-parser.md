@@ -278,11 +278,7 @@ Each service may define additional custom parameters:
 
 ## Performance Benefits
 
-1. **Reduced Payload Sizes**: Up to 70% smaller responses with `shortdata`
-2. **Faster Database Queries**: Avoid expensive joins when not needed
-3. **Better Mobile Performance**: Smaller payloads for mobile apps  
-4. **Cross-Service Efficiency**: Lighter API calls between microservices
-5. **Bandwidth Savings**: Reduced data transfer costs
+Using the IncludesParser with `shortdata` convention can reduce API payload sizes by up to 70%, resulting in faster database queries (no unnecessary joins), improved mobile app performance, and reduced bandwidth costs. This is particularly valuable for cross-service communication in microservice architectures.
 
 ## Best Practices
 
@@ -362,13 +358,13 @@ The IncludesParser includes comprehensive test coverage:
    composer test
    ```
 
-### Backward Compatibility
+### Implementation Details
 
-The shared implementation maintains backward compatibility with existing usage patterns:
+The shared implementation provides:
 
-- Same method signatures (`isIncluded()`, `isNotIncluded()`, etc.)
-- Same query parameter format (`?include=`, `?exclude=`)
-- Same shortdata convention
+- Standard method signatures (`isIncluded()`, `isNotIncluded()`, etc.)
+- Query parameter format (`?include=`, `?exclude=`)
+- Shortdata convention support
 - Enhanced features (debug logging, additional methods)
 
 ## Troubleshooting
@@ -398,8 +394,3 @@ $includesParser->debug();
 3. **Disabled includes still showing**: Ensure disabled includes are processed after defaults
 4. **Performance issues**: Review which includes trigger expensive operations
 
-## Architecture Notes
-
-This is a **custom convention** - not a Laravel/PHP community standard. Other Laravel projects would typically use standard resource patterns or custom resource classes instead of this include parser approach.
-
-The IncludesParser represents a custom solution developed specifically for microservices architectures and API optimization requirements.
