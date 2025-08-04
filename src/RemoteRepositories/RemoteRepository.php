@@ -60,19 +60,19 @@ abstract class RemoteRepository
             'Content-Type' => 'application/json',
             'Authorization' => 'Bearer '.$token,
         ];
-        
+
         // Add request ID if available
         $requestId = $this->getCurrentRequestId();
         if ($requestId) {
             $this->headers['X-Request-ID'] = $requestId;
         }
-        
+
         // Add X-Ray trace header if available (preserves full trace context)
         $traceHeader = $this->getCurrentTraceHeader();
         if ($traceHeader) {
             $this->headers['X-Amzn-Trace-Id'] = $traceHeader;
         }
-        
+
         // Add correlation ID as fallback for non-X-Ray scenarios
         $traceId = $this->getCurrentTraceId();
         if ($traceId) {
@@ -340,7 +340,7 @@ abstract class RemoteRepository
                 } else {
                     \Sentry\captureException($exception);
                     $this->profileEnd(__METHOD__, $startTime);
-                    throw new RemoteServiceException('Error getting response from remote server: '.$exception->getMessage(), 500, $exception);
+                    throw new RemoteServiceException('Error getting response from remote server: '.$exception->getMessage(), 503, $exception);
                 }
             }
         }
@@ -431,7 +431,7 @@ abstract class RemoteRepository
                     }
 
                     $errorMessage = 'Error calling service. Returned: '.implode('; ', $errorDetails);
-                    throw new RemoteServiceException($errorMessage);
+                    throw new RemoteServiceException($errorMessage, 502);
                 }
 
                 $this->profileEnd(__METHOD__, $startTime);
@@ -448,7 +448,7 @@ abstract class RemoteRepository
                 } else {
                     \Sentry\captureException($exception);
                     $this->profileEnd(__METHOD__, $startTime);
-                    throw new RemoteServiceException('Error getting response from remote server', 500);
+                    throw new RemoteServiceException('Error getting response from remote server', 503);
                 }
             }
         }
@@ -470,7 +470,7 @@ abstract class RemoteRepository
         $errorMessage = $e->getMessage() ?: 'Remote API validation error';
 
         \Sentry\captureException($e);
-        throw new RemoteServiceException($errorMessage, 0, $e);
+        throw new RemoteServiceException($errorMessage, 502, $e);
     }
 
     /**
@@ -497,7 +497,7 @@ abstract class RemoteRepository
         foreach ($response->getErrors() as $error) {
             Log::error($error->getDetail());
         }
-        throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody());
+        throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody(), 502);
     }
 
     /**
@@ -573,7 +573,7 @@ abstract class RemoteRepository
             foreach ($response->getErrors() as $error) {
                 Log::error($error->getDetail());
             }
-            throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody());
+            throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody(), 502);
         }
 
         return $response->getData();
@@ -665,7 +665,7 @@ abstract class RemoteRepository
             \Sentry\captureException($e);
 
             // Throw exception instead of returning null to prevent silent failures
-            throw new RemoteServiceException('Error in findByIds: ' . $e->getMessage(), 500, $e);
+            throw new RemoteServiceException('Error in findByIds: '.$e->getMessage(), 502, $e);
         }
     }
 
@@ -676,8 +676,6 @@ abstract class RemoteRepository
 
     /**
      * Get the current request ID from the log context.
-     * 
-     * @return string|null
      */
     protected function getCurrentRequestId(): ?string
     {
@@ -685,14 +683,12 @@ abstract class RemoteRepository
         if (request() && request()->headers) {
             return request()->headers->get('X-Request-ID');
         }
-        
+
         return null;
     }
-    
+
     /**
      * Get the current X-Ray trace ID from the log context.
-     * 
-     * @return string|null
      */
     protected function getCurrentTraceId(): ?string
     {
@@ -702,17 +698,16 @@ abstract class RemoteRepository
             if ($traceHeader && preg_match('/Root=([^;]+)/', $traceHeader, $matches)) {
                 return $matches[1];
             }
+
             return $traceHeader;
         }
-        
+
         return null;
     }
-    
+
     /**
      * Get the full X-Ray trace header for propagation to downstream services.
      * This preserves the complete trace context including Parent and Sampled flags.
-     * 
-     * @return string|null
      */
     protected function getCurrentTraceHeader(): ?string
     {
@@ -720,7 +715,7 @@ abstract class RemoteRepository
         if (request() && request()->headers) {
             return request()->headers->get('X-Amzn-Trace-Id');
         }
-        
+
         return null;
     }
 
