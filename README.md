@@ -49,7 +49,7 @@ Automated test database management, specialized test jobs for queue testing, and
 
 ## Requirements
 
-- PHP 8.2 or higher
+- PHP 8.0 or higher
 - Laravel 8.x, 9.x, or 10.x
 - Composer 2.x
 
