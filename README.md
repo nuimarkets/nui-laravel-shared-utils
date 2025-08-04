@@ -241,9 +241,6 @@ We welcome contributions! Please follow these guidelines:
 - Environment-aware security settings
 - No credentials stored in code
 
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for recent changes.
 
 ## License
 

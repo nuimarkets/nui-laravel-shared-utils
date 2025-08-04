@@ -6,8 +6,8 @@ composer.lock
 *temp*
 
 # Ignore all .md files in the root
-TODO.md
-CLAUDE.md
-CHANGELOG.md
+/*.md
 
+# But do not ignore README.md
+!README.md
 

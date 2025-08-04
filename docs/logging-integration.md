@@ -2,6 +2,16 @@
 
 This guide explains how to integrate the shared logging utilities into your Laravel service.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Advanced Configuration](#advanced-configuration)
+- [Migration from Custom Logging](#migration-from-custom-logging)
+- [Benefits](#benefits)
+- [Troubleshooting](#troubleshooting)
+- [Support](#support)
+
 ## Overview
 
 The shared logging utilities provide:
@@ -220,19 +230,15 @@ If you're migrating from custom logging implementation:
 3. **Keep backward compatibility** - Use class aliases or extend your old classes from new ones
 4. **Test thoroughly** - Ensure all logging still works as expected
 
-Example migration:
+Example migration approach for backward compatibility:
 
 ```php
-// Old LogFields.php
+// If you need to maintain backward compatibility, create an alias:
 namespace App\Logging;
 
-/**
- * @deprecated Use ServiceLogFields instead
- */
-class LogFields extends ServiceLogFields
-{
-    // Keep for backward compatibility
-}
+use App\Logging\OrderLogFields as ServiceLogFields;
+
+class_alias(ServiceLogFields::class, 'App\Logging\LogFields');
 ```
 
 ## Benefits
