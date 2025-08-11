@@ -13,7 +13,9 @@ use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 class UuidValidatingRemoteRepositoryTest extends TestCase
 {
     protected $mockClient;
+
     protected $mockTokenService;
+
     protected $repository;
 
     protected function setUp(): void
@@ -23,28 +25,29 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
         // Mock dependencies
         $this->mockClient = Mockery::mock(DocumentClientInterface::class);
         $this->mockTokenService = Mockery::mock(MachineTokenServiceInterface::class);
-        
+
         // Mock client methods
         $this->mockClient->shouldReceive('setBaseUri')->andReturnSelf();
-        
+
         // Mock token service methods
         $this->mockTokenService->shouldReceive('getToken')->andReturn('mock-token');
-        
+
         // Create a concrete implementation for testing
-        $this->repository = new class($this->mockClient, $this->mockTokenService) extends UuidValidatingRemoteRepository {
+        $this->repository = new class($this->mockClient, $this->mockTokenService) extends UuidValidatingRemoteRepository
+        {
             protected function getConfiguredBaseUri(): string
             {
                 return 'https://test-api.com';
             }
-            
+
             protected function filter(array $data)
             {
                 // Mock implementation - not used in our tests
                 return null;
             }
-            
+
             // Make protected method public for testing
-            public function testFilterValidUuids(array $uuids): array
+            public function test_filter_valid_uuids(array $uuids): array
             {
                 return $this->filterValidUuids($uuids);
             }
@@ -57,33 +60,33 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
         parent::tearDown();
     }
 
-    public function testFilterValidUuidsWithAllValidUuids()
+    public function test_filter_valid_uuids_with_all_valid_uuids()
     {
         $validUuids = [
             '550e8400-e29b-41d4-a716-446655440000',
             '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-            '6ba7b811-9dad-11d1-80b4-00c04fd430c8'
+            '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
         ];
 
         Log::shouldReceive('warning')->never();
 
-        $result = $this->repository->testFilterValidUuids($validUuids);
+        $result = $this->repository->test_filter_valid_uuids($validUuids);
 
         $this->assertEquals($validUuids, $result);
         $this->assertCount(3, $result);
     }
 
-    public function testFilterValidUuidsWithEmptyArray()
+    public function test_filter_valid_uuids_with_empty_array()
     {
         Log::shouldReceive('warning')->never();
 
-        $result = $this->repository->testFilterValidUuids([]);
+        $result = $this->repository->test_filter_valid_uuids([]);
 
         $this->assertEmpty($result);
         $this->assertCount(0, $result);
     }
 
-    public function testFilterValidUuidsWithSomeInvalidUuids()
+    public function test_filter_valid_uuids_with_some_invalid_uuids()
     {
         $mixedUuids = [
             '550e8400-e29b-41d4-a716-446655440000', // valid
@@ -92,13 +95,13 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
             123,                                      // invalid
             '',                                       // invalid
             null,                                     // invalid
-            '6ba7b811-9dad-11d1-80b4-00c04fd430c8'  // valid
+            '6ba7b811-9dad-11d1-80b4-00c04fd430c8',  // valid
         ];
 
         $expectedValid = [
             '550e8400-e29b-41d4-a716-446655440000',
             '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-            '6ba7b811-9dad-11d1-80b4-00c04fd430c8'
+            '6ba7b811-9dad-11d1-80b4-00c04fd430c8',
         ];
 
         // Expect warning log to be called with basic validation
@@ -112,20 +115,20 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
                        in_array(123, $logData['invalid_uuids']);
             }));
 
-        $result = $this->repository->testFilterValidUuids($mixedUuids);
+        $result = $this->repository->test_filter_valid_uuids($mixedUuids);
 
         $this->assertEquals($expectedValid, array_values($result));
         $this->assertCount(3, $result);
     }
 
-    public function testFilterValidUuidsWithAllInvalidUuids()
+    public function test_filter_valid_uuids_with_all_invalid_uuids()
     {
         $invalidUuids = [
             'not-a-uuid',
             123,
             '',
             null,
-            'invalid-uuid-format'
+            'invalid-uuid-format',
         ];
 
         // Expect warning log to be called
@@ -137,18 +140,18 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
                        $logData['valid_count'] === 0;
             }));
 
-        $result = $this->repository->testFilterValidUuids($invalidUuids);
+        $result = $this->repository->test_filter_valid_uuids($invalidUuids);
 
         $this->assertEmpty($result);
         $this->assertCount(0, $result);
     }
 
-    public function testFindByIdsCallsFilterValidUuids()
+    public function test_find_by_ids_calls_filter_valid_uuids()
     {
         $mixedIds = [
             '550e8400-e29b-41d4-a716-446655440000', // valid
             'invalid-id',                             // invalid
-            '6ba7b810-9dad-11d1-80b4-00c04fd430c8'  // valid
+            '6ba7b810-9dad-11d1-80b4-00c04fd430c8',  // valid
         ];
 
         // Expect warning log to be called for the invalid ID
@@ -156,10 +159,10 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
 
         // Mock the data collection with keyed items for parent::findByIds()
         $mockCollection = new Collection([
-            '550e8400-e29b-41d4-a716-446655440000' => (object)['id' => '550e8400-e29b-41d4-a716-446655440000'],
-            '6ba7b810-9dad-11d1-80b4-00c04fd430c8' => (object)['id' => '6ba7b810-9dad-11d1-80b4-00c04fd430c8']
+            '550e8400-e29b-41d4-a716-446655440000' => (object) ['id' => '550e8400-e29b-41d4-a716-446655440000'],
+            '6ba7b810-9dad-11d1-80b4-00c04fd430c8' => (object) ['id' => '6ba7b810-9dad-11d1-80b4-00c04fd430c8'],
         ]);
-        
+
         // Use reflection to set the data property
         $reflection = new \ReflectionClass($this->repository);
         $dataProperty = $reflection->getProperty('data');
@@ -174,7 +177,7 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
         $this->assertCount(2, $result);
     }
 
-    public function testUuidValidationRegexPatterns()
+    public function test_uuid_validation_regex_patterns()
     {
         $testCases = [
             // Valid UUIDs
@@ -183,7 +186,7 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
             ['00000000-0000-0000-0000-000000000000', true],
             ['FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF', true],
             ['a1b2c3d4-e5f6-7890-abcd-ef1234567890', true],
-            
+
             // Invalid UUIDs
             ['not-a-uuid', false],
             ['550e8400-e29b-41d4-a716', false], // too short
@@ -198,13 +201,13 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
         Log::shouldReceive('warning')->times(8); // For the 8 invalid cases
 
         foreach ($testCases as [$uuid, $shouldBeValid]) {
-            $result = $this->repository->testFilterValidUuids([$uuid]);
-            
+            $result = $this->repository->test_filter_valid_uuids([$uuid]);
+
             if ($shouldBeValid) {
                 $this->assertCount(1, $result, "UUID should be valid: {$uuid}");
                 $this->assertEquals([$uuid], $result, "Valid UUID should be preserved: {$uuid}");
             } else {
-                $this->assertCount(0, $result, "UUID should be invalid: " . var_export($uuid, true));
+                $this->assertCount(0, $result, 'UUID should be invalid: '.var_export($uuid, true));
             }
         }
     }

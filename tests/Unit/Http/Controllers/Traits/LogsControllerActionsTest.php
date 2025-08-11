@@ -2,29 +2,28 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Http\Controllers\Traits;
 
-use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\LogsControllerActions;
-use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
+use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\LogsControllerActions;
+use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class LogsControllerActionsTest extends TestCase
 {
     protected TestController $controller;
-    
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->controller = new TestController();
+        $this->controller = new TestController;
         Log::spy();
     }
-    
+
     public function test_log_action_start_with_basic_context()
     {
         $request = Request::create('/api/test', 'POST', ['name' => 'Test Item']);
-        
+
         $this->controller->testLogActionStart('store', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.store started',
             \Mockery::on(function ($context) {
@@ -35,20 +34,20 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_start_with_authenticated_user()
     {
-        $user = new \stdClass();
+        $user = new \stdClass;
         $user->id = 123;
         $user->org_id = 456;
-        
+
         $request = Request::create('/api/test', 'GET');
         $request->setUserResolver(function () use ($user) {
             return $user;
         });
-        
+
         $this->controller->testLogActionStart('index', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.index started',
             \Mockery::on(function ($context) {
@@ -57,19 +56,21 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_start_with_validated_data()
     {
         // Create a custom request class that implements validated method
-        $request = new class extends Request {
-            public function validated() {
+        $request = new class extends Request
+        {
+            public function validated()
+            {
                 return ['email' => 'test@example.com', 'name' => 'Test'];
             }
         };
         $request->initialize([], [], [], [], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/api/users']);
-        
+
         $this->controller->testLogActionStart('store', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.store started',
             \Mockery::on(function ($context) {
@@ -79,16 +80,16 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_start_with_additional_context()
     {
         $request = Request::create('/api/test', 'PUT');
-        
+
         $this->controller->testLogActionStart('update', $request, [
             'entity_id' => 789,
             'version' => 2,
         ]);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.update started',
             \Mockery::on(function ($context) {
@@ -97,14 +98,14 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_success()
     {
         $request = Request::create('/api/test', 'POST');
         $result = ['id' => 123, 'name' => 'Created Item'];
-        
+
         $this->controller->testLogActionSuccess('store', $result, $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.store completed successfully',
             \Mockery::on(function ($context) {
@@ -114,14 +115,14 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_failure_with_exception()
     {
         $request = Request::create('/api/test', 'POST');
         $exception = new \RuntimeException('Database connection failed', 500);
-        
+
         $this->controller->testLogActionFailure('store', $exception, $request);
-        
+
         Log::shouldHaveReceived('error')->once()->with(
             'TestController.store failed',
             \Mockery::on(function ($context) {
@@ -132,23 +133,23 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_log_action_failure_with_string_error()
     {
         $request = Request::create('/api/test', 'DELETE');
-        
+
         $this->controller->testLogActionFailure('destroy', 'Permission denied', $request);
-        
+
         Log::shouldHaveReceived('error')->once()->with(
             'TestController.destroy failed',
             \Mockery::on(function ($context) {
                 return $context['result'] === 'failure' &&
                        $context['error_message'] === 'Permission denied' &&
-                       !isset($context['exception']);
+                       ! isset($context['exception']);
             })
         );
     }
-    
+
     public function test_does_not_log_sensitive_data()
     {
         $request = \Mockery::mock(Request::class);
@@ -157,25 +158,25 @@ class LogsControllerActionsTest extends TestCase
         $request->shouldReceive('path')->andReturn('api/login');
         $request->shouldReceive('user')->andReturn(null);
         $request->shouldReceive('route')->andReturn(null);
-        
+
         $this->controller->testLogActionStart('login', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.login started',
             \Mockery::on(function ($context) {
                 // Should not include validated data for sensitive actions
-                return !isset($context['request_data']);
+                return ! isset($context['request_data']);
             })
         );
     }
-    
+
     public function test_uses_custom_feature_name()
     {
-        $controller = new CustomFeatureController();
+        $controller = new CustomFeatureController;
         $request = Request::create('/api/custom', 'GET');
-        
+
         $controller->testLogActionStart('index', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'CustomFeatureController.index started',
             \Mockery::on(function ($context) {
@@ -183,42 +184,48 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_uses_appropriate_data_field_names()
     {
         // Test 'store' action uses 'request_data'
-        $storeRequest = new class extends Request {
-            public function validated() {
+        $storeRequest = new class extends Request
+        {
+            public function validated()
+            {
                 return ['name' => 'New Item'];
             }
         };
         $storeRequest->initialize([], [], [], [], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/api/test']);
-        
+
         $this->controller->testLogActionStart('store', $storeRequest);
-        
+
         // Test 'update' action uses 'update_data'
-        $updateRequest = new class extends Request {
-            public function validated() {
+        $updateRequest = new class extends Request
+        {
+            public function validated()
+            {
                 return ['name' => 'Updated Item'];
             }
         };
         $updateRequest->initialize([], [], [], [], [], ['REQUEST_METHOD' => 'PATCH', 'REQUEST_URI' => '/api/test']);
-        
+
         $this->controller->testLogActionStart('update', $updateRequest);
-        
+
         // Test 'index' action uses 'filters'
-        $indexRequest = new class extends Request {
-            public function validated() {
+        $indexRequest = new class extends Request
+        {
+            public function validated()
+            {
                 return ['status' => 'active'];
             }
         };
         $indexRequest->initialize([], [], [], [], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/api/test']);
-        
+
         $this->controller->testLogActionStart('index', $indexRequest);
-        
+
         // Verify all three calls happened with the right context
         Log::shouldHaveReceived('info')->times(3);
-        
+
         // Verify specific contexts
         Log::shouldHaveReceived('info')->with(
             \Mockery::any(),
@@ -226,14 +233,14 @@ class LogsControllerActionsTest extends TestCase
                 return isset($context['request_data']);
             })
         )->once();
-        
+
         Log::shouldHaveReceived('info')->with(
             \Mockery::any(),
             \Mockery::on(function ($context) {
                 return isset($context['update_data']);
             })
         )->once();
-        
+
         Log::shouldHaveReceived('info')->with(
             \Mockery::any(),
             \Mockery::on(function ($context) {
@@ -241,20 +248,22 @@ class LogsControllerActionsTest extends TestCase
             })
         )->once();
     }
-    
+
     public function test_sanitizes_model_result_data()
     {
         $request = Request::create('/api/test', 'GET');
-        
+
         // Create a simple object that implements toArray
-        $model = new class {
-            public function toArray() {
+        $model = new class
+        {
+            public function toArray()
+            {
                 return ['id' => 1, 'name' => 'Test Model'];
             }
         };
-        
+
         $this->controller->testLogActionSuccess('show', $model, $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.show completed successfully',
             \Mockery::on(function ($context) {
@@ -265,7 +274,7 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_includes_route_parameters()
     {
         $request = Request::create('/api/orders/123/items/456', 'GET');
@@ -273,37 +282,37 @@ class LogsControllerActionsTest extends TestCase
         $route->shouldReceive('parameters')->andReturn([
             'order_id' => '123',
             'item_id' => '456',
-            'model_instance' => new \stdClass(), // Should be filtered out
+            'model_instance' => new \stdClass, // Should be filtered out
         ]);
         $request->setRouteResolver(function () use ($route) {
             return $route;
         });
-        
+
         $this->controller->testLogActionStart('show', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.show started',
             \Mockery::on(function ($context) {
                 return isset($context['route_params']) &&
                        $context['route_params']['order_id'] === '123' &&
                        $context['route_params']['item_id'] === '456' &&
-                       !isset($context['route_params']['model_instance']);
+                       ! isset($context['route_params']['model_instance']);
             })
         );
     }
-    
+
     public function test_sanitize_result_data_handles_circular_references()
     {
         // Create objects with circular reference
-        $objA = new \stdClass();
-        $objB = new \stdClass();
+        $objA = new \stdClass;
+        $objB = new \stdClass;
         $objA->name = 'Object A';
         $objA->child = $objB;
         $objB->name = 'Object B';
         $objB->parent = $objA; // Circular reference
-        
+
         $this->controller->testLogActionSuccess('test', $objA);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.test completed successfully',
             \Mockery::on(function ($context) {
@@ -314,32 +323,32 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_sanitize_result_data_handles_array_with_circular_references()
     {
         // Create a complex structure with circular references
-        $parent = new \stdClass();
+        $parent = new \stdClass;
         $parent->id = 1;
-        $child1 = new \stdClass();
+        $child1 = new \stdClass;
         $child1->id = 2;
-        $child2 = new \stdClass();
+        $child2 = new \stdClass;
         $child2->id = 3;
-        
+
         // Create circular references
         $parent->children = [$child1, $child2];
         $child1->parent = $parent;
         $child2->parent = $parent;
         $child1->sibling = $child2;
         $child2->sibling = $child1;
-        
+
         // Test with an array containing the circular structure
         $result = [
             'parent' => $parent,
-            'all_objects' => [$parent, $child1, $child2]
+            'all_objects' => [$parent, $child1, $child2],
         ];
-        
+
         $this->controller->testLogActionSuccess('test', $result);
-        
+
         Log::shouldHaveReceived('info')->once()->with(
             'TestController.test completed successfully',
             \Mockery::on(function ($context) {
@@ -351,50 +360,50 @@ class LogsControllerActionsTest extends TestCase
             })
         );
     }
-    
+
     public function test_extracts_keys_from_model_instances_in_route_parameters()
     {
         // Create a real model instance with getKey method
         $mockModel = new MockModel(999);
-        
+
         $request = Request::create('/api/orders/123/items/456', 'GET');
         $route = \Mockery::mock();
         $route->shouldReceive('parameters')->andReturn([
             'order_id' => '123',
             'item_id' => '456',
             'order' => $mockModel, // Model instance with getKey method
-            'plain_object' => new \stdClass(), // Should be filtered out
+            'plain_object' => new \stdClass, // Should be filtered out
         ]);
         $request->setRouteResolver(function () use ($route) {
             return $route;
         });
-        
+
         $this->controller->testLogActionStart('show', $request);
-        
+
         Log::shouldHaveReceived('info')->once()->withArgs(function ($message, $context) {
             // Allow test to see what's actually being logged
             $this->assertEquals('TestController.show started', $message);
             $this->assertArrayHasKey('route_params', $context);
-            
+
             $params = $context['route_params'];
             // Debug what's actually in the params
             $this->assertIsArray($params);
-            
+
             // Check what keys are actually present
             $actualKeys = array_keys($params);
             $this->assertContains('order_id', $actualKeys);
             $this->assertContains('item_id', $actualKeys);
-            
+
             // The issue might be that array_filter preserves keys but array_map doesn't
             // Let's check if order key exists
             if (isset($params['order'])) {
                 $this->assertEquals(999, $params['order']);
             } else {
-                $this->fail('Order key not found in params. Keys present: ' . implode(', ', $actualKeys));
+                $this->fail('Order key not found in params. Keys present: '.implode(', ', $actualKeys));
             }
-            
+
             $this->assertArrayNotHasKey('plain_object', $params);
-            
+
             return true;
         });
     }
@@ -406,17 +415,17 @@ class LogsControllerActionsTest extends TestCase
 class TestController
 {
     use LogsControllerActions;
-    
+
     public function testLogActionStart($action, $request = null, $context = [])
     {
         $this->logActionStart($action, $request, $context);
     }
-    
+
     public function testLogActionSuccess($action, $result = null, $request = null, $context = [])
     {
         $this->logActionSuccess($action, $result, $request, $context);
     }
-    
+
     public function testLogActionFailure($action, $error, $request = null, $context = [])
     {
         $this->logActionFailure($action, $error, $request, $context);
@@ -429,9 +438,9 @@ class TestController
 class CustomFeatureController
 {
     use LogsControllerActions;
-    
+
     protected $loggingFeatureName = 'custom_feature';
-    
+
     public function testLogActionStart($action, $request = null, $context = [])
     {
         $this->logActionStart($action, $request, $context);
@@ -444,12 +453,12 @@ class CustomFeatureController
 class MockModel
 {
     protected $key;
-    
+
     public function __construct($key)
     {
         $this->key = $key;
     }
-    
+
     public function getKey()
     {
         return $this->key;

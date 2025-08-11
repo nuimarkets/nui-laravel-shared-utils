@@ -3,12 +3,11 @@
 namespace NuiMarkets\LaravelSharedUtils\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use NuiMarkets\LaravelSharedUtils\Http\Middleware\RequestLoggingMiddleware;
 use NuiMarkets\LaravelSharedUtils\Logging\Processors\AddTargetProcessor;
 
 /**
  * Service provider for easy integration of logging components.
- * 
+ *
  * This provider:
  * - Publishes configuration files
  * - Registers logging middleware
@@ -26,7 +25,7 @@ class LoggingServiceProvider extends ServiceProvider
     {
         // Merge default config
         $this->mergeConfigFrom(
-            __DIR__ . '/../../config/logging-utils.php',
+            __DIR__.'/../../config/logging-utils.php',
             'logging-utils'
         );
     }
@@ -41,7 +40,7 @@ class LoggingServiceProvider extends ServiceProvider
         // Publish configuration
         if ($this->app->runningInConsole()) {
             $this->publishes([
-                __DIR__ . '/../../config/logging-utils.php' => config_path('logging-utils.php'),
+                __DIR__.'/../../config/logging-utils.php' => config_path('logging-utils.php'),
             ], 'logging-utils-config');
         }
 
@@ -68,19 +67,19 @@ class LoggingServiceProvider extends ServiceProvider
         $channelConfig = config("logging.channels.{$defaultChannel}");
 
         // Only proceed if it's a channel that supports tap
-        if (!isset($channelConfig['driver']) || !in_array($channelConfig['driver'], ['single', 'daily', 'stack'])) {
+        if (! isset($channelConfig['driver']) || ! in_array($channelConfig['driver'], ['single', 'daily', 'stack'])) {
             return;
         }
 
         // Add our custom tap to the channel configuration
-        $tapClass = config('logging-utils.processors.monolog_customizer', 
+        $tapClass = config('logging-utils.processors.monolog_customizer',
             \NuiMarkets\LaravelSharedUtils\Logging\CustomizeMonoLog::class);
 
         config([
             "logging.channels.{$defaultChannel}.tap" => array_merge(
                 (array) config("logging.channels.{$defaultChannel}.tap", []),
                 [$tapClass]
-            )
+            ),
         ]);
     }
 
@@ -92,10 +91,10 @@ class LoggingServiceProvider extends ServiceProvider
     protected function registerMiddlewareAlias()
     {
         $router = $this->app['router'];
-        
+
         // Get the middleware class from config
         $middlewareClass = config('logging-utils.middleware.request_logging.class');
-        
+
         if ($middlewareClass && class_exists($middlewareClass)) {
             $router->aliasMiddleware('log.requests', $middlewareClass);
         }
