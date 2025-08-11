@@ -34,6 +34,7 @@ class IntercomService
 
         if (empty($this->token) && $this->enabled) {
             Log::warning('Intercom token not configured but service is enabled', [
+                'feature' => 'intercom',
                 'service' => $this->serviceName,
             ]);
         }
@@ -47,6 +48,7 @@ class IntercomService
         // Guard clause: Check for empty userId or event
         if (empty(trim($userId)) || empty(trim($event))) {
             Log::warning('Intercom trackEvent called with empty userId or event', [
+                'feature' => 'intercom',
                 'user_id' => $userId,
                 'event' => $event,
                 'service' => $this->serviceName,
@@ -56,6 +58,7 @@ class IntercomService
         }
 
         Log::info('Intercom trackEvent called', [
+            'feature' => 'intercom',
             'user_id' => $userId,
             'event' => $event,
             'enabled' => $this->isEnabled(),
@@ -65,6 +68,7 @@ class IntercomService
 
         if (! $this->isEnabled()) {
             Log::warning('Intercom track event not enabled', [
+                'feature' => 'intercom',
                 'enabled_config' => $this->enabled,
                 'token_empty' => empty($this->token),
                 'config' => $this->config,
@@ -406,7 +410,10 @@ class IntercomService
      */
     private function logSuccess(string $message, array $context = []): void
     {
-        Log::info($message, array_merge($context, ['service' => $this->serviceName]));
+        Log::info($message, array_merge($context, [
+            'feature' => 'intercom',
+            'service' => $this->serviceName,
+        ]));
     }
 
     /**
@@ -416,10 +423,15 @@ class IntercomService
     {
         $failSilently = $this->config['fail_silently'] ?? true;
 
+        $logContext = array_merge($context, [
+            'feature' => 'intercom',
+            'service' => $this->serviceName,
+        ]);
+
         if ($failSilently) {
-            Log::warning($message, array_merge($context, ['service' => $this->serviceName]));
+            Log::warning($message, $logContext);
         } else {
-            Log::error($message, array_merge($context, ['service' => $this->serviceName]));
+            Log::error($message, $logContext);
         }
     }
 }

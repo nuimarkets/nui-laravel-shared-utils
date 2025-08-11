@@ -124,6 +124,7 @@ class IntercomServiceTest extends TestCase
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
+                'feature' => 'intercom',
                 'user_id' => '',
                 'event' => 'test_event',
                 'service' => 'connect-service-test',
@@ -143,6 +144,7 @@ class IntercomServiceTest extends TestCase
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
+                'feature' => 'intercom',
                 'user_id' => 'user-123',
                 'event' => '',
                 'service' => 'connect-service-test',
@@ -162,6 +164,7 @@ class IntercomServiceTest extends TestCase
         Log::shouldReceive('warning')->once()->with(
             'Intercom trackEvent called with empty userId or event',
             [
+                'feature' => 'intercom',
                 'user_id' => '   ',
                 'event' => '   ',
                 'service' => 'connect-service-test',

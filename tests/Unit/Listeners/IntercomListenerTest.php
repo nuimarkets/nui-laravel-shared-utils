@@ -158,6 +158,7 @@ class IntercomListenerTest extends TestCase
             ->with(
                 'Intercom event tracking failed',
                 [
+                    'feature' => 'intercom',
                     'service' => 'connect-service-test',
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',
@@ -192,6 +193,7 @@ class IntercomListenerTest extends TestCase
             ->with(
                 'Intercom listener exception',
                 [
+                    'feature' => 'intercom',
                     'service' => 'connect-service-test',
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',
@@ -226,6 +228,7 @@ class IntercomListenerTest extends TestCase
             ->with(
                 'Intercom listener job failed',
                 [
+                    'feature' => 'intercom',
                     'service' => 'connect-service-test',
                     'user_id' => 'user-123',
                     'event' => 'product_viewed',

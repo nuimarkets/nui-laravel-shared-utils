@@ -40,6 +40,7 @@ class IntercomListener implements ShouldQueue
 
             if (! $success) {
                 Log::warning('Intercom event tracking failed', [
+                    'feature' => 'intercom',
                     'service' => $intercomService->getServiceName(),
                     'user_id' => $event->userId,
                     'event' => $event->event,
@@ -48,6 +49,7 @@ class IntercomListener implements ShouldQueue
             }
         } catch (\Throwable $e) {
             Log::error('Intercom listener exception', [
+                'feature' => 'intercom',
                 'service' => $intercomService->getServiceName(),
                 'user_id' => $event->userId,
                 'event' => $event->event,
@@ -68,6 +70,7 @@ class IntercomListener implements ShouldQueue
         $intercomService = app(IntercomService::class);
 
         Log::error('Intercom listener job failed', [
+            'feature' => 'intercom',
             'service' => $intercomService->getServiceName(),
             'user_id' => $event->userId,
             'event' => $event->event,
