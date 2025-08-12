@@ -95,7 +95,8 @@ class IntercomService
                 $eventData['external_id'] = $userId;
             }
 
-            $response = $this->makeApiRequest('POST', '/events', $eventData);
+            // Wrap event data in 'data' field as required by Intercom API
+            $response = $this->makeApiRequest('POST', '/events', ['data' => $eventData]);
 
             if ($response->successful()) {
                 $this->logSuccess('Intercom event tracked', [
@@ -290,7 +291,8 @@ class IntercomService
                 $bulkData['events'][] = $eventData;
             }
 
-            $response = $this->makeApiRequest('POST', '/events/bulk', $bulkData);
+            // Wrap bulk data in 'data' field as required by Intercom API
+            $response = $this->makeApiRequest('POST', '/events/bulk', ['data' => $bulkData]);
 
             if ($response->successful()) {
                 $this->logSuccess('Intercom bulk events tracked', [
