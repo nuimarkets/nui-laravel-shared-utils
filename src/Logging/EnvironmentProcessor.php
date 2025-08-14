@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Logging;
 
+use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;
 
 /**
@@ -9,9 +10,8 @@ use Monolog\Processor\ProcessorInterface;
  */
 class EnvironmentProcessor implements ProcessorInterface
 {
-    public function __invoke(array $record): array
+    public function __invoke(LogRecord|array $record): LogRecord|array
     {
-
         $extraInfo = [
             'environment' => env('APP_ENV', 'testing'),
             'hostname' => gethostname(),
@@ -29,7 +29,6 @@ class EnvironmentProcessor implements ProcessorInterface
             global $argv;
             $extraInfo['command'] = $argv[1] ?? '';
         } else {
-
             // Add request-specific information only if in a web request context
             if (app()->bound('request') && request()) {
                 $amzTraceId = request()->header('x-amzn-trace-id', '');
@@ -55,8 +54,14 @@ class EnvironmentProcessor implements ProcessorInterface
             }
         }
 
-        $record['extra'] = array_merge($record['extra'], $extraInfo);
-
-        return $record;
+        // Handle both Monolog 2 (array) and Monolog 3 (LogRecord) formats
+        if ($record instanceof LogRecord) {
+            // Monolog 3: LogRecord format
+            return $record->with(extra: array_merge($record->extra, $extraInfo));
+        } else {
+            // Monolog 2: Array format
+            $record['extra'] = array_merge($record['extra'] ?? [], $extraInfo);
+            return $record;
+        }
     }
 }

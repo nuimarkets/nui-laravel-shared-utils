@@ -28,7 +28,7 @@ class SentryHandler extends AbstractProcessingHandler
             // Handle both Monolog 2.x array format and 3.x LogRecord (laravel >=10)
             $context = is_array($record) ? $record['context'] : $record->context;
             $message = is_array($record) ? $record['message'] : $record->message;
-            $level = is_array($record) ? $record['level'] : $record->level;
+            $level = is_array($record) ? $record['level'] : $record->level->value;
 
             // Configure Sentry scope with any tags from context
             configureScope(function (Scope $scope) use ($context): void {
@@ -62,7 +62,6 @@ class SentryHandler extends AbstractProcessingHandler
                 }
 
             } else {
-                // todo For Monolog 3.x, level is an object, for 2.x it's an integer
                 captureMessage($message, $this->getMonologLevelToSeverity($level));
             }
         }
