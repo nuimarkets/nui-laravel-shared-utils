@@ -16,7 +16,7 @@ class ScheduleRunCommandTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Mock Log facade
         Log::shouldReceive('withContext')->andReturnSelf();
         Log::shouldReceive('debug')->andReturnTrue();
@@ -33,12 +33,12 @@ class ScheduleRunCommandTest extends TestCase
         $schedule = Mockery::mock(Schedule::class);
         $dispatcher = Mockery::mock(Dispatcher::class);
         $handler = Mockery::mock(ExceptionHandler::class);
-        
+
         $schedule->shouldReceive('dueEvents')
             ->once()
             ->andReturn(collect([]));
-        
-        $command = new ScheduleRunCommand();
+
+        $command = new ScheduleRunCommand;
         $command->setLaravel($this->app);
 
         // Act - Laravel 8/9 signature: handle(Schedule, Dispatcher, ExceptionHandler)
@@ -58,12 +58,12 @@ class ScheduleRunCommandTest extends TestCase
         $dispatcher = Mockery::mock(Dispatcher::class);
         $cache = Mockery::mock(Cache::class);
         $handler = Mockery::mock(ExceptionHandler::class);
-        
+
         $schedule->shouldReceive('dueEvents')
             ->once()
             ->andReturn(collect([]));
-        
-        $command = new ScheduleRunCommand();
+
+        $command = new ScheduleRunCommand;
         $command->setLaravel($this->app);
 
         // Act - Laravel 10+ signature: handle(Schedule, Dispatcher, Cache, ExceptionHandler)
@@ -83,12 +83,12 @@ class ScheduleRunCommandTest extends TestCase
         $dispatcher = Mockery::mock(Dispatcher::class);
         $cache = Mockery::mock(Cache::class);
         $handler = Mockery::mock(ExceptionHandler::class);
-        
+
         $schedule->shouldReceive('dueEvents')
             ->once()
             ->andReturn(collect([]));
-        
-        $command = new ScheduleRunCommand();
+
+        $command = new ScheduleRunCommand;
         $command->setLaravel($this->app);
 
         // Act
@@ -97,7 +97,7 @@ class ScheduleRunCommandTest extends TestCase
         // Assert - Should log that no commands are ready
         Log::shouldHaveReceived('debug')
             ->with('No scheduled commands are ready to run.', ['command' => 'scheduler']);
-        
+
         // Add explicit assertion for the test
         $this->assertTrue(true);
     }
@@ -112,11 +112,11 @@ class ScheduleRunCommandTest extends TestCase
         $dispatcher = Mockery::mock(Dispatcher::class);
         $cache = Mockery::mock(Cache::class);
         $handler = Mockery::mock(ExceptionHandler::class);
-        
+
         $schedule->shouldReceive('dueEvents')
             ->andReturn(collect([]));
-        
-        $command = new ScheduleRunCommand();
+
+        $command = new ScheduleRunCommand;
         $command->setLaravel($this->app);
 
         // Test Laravel 8/9 signature (3 params)
@@ -124,7 +124,7 @@ class ScheduleRunCommandTest extends TestCase
             $command->handle($schedule, $dispatcher, $handler);
             $this->assertTrue(true);
         } catch (\Throwable $e) {
-            $this->fail('Laravel 8/9 signature should work: ' . $e->getMessage());
+            $this->fail('Laravel 8/9 signature should work: '.$e->getMessage());
         }
 
         // Test Laravel 10 signature (4 params)
@@ -132,7 +132,7 @@ class ScheduleRunCommandTest extends TestCase
             $command->handle($schedule, $dispatcher, $cache, $handler);
             $this->assertTrue(true);
         } catch (\Throwable $e) {
-            $this->fail('Laravel 10 signature should work: ' . $e->getMessage());
+            $this->fail('Laravel 10 signature should work: '.$e->getMessage());
         }
     }
 
