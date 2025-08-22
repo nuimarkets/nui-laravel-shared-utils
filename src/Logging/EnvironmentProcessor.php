@@ -61,6 +61,7 @@ class EnvironmentProcessor implements ProcessorInterface
         } else {
             // Monolog 2: Array format
             $record['extra'] = array_merge($record['extra'] ?? [], $extraInfo);
+
             return $record;
         }
     }

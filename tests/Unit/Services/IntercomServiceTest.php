@@ -80,12 +80,11 @@ class IntercomServiceTest extends TestCase
 
             return $request->url() === 'https://api.intercom.io/events' &&
                    $request->method() === 'POST' &&
-                   isset($data['data']) &&
-                   $data['data']['external_id'] === 'user-123' &&
-                   $data['data']['event_name'] === 'connect_product_viewed' &&
-                   $data['data']['metadata']['service'] === 'connect-service-test' &&
-                   $data['data']['metadata']['product_id'] === 'prod-456' &&
-                   $data['data']['metadata']['category'] === 'meat';
+                   $data['external_id'] === 'user-123' &&
+                   $data['event_name'] === 'connect_product_viewed' &&
+                   $data['metadata']['service'] === 'connect-service-test' &&
+                   $data['metadata']['product_id'] === 'prod-456' &&
+                   $data['metadata']['category'] === 'meat';
         });
     }
 
@@ -97,7 +96,7 @@ class IntercomServiceTest extends TestCase
             ], 400),
         ]);
 
-        Log::shouldReceive('info')->once();
+        Log::shouldReceive('info')->twice(); // Once for trackEvent called, once for Sending event
         Log::shouldReceive('warning')->once();
 
         $result = $this->service->trackEvent('user-123', 'product_viewed', []);
@@ -319,7 +318,7 @@ class IntercomServiceTest extends TestCase
         Http::assertSent(function (Request $request) {
             $data = $request->data();
 
-            return isset($data['data']) && $data['data']['event_name'] === 'connect_product_viewed';
+            return $data['event_name'] === 'connect_product_viewed';
         });
     }
 
@@ -377,6 +376,14 @@ class IntercomServiceTest extends TestCase
         );
 
         Log::shouldReceive('info')->once()->with(
+            'Sending Intercom event',
+            \Mockery::on(function ($context) {
+                return $context['user_id'] === 'user-123' &&
+                       $context['event'] === 'test_event';
+            })
+        );
+
+        Log::shouldReceive('info')->once()->with(
             'Intercom event tracked',
             \Mockery::on(function ($context) {
                 return $context['user_id'] === 'user-123' &&
@@ -395,7 +402,7 @@ class IntercomServiceTest extends TestCase
             throw new \Exception('Network error');
         });
 
-        Log::shouldReceive('info')->once();
+        Log::shouldReceive('info')->twice(); // Once for trackEvent called, once for Sending event
         Log::shouldReceive('warning')->once();
 
         $result = $this->service->trackEvent('user-123', 'test_event', []);
@@ -418,7 +425,7 @@ class IntercomServiceTest extends TestCase
         Http::assertSent(function (Request $request) {
             $data = $request->data();
 
-            return isset($data['data']) && $data['data']['event_name'] === 'myapp_user_action';
+            return $data['event_name'] === 'myapp_user_action';
         });
     }
 
@@ -437,7 +444,7 @@ class IntercomServiceTest extends TestCase
         Http::assertSent(function (Request $request) {
             $data = $request->data();
 
-            return isset($data['data']) && $data['data']['event_name'] === 'user_action';
+            return $data['event_name'] === 'user_action';
         });
     }
 }

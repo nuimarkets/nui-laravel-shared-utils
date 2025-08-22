@@ -95,8 +95,18 @@ class IntercomService
                 $eventData['external_id'] = $userId;
             }
 
-            // Wrap event data in 'data' field as required by Intercom API
-            $response = $this->makeApiRequest('POST', '/events', ['data' => $eventData]);
+            // Send event data directly - NO data wrapper needed for /events endpoint
+            $payload = $eventData;
+
+            // Log the complete request payload for debugging
+            $this->logInfo('Sending Intercom event', [
+                'user_id' => $userId,
+                'event' => $event,
+                'payload' => $payload,
+                'endpoint' => '/events',
+            ]);
+
+            $response = $this->makeApiRequest('POST', '/events', $payload);
 
             if ($response->successful()) {
                 $this->logSuccess('Intercom event tracked', [
@@ -112,6 +122,8 @@ class IntercomService
                     'event' => $event,
                     'status' => $response->status(),
                     'error' => $response->body(),
+                    'response_headers' => $response->headers(),
+                    'request_payload' => $payload,
                 ]);
 
                 return false;
@@ -291,8 +303,17 @@ class IntercomService
                 $bulkData['events'][] = $eventData;
             }
 
-            // Wrap bulk data in 'data' field as required by Intercom API
-            $response = $this->makeApiRequest('POST', '/events/bulk', ['data' => $bulkData]);
+            // Send bulk data directly - bulkData already has 'events' array
+            $payload = $bulkData;
+
+            // Log the bulk request for debugging
+            $this->logInfo('Sending Intercom bulk events', [
+                'event_count' => count($events),
+                'payload' => $payload,
+                'endpoint' => '/events/bulk',
+            ]);
+
+            $response = $this->makeApiRequest('POST', '/events/bulk', $payload);
 
             if ($response->successful()) {
                 $this->logSuccess('Intercom bulk events tracked', [
@@ -312,6 +333,8 @@ class IntercomService
                     'event_count' => count($events),
                     'response_status' => $response->status(),
                     'response_body' => $response->body(),
+                    'response_headers' => $response->headers(),
+                    'request_payload' => $payload,
                 ]);
 
                 // Return failure for all events in this batch
@@ -411,6 +434,17 @@ class IntercomService
      * Log success messages
      */
     private function logSuccess(string $message, array $context = []): void
+    {
+        Log::info($message, array_merge($context, [
+            'feature' => 'intercom',
+            'service' => $this->serviceName,
+        ]));
+    }
+
+    /**
+     * Log info messages for debugging
+     */
+    private function logInfo(string $message, array $context = []): void
     {
         Log::info($message, array_merge($context, [
             'feature' => 'intercom',

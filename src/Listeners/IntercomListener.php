@@ -31,6 +31,16 @@ class IntercomListener implements ShouldQueue
                 $properties['tenant_id'] = $event->tenantId;
             }
 
+            // Log incoming event data for debugging
+            Log::info('IntercomListener processing event', [
+                'feature' => 'intercom',
+                'service' => $intercomService->getServiceName(),
+                'user_id' => $event->userId,
+                'event' => $event->event,
+                'properties' => $properties,
+                'tenant_id' => $event->tenantId,
+            ]);
+
             // Track the event
             $success = $intercomService->trackEvent(
                 $event->userId,

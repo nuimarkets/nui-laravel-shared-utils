@@ -45,6 +45,10 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->mockIntercomService
+            ->shouldReceive('getServiceName')
+            ->andReturn('connect-service-test');
+
+        $this->mockIntercomService
             ->shouldReceive('trackEvent')
             ->once()
             ->with(
@@ -53,6 +57,13 @@ class IntercomListenerTest extends TestCase
                 ['product_id' => 'prod-456', 'tenant_id' => 'tenant-789']
             )
             ->andReturn(true);
+
+        Log::shouldReceive('info')
+            ->once()
+            ->with(
+                'IntercomListener processing event',
+                Mockery::type('array')
+            );
 
         $this->listener->handle($event);
 
@@ -90,6 +101,10 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->mockIntercomService
+            ->shouldReceive('getServiceName')
+            ->andReturn('connect-service-test');
+
+        $this->mockIntercomService
             ->shouldReceive('trackEvent')
             ->once()
             ->with(
@@ -98,6 +113,13 @@ class IntercomListenerTest extends TestCase
                 ['product_id' => 'prod-456', 'tenant_id' => 'tenant-789']
             )
             ->andReturn(true);
+
+        Log::shouldReceive('info')
+            ->once()
+            ->with(
+                'IntercomListener processing event',
+                Mockery::type('array')
+            );
 
         $this->listener->handle($event);
 
@@ -117,6 +139,10 @@ class IntercomListenerTest extends TestCase
             ->andReturn(true);
 
         $this->mockIntercomService
+            ->shouldReceive('getServiceName')
+            ->andReturn('connect-service-test');
+
+        $this->mockIntercomService
             ->shouldReceive('trackEvent')
             ->once()
             ->with(
@@ -125,6 +151,13 @@ class IntercomListenerTest extends TestCase
                 ['product_id' => 'prod-456']
             )
             ->andReturn(true);
+
+        Log::shouldReceive('info')
+            ->once()
+            ->with(
+                'IntercomListener processing event',
+                Mockery::type('array')
+            );
 
         $this->listener->handle($event);
 
@@ -152,6 +185,13 @@ class IntercomListenerTest extends TestCase
             ->shouldReceive('trackEvent')
             ->once()
             ->andReturn(false);
+
+        Log::shouldReceive('info')
+            ->once()
+            ->with(
+                'IntercomListener processing event',
+                Mockery::type('array')
+            );
 
         Log::shouldReceive('warning')
             ->once()
@@ -187,6 +227,13 @@ class IntercomListenerTest extends TestCase
             ->shouldReceive('trackEvent')
             ->once()
             ->andThrow(new \Exception('Network timeout'));
+
+        Log::shouldReceive('info')
+            ->once()
+            ->with(
+                'IntercomListener processing event',
+                Mockery::type('array')
+            );
 
         Log::shouldReceive('error')
             ->once()
