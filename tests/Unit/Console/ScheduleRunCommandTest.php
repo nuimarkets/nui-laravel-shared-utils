@@ -13,9 +13,13 @@ use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 class ScheduleRunCommandTest extends TestCase
 {
     protected Schedule $schedule;
+
     protected Dispatcher $dispatcher;
+
     protected ExceptionHandler $handler;
+
     protected Cache $cache;
+
     protected function setUp(): void
     {
         $this->schedule = Mockery::mock(Schedule::class);
