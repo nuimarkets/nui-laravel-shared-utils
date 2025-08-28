@@ -248,10 +248,6 @@ class BaseErrorHandler extends ExceptionHandler
         }
 
         return new JsonResponse([
-            'meta' => [
-                'message' => $errorData['title'],
-                'status' => $errorData['status'],
-            ],
             'errors' => $errorData['errors'],
         ], $errorData['status']);
     }
