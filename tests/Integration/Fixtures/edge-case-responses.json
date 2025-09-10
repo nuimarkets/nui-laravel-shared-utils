@@ -1,0 +1,59 @@
+[
+  {
+    "name": "errors_null",
+    "response": {
+      "errors": null
+    }
+  },
+  {
+    "name": "errors_empty_array",
+    "response": {
+      "errors": []
+    }
+  },
+  {
+    "name": "errors_array_of_strings",
+    "response": {
+      "errors": ["Error 1", "Error 2", "Error 3"]
+    }
+  },
+  {
+    "name": "empty_object",
+    "response": {}
+  },
+  {
+    "name": "null_response",
+    "response": null
+  },
+  {
+    "name": "mixed_array_errors",
+    "response": {
+      "errors": [
+        "String error",
+        {"detail": "Object error"},
+        42,
+        null,
+        {"title": "Complex error", "detail": "With multiple fields"}
+      ]
+    }
+  },
+  {
+    "name": "deeply_nested",
+    "response": {
+      "meta": {
+        "errors": {
+          "nested": {
+            "deeply": "This should not be picked up as the main errors"
+          }
+        }
+      },
+      "errors": "This is the actual error"
+    }
+  },
+  {
+    "name": "json_encode_failure_simulation",
+    "response": {
+      "errors": "Simulated JSON encoding failure"
+    }
+  }
+]

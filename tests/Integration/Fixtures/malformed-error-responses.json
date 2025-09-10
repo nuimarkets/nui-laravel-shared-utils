@@ -1,0 +1,56 @@
+[
+  {
+    "name": "errors_as_string",
+    "response": {
+      "errors": "Database connection failed"
+    }
+  },
+  {
+    "name": "message_field",
+    "response": {
+      "message": "Internal server error"
+    }
+  },
+  {
+    "name": "error_object",
+    "response": {
+      "error": {
+        "code": 500,
+        "message": "Server error"
+      }
+    }
+  },
+  {
+    "name": "nested_error_structure",
+    "response": {
+      "status": "error",
+      "data": {
+        "errors": {
+          "validation": "Email format invalid"
+        }
+      }
+    }
+  },
+  {
+    "name": "laravel_validation",
+    "response": {
+      "message": "The given data was invalid.",
+      "errors": {
+        "email": ["The email field is required."],
+        "password": ["The password must be at least 8 characters."]
+      }
+    }
+  },
+  {
+    "name": "plain_text_error",
+    "response": "Service temporarily unavailable"
+  },
+  {
+    "name": "numeric_error",
+    "response": 500
+  },
+  {
+    "name": "boolean_error",
+    "response": false
+  }
+]

@@ -47,6 +47,9 @@ Complete Intercom integration for user analytics and event tracking with queue-b
 ### **JSON API Validation**
 Standardized JSON:API error handling with consistent validation responses. Provides unified error formatting across all services without configuration.
 
+### **Enhanced Error Handling**
+`ErrorCollectionParser` for consistent outbound API error handling across all services. Normalizes string errors, scalar values, Throwable instances, Laravel validation errors, and malformed error structures into proper JSON API format.
+
 ### **Testing Utilities**
 Automated test database management, specialized test jobs for queue testing, JSON API validation assertions, and base test cases for rapid test development.
 
@@ -85,6 +88,7 @@ php artisan vendor:publish --tag=intercom-config
 | **JSON API Validation** | Standardized error handling with unified formatting | [Guide](docs/json-api-validation.md) |
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
+| **ErrorCollectionParser** | Standardized error handling for JSON API responses | [Guide](docs/error-collection-parser.md) |
 
 ### Quick Examples
 
@@ -170,6 +174,35 @@ Route::get('/healthcheck', [HealthCheckController::class, 'check']);
         "queue": {"status": "up", "jobs_pending": 0}
     }
 }
+```
+
+#### Use Enhanced Error Handling
+
+```php
+// 1. Register in service provider for JSON API client
+use NuiMarkets\LaravelSharedUtils\Support\ErrorCollectionParser;
+
+$this->app->singleton(ErrorCollectionParser::class, function ($app) {
+    return new ErrorCollectionParser($app->make(ErrorParser::class));
+});
+
+// Bind the base Swis parser interface to your enhanced implementation
+$this->app->alias(
+    ErrorCollectionParser::class,
+    \Swis\JsonApi\Client\Parsers\ErrorCollectionParser::class
+);
+
+// 2. Resolve parser instance and handle various error formats
+$parser = $this->app->make(ErrorCollectionParser::class);
+
+// String errors → JSON API format
+$parser->parse('Database connection failed');
+
+// Exception objects → Structured errors with context
+$parser->parse(new Exception('Validation failed', 422));
+
+// Malformed API responses → Normalized format
+$parser->parse(['errors' => 'Single error string']);
 ```
 
 ## Architecture
