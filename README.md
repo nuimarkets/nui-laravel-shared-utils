@@ -45,7 +45,7 @@ Enhanced RemoteRepository with retry logic, performance monitoring, intelligent 
 Complete Intercom integration for user analytics and event tracking with queue-based processing and multi-tenant support.
 
 ### **Testing Utilities**
-Automated test database management, specialized test jobs for queue testing, and base test cases for rapid test development.
+Automated test database management, specialized test jobs for queue testing, JSON API validation assertions, and base test cases for rapid test development.
 
 ## Requirements
 
