@@ -12,97 +12,105 @@ class JsonApiAssertionsTest extends TestCase
 {
     use JsonApiAssertions;
 
-    public function test_assertHasValidationErrors_passes_with_correct_fields()
+    public function test_assert_has_validation_errors_passes_with_correct_fields()
     {
         $responseData = [
             'errors' => [
                 [
                     'detail' => 'The field is required.',
                     'source' => [
-                        'pointer' => '/data/attributes/email'
-                    ]
+                        'pointer' => '/data/attributes/email',
+                    ],
                 ],
                 [
                     'detail' => 'The name field is required.',
                     'source' => [
-                        'pointer' => '/data/attributes/name'
-                    ]
-                ]
-            ]
+                        'pointer' => '/data/attributes/name',
+                    ],
+                ],
+            ],
         ];
-        
-        $response = new TestResponse(new JsonResponse($responseData, 422));
-        
+
+        $jsonResponse = new JsonResponse($responseData, 422);
+        $jsonResponse->header('Content-Type', 'application/vnd.api+json');
+        $response = new TestResponse($jsonResponse);
+
         // This should pass without throwing an exception
         $this->assertHasValidationErrors($response, ['email', 'name']);
-        
+
         // Also test with subset of fields
         $this->assertHasValidationErrors($response, ['email']);
     }
 
-    public function test_assertHasValidationErrors_fails_when_field_not_present()
+    public function test_assert_has_validation_errors_fails_when_field_not_present()
     {
         $responseData = [
             'errors' => [
                 [
                     'detail' => 'The field is required.',
                     'source' => [
-                        'pointer' => '/data/attributes/email'
-                    ]
-                ]
-            ]
+                        'pointer' => '/data/attributes/email',
+                    ],
+                ],
+            ],
         ];
-        
-        $response = new TestResponse(new JsonResponse($responseData, 422));
-        
+
+        $jsonResponse = new JsonResponse($responseData, 422);
+        $jsonResponse->header('Content-Type', 'application/vnd.api+json');
+        $response = new TestResponse($jsonResponse);
+
         $this->expectException(AssertionFailedError::class);
-        $this->expectExceptionMessage("Expected validation error for field 'name' but it was not found");
-        
+        $this->expectExceptionMessage('Missing validation error for field: name. Available error fields:');
+
         $this->assertHasValidationErrors($response, ['email', 'name']);
     }
 
-    public function test_assertHasValidationErrors_handles_nested_field_names()
+    public function test_assert_has_validation_errors_handles_nested_field_names()
     {
         $responseData = [
             'errors' => [
                 [
                     'detail' => 'The data.items.0.productId field is required.',
                     'source' => [
-                        'pointer' => '/data/attributes/data.items.0.productId'
-                    ]
+                        'pointer' => '/data/attributes/data.items.0.productId',
+                    ],
                 ],
                 [
                     'detail' => 'The buyerOrgIds.1 field is invalid.',
                     'source' => [
-                        'pointer' => '/data/attributes/buyerOrgIds.1'
-                    ]
-                ]
-            ]
+                        'pointer' => '/data/attributes/buyerOrgIds.1',
+                    ],
+                ],
+            ],
         ];
-        
-        $response = new TestResponse(new JsonResponse($responseData, 422));
-        
+
+        $jsonResponse = new JsonResponse($responseData, 422);
+        $jsonResponse->header('Content-Type', 'application/vnd.api+json');
+        $response = new TestResponse($jsonResponse);
+
         $this->assertHasValidationErrors($response, ['data.items.0.productId', 'buyerOrgIds.1']);
     }
 
-    public function test_assertHasValidationErrors_fails_on_wrong_status_code()
+    public function test_assert_has_validation_errors_fails_on_wrong_status_code()
     {
         $responseData = ['message' => 'Success'];
         $response = new TestResponse(new JsonResponse($responseData, 200));
-        
+
         $this->expectException(AssertionFailedError::class);
-        
+
         $this->assertHasValidationErrors($response, ['email']);
     }
 
-    public function test_assertHasValidationErrors_fails_when_errors_array_missing()
+    public function test_assert_has_validation_errors_fails_when_errors_array_missing()
     {
         $responseData = ['message' => 'Validation failed'];
-        $response = new TestResponse(new JsonResponse($responseData, 422));
-        
+        $jsonResponse = new JsonResponse($responseData, 422);
+        $jsonResponse->header('Content-Type', 'application/vnd.api+json');
+        $response = new TestResponse($jsonResponse);
+
         $this->expectException(AssertionFailedError::class);
-        $this->expectExceptionMessage('Response should have errors array');
-        
+        $this->expectExceptionMessage('JSON:API "errors" member missing.');
+
         $this->assertHasValidationErrors($response, ['email']);
     }
 }
