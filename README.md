@@ -44,6 +44,9 @@ Enhanced RemoteRepository with retry logic, performance monitoring, intelligent 
 ### **Analytics Integration**
 Complete Intercom integration for user analytics and event tracking with queue-based processing and multi-tenant support.
 
+### **JSON API Validation**
+Standardized JSON:API error handling with consistent validation responses. Provides unified error formatting across all services without configuration.
+
 ### **Testing Utilities**
 Automated test database management, specialized test jobs for queue testing, JSON API validation assertions, and base test cases for rapid test development.
 
@@ -79,6 +82,7 @@ php artisan vendor:publish --tag=intercom-config
 | **Distributed Tracing** | AWS X-Ray integration with request correlation | [Guide](docs/distributed-tracing.md) |
 | **Logging System** | Enhanced logging with Elasticsearch routing | [Guide](docs/logging-integration.md) |
 | **RemoteRepository** | Service-to-service communication framework | [Guide](docs/RemoteRepository.md) |
+| **JSON API Validation** | Standardized error handling with unified formatting | [Guide](docs/json-api-validation.md) |
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
 
@@ -123,6 +127,32 @@ class CustomizeMonoLog extends BaseCustomizeMonoLog {
 
 // 3. Logs automatically route to correct Elasticsearch index
 Log::info('Order processed', ['order_id' => $order->id]);
+```
+
+#### Standardize JSON API Validation
+
+```php
+// 1. Use trait in FormRequest classes
+use NuiMarkets\LaravelSharedUtils\Http\Requests\JsonApiValidation;
+
+class CreateOrderRequest extends FormRequest {
+    use JsonApiValidation;
+
+    public function rules() {
+        return ['email' => 'required|email'];
+    }
+}
+
+// 2. Consistent error format across all services (uses Laravel dot-notation in pointers)
+{
+    "meta": {"message": "Validation Failed", "status": 422},
+    "errors": [{
+        "status": "422",
+        "title": "Validation Error",
+        "detail": "email: The email field is required.",
+        "source": {"pointer": "/data/attributes/email"}
+    }]
+}
 ```
 
 #### Add Health Checks
