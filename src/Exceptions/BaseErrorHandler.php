@@ -228,7 +228,13 @@ class BaseErrorHandler extends ExceptionHandler
         $errorData = $this->getFormattedError($e);
 
         if (! $this->shouldReport($e)) {
-            Log::info(class_basename($e), $errorData['errors']);
+            Log::info(
+                class_basename($e),
+                [
+                    'errors' => $errorData['errors'],
+                    'exception' => $e,
+                ],
+            );
         }
 
         $headers = [];
