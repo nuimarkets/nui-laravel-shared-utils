@@ -453,20 +453,77 @@ class HealthCheckController extends Controller
      */
     protected function getPhpEnvironment(): array
     {
-        return [
-            'php_version' => phpversion(),
-            'php_sapi' => php_sapi_name(),
+        $sapi = PHP_SAPI;
+        $extensions = get_loaded_extensions();
+        sort($extensions, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $environment = [
+            'php_version' => PHP_VERSION,
+            'php_sapi' => $sapi,
             'memory_limit' => ini_get('memory_limit'),
             'max_execution_time' => ini_get('max_execution_time').' seconds',
-            'loaded_extensions' => implode(', ', get_loaded_extensions()),
+            'loaded_extensions' => implode(', ', $extensions),
             'php_ini_paths' => [
                 'loaded_php_ini' => php_ini_loaded_file(),
                 'additional_ini_files' => php_ini_scanned_files(),
             ],
             'realpath_cache_size' => ini_get('realpath_cache_size'),
             'output_buffering' => ini_get('output_buffering'),
-            'zend_enable_gc' => ini_get('zend.enable_gc'),
+            'zend_enable_gc' => (bool) ini_get('zend.enable_gc'),
         ];
+
+        // Add FrankenPHP-specific information if running under FrankenPHP
+        if ($sapi === 'frankenphp' || str_starts_with($sapi, 'frankenphp')) {
+            $environment['frankenphp'] = $this->getFrankenPhpInfo();
+        }
+
+        return $environment;
+    }
+
+    /**
+     * Get FrankenPHP-specific information
+     */
+    protected function getFrankenPhpInfo(): array
+    {
+        $frankenphpInfo = [
+            'detected' => true,
+            'sapi' => 'frankenphp',
+        ];
+
+        // Check for FrankenPHP version constant
+        if (defined('FRANKENPHP_VERSION')) {
+            $frankenphpInfo['version'] = FRANKENPHP_VERSION;
+        }
+
+        // Check for FrankenPHP-specific functions
+        $frankenphpFunctions = [
+            'frankenphp_request_headers',
+            'frankenphp_response_headers',
+            'frankenphp_handle_request',
+        ];
+
+        $availableFunctions = [];
+        foreach ($frankenphpFunctions as $function) {
+            if (function_exists($function)) {
+                $availableFunctions[] = $function;
+            }
+        }
+
+        if (! empty($availableFunctions)) {
+            $frankenphpInfo['available_functions'] = $availableFunctions;
+        }
+
+        // Try to get version from server variables if available
+        if (isset($_SERVER['SERVER_SOFTWARE']) && strpos($_SERVER['SERVER_SOFTWARE'], 'FrankenPHP') !== false) {
+            $frankenphpInfo['server_software'] = $_SERVER['SERVER_SOFTWARE'];
+        }
+
+        // Check for Caddy integration (FrankenPHP often runs with Caddy)
+        if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) || isset($_SERVER['HTTP_X_REAL_IP'])) {
+            $frankenphpInfo['reverse_proxy_detected'] = true;
+        }
+
+        return $frankenphpInfo;
     }
 
     /**
