@@ -12,12 +12,20 @@ trait ProfilingTrait
 
     public static function initProfiling(): void
     {
+        if (!self::isProfilingEnabled()) {
+            return;
+        }
+
         self::$timings = [];
         self::$requestStartTime = microtime(true);
     }
 
     protected function profileStart(string $method): float
     {
+        if (!self::isProfilingEnabled()) {
+            return 0.0;
+        }
+
         // Ensure requestStartTime is set if somehow initProfiling wasn't called
         if (self::$requestStartTime === 0.0) {
             self::$requestStartTime = microtime(true);
@@ -28,6 +36,10 @@ trait ProfilingTrait
 
     protected function profileEnd(string $method, float $startTime): void
     {
+        if (!self::isProfilingEnabled() || $startTime === 0.0) {
+            return;
+        }
+
         $duration = microtime(true) - $startTime;
         $className = get_class($this);
 
@@ -47,8 +59,8 @@ trait ProfilingTrait
 
     public static function logTimings(): void
     {
-        // Guard against logTimings being called before initProfiling eg tests without profiling or no timings
-        if (self::$requestStartTime === 0.0) {
+        // Guard against logTimings being called before initProfiling or when profiling disabled
+        if (!self::isProfilingEnabled() || self::$requestStartTime === 0.0) {
             return;
         }
 
@@ -70,5 +82,13 @@ trait ProfilingTrait
                     ->toArray(),
             ]);
         }
+    }
+
+    /**
+     * Check if profiling is enabled via configuration
+     */
+    private static function isProfilingEnabled(): bool
+    {
+        return config('logging-utils.remote_repository.enable_profiling', false);
     }
 }

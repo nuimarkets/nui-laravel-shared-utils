@@ -14,6 +14,9 @@ class ProfilingTraitTest extends TestCase
     {
         parent::setUp();
 
+        // Enable profiling for tests
+        config(['logging-utils.remote_repository.enable_profiling' => true]);
+
         $this->testClass = new class
         {
             use ProfilingTrait;

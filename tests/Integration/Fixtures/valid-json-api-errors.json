@@ -1,0 +1,62 @@
+[
+  {
+    "name": "validation_error",
+    "response": {
+      "errors": [
+        {
+          "status": "422",
+          "title": "Validation Error",
+          "detail": "The email field is required",
+          "source": {"pointer": "/data/attributes/email"}
+        }
+      ]
+    }
+  },
+  {
+    "name": "multiple_validation_errors",
+    "response": {
+      "errors": [
+        {
+          "status": "422",
+          "title": "Validation Error",
+          "detail": "The email field is required",
+          "source": {"pointer": "/data/attributes/email"}
+        },
+        {
+          "status": "422",
+          "title": "Validation Error", 
+          "detail": "The name field must be at least 2 characters",
+          "source": {"pointer": "/data/attributes/name"}
+        }
+      ]
+    }
+  },
+  {
+    "name": "server_error",
+    "response": {
+      "errors": [
+        {
+          "status": "500",
+          "title": "Internal Server Error",
+          "detail": "An unexpected error occurred",
+          "code": "INTERNAL_ERROR"
+        }
+      ]
+    }
+  },
+  {
+    "name": "authorization_error",
+    "response": {
+      "errors": [
+        {
+          "status": "403",
+          "title": "Forbidden",
+          "detail": "You do not have permission to perform this action",
+          "meta": {
+            "required_permission": "admin"
+          }
+        }
+      ]
+    }
+  }
+]
