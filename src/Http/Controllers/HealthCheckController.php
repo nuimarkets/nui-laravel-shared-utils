@@ -477,6 +477,9 @@ class HealthCheckController extends Controller
             $environment['frankenphp'] = $this->getFrankenPhpInfo();
         }
 
+        // Add critical extension status
+        $environment['critical_extensions'] = $this->getCriticalExtensionStatus();
+
         return $environment;
     }
 
@@ -493,6 +496,22 @@ class HealthCheckController extends Controller
         // Check for FrankenPHP version constant
         if (defined('FRANKENPHP_VERSION')) {
             $frankenphpInfo['version'] = FRANKENPHP_VERSION;
+        }
+
+        // Try to get version from server variables if available
+        if (isset($_SERVER['SERVER_SOFTWARE']) && strpos($_SERVER['SERVER_SOFTWARE'], 'FrankenPHP') !== false) {
+            $frankenphpInfo['server_software'] = $_SERVER['SERVER_SOFTWARE'];
+
+            // Extract version from SERVER_SOFTWARE string (e.g., "FrankenPHP/1.0.0")
+            if (preg_match('/FrankenPHP\/([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9]+)?)/', $_SERVER['SERVER_SOFTWARE'], $matches)) {
+                $frankenphpInfo['version'] = $matches[1];
+            }
+        }
+
+        // Try to get version from phpinfo if not found yet
+        if (!isset($frankenphpInfo['version'])) {
+            $phpinfoData = $this->getPhpInfoData();
+            $frankenphpInfo['version'] = $this->extractFrankenPhpVersionFromPhpInfo($phpinfoData);
         }
 
         // Check for FrankenPHP-specific functions
@@ -513,17 +532,154 @@ class HealthCheckController extends Controller
             $frankenphpInfo['available_functions'] = $availableFunctions;
         }
 
-        // Try to get version from server variables if available
-        if (isset($_SERVER['SERVER_SOFTWARE']) && strpos($_SERVER['SERVER_SOFTWARE'], 'FrankenPHP') !== false) {
-            $frankenphpInfo['server_software'] = $_SERVER['SERVER_SOFTWARE'];
-        }
-
         // Check for Caddy integration (FrankenPHP often runs with Caddy)
         if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) || isset($_SERVER['HTTP_X_REAL_IP'])) {
             $frankenphpInfo['reverse_proxy_detected'] = true;
         }
 
         return $frankenphpInfo;
+    }
+
+    /**
+     * Get phpinfo output as a string for parsing
+     *
+     * @param int $what What to show. Defaults to INFO_GENERAL
+     * @return string|null phpinfo output or null if unavailable
+     */
+    protected function getPhpInfoData(int $what = INFO_GENERAL): ?string
+    {
+        // Check if phpinfo is disabled before attempting to use it
+        if (!function_exists('phpinfo')) {
+            return null;
+        }
+
+        try {
+            ob_start();
+            phpinfo($what);
+            $phpinfo = ob_get_clean();
+
+            return $phpinfo;
+        } catch (Exception $e) {
+            Log::debug('Failed to get phpinfo data', [
+                'error' => $e->getMessage(),
+                'what' => $what
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Extract FrankenPHP version from phpinfo data
+     *
+     * Note: FrankenPHP doesn't have standardized version detection yet.
+     * See GitHub issues:
+     * - #1237: Add documentation on how to detect the FrankenPHP version and the Caddy version underneath
+     * - #1225: Prometheus metrics to get FrankenPHP and PHP version
+     *
+     * @param string|null $phpinfoData Raw phpinfo output
+     * @return string|null FrankenPHP version if found
+     */
+    protected function extractFrankenPhpVersionFromPhpInfo(?string $phpinfoData): ?string
+    {
+        if (!$phpinfoData) {
+            return null;
+        }
+
+        // Look for FrankenPHP version in phpinfo output
+        if (preg_match('/FrankenPHP Version\s*=>\s*([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9\.]+)?)/i', $phpinfoData, $matches)) {
+            return $matches[1];
+        }
+
+        // Alternative patterns that might appear in phpinfo
+        if (preg_match('/Server API\s*=>\s*FrankenPHP\/([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9\.]+)?)/i', $phpinfoData, $matches)) {
+            return $matches[1];
+        }
+
+        // Check for FrankenPHP in SAPI line
+        if (preg_match('/Server API\s*=>\s*FrankenPHP\s*([0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9\.]+)?)/i', $phpinfoData, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract specific information from phpinfo data using regex
+     *
+     * @param string|null $phpinfoData Raw phpinfo output
+     * @param string $pattern Regex pattern to match
+     * @param int $group Capture group to return (default: 1)
+     * @return string|null Matched value if found
+     */
+    protected function extractFromPhpInfo(?string $phpinfoData, string $pattern, int $group = 1): ?string
+    {
+        if (!$phpinfoData) {
+            return null;
+        }
+
+        if (preg_match($pattern, $phpinfoData, $matches)) {
+            return $matches[$group] ?? null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Get status of critical PHP extensions for Laravel applications
+     *
+     * @return array Extension status with version info where available
+     */
+    protected function getCriticalExtensionStatus(): array
+    {
+        $criticalExtensions = [
+            // Core Laravel requirements
+            'openssl' => 'Encryption and security',
+            'pdo' => 'Database abstraction layer',
+            'mbstring' => 'Multibyte string handling',
+            'tokenizer' => 'PHP tokenization',
+            'xml' => 'XML processing',
+            'ctype' => 'Character type checking',
+            'json' => 'JSON data handling',
+            'bcmath' => 'Arbitrary precision mathematics',
+
+            // Common database drivers
+            'pdo_mysql' => 'MySQL database support',
+            'pdo_pgsql' => 'PostgreSQL database support',
+            'mysqli' => 'MySQL improved extension',
+
+            // Caching and session
+            'redis' => 'Redis support',
+            'memcached' => 'Memcached support',
+
+            // File and image processing
+            'fileinfo' => 'File information',
+            'gd' => 'Image processing',
+            'curl' => 'HTTP client',
+            'zip' => 'ZIP archive support',
+
+            // Performance
+            'opcache' => 'Opcode caching',
+        ];
+
+        $status = [];
+        foreach ($criticalExtensions as $extension => $description) {
+            $extensionStatus = [
+                'loaded' => extension_loaded($extension),
+                'description' => $description,
+            ];
+
+            // Get version if available
+            if ($extensionStatus['loaded']) {
+                $version = phpversion($extension);
+                if ($version && $version !== false) {
+                    $extensionStatus['version'] = $version;
+                }
+            }
+
+            $status[$extension] = $extensionStatus;
+        }
+
+        return $status;
     }
 
     /**
