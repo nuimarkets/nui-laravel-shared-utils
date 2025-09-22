@@ -115,6 +115,8 @@ REMOTE_REPOSITORY_MAX_URL_LENGTH=2048
 - `REMOTE_REPOSITORY_LOG_REQUESTS`: Enable detailed request/response logging (default: false)
 - `REMOTE_REPOSITORY_MAX_URL_LENGTH`: Maximum URL length for logs (default: 255)
 
+These configuration values are defined in `config/logging-utils.php` under the `remote_repository` section.
+
 ## Troubleshooting Performance Issues
 
 When investigating slow requests:

@@ -89,10 +89,12 @@ public function test_handles_actual_api_error_responses()
 
 #### Edge Case Responses
 ```json
-{"errors": null}
-{"errors": []}
-{"errors": ["Error 1", "Error 2"]}
-{}
+[
+  {"errors": null},
+  {"errors": []},
+  {"errors": ["Error 1", "Error 2"]},
+  {}
+]
 ```
 
 ### Configuration Testing

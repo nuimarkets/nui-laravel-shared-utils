@@ -284,7 +284,9 @@ class ErrorDataNormalizer
             foreach ($data as $key => $value) {
                 // Map common non-JSON:API fields to JSON:API equivalents
                 if ($key === 'message') {
-                    $result['detail'] = $this->convertArrayToObject($value);
+                    $result['detail'] = is_scalar($value)
+                        ? (string) $value
+                        : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 } elseif (in_array($key, ['code', 'status']) && is_numeric($value)) {
                     // Convert certain fields to strings as required by JSON:API spec
                     $result[$key] = (string) $value;

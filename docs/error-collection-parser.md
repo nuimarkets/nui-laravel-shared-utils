@@ -158,9 +158,9 @@ If using RemoteRepository classes, they will automatically use the enhanced pars
 
 namespace App\RemoteRepositories;
 
-use NuiMarkets\LaravelSharedUtils\RemoteRepositories\BaseRemoteRepository;
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 
-class ProductRepository extends BaseRemoteRepository
+class ProductRepository extends RemoteRepository
 {
     protected string $endpoint = 'products';
     
