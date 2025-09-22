@@ -102,4 +102,18 @@ return [
         'use_snake_case' => true,
         'use_dot_notation_for_nested' => true, // e.g., 'request.method'
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Remote Repository Profiling
+    |--------------------------------------------------------------------------
+    |
+    | Configure profiling behavior for remote repository operations.
+    |
+    */
+    'remote_repository' => [
+        'enable_profiling' => env('REMOTE_REPOSITORY_ENABLE_PROFILING', false),
+        'log_requests' => env('REMOTE_REPOSITORY_LOG_REQUESTS', false),
+        'max_url_length' => env('REMOTE_REPOSITORY_MAX_URL_LENGTH', 255),
+    ],
 ];

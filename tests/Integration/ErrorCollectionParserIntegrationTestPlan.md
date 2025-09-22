@@ -80,9 +80,11 @@ public function test_handles_actual_api_error_responses()
 
 #### Malformed Error Responses
 ```json
-{"errors": "Database connection failed"}
-{"message": "Internal server error"}
-{"error": {"code": 500, "message": "Server error"}}
+[
+  {"errors": "Database connection failed"},
+  {"message": "Internal server error"},
+  {"error": {"code": 500, "message": "Server error"}}
+]
 ```
 
 #### Edge Case Responses

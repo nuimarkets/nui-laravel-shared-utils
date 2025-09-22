@@ -100,12 +100,20 @@ Use the profiling data to identify:
 Control profiling behavior via environment variables:
 
 ```env
+# Enable profiling (controls whether timing data is collected and logged)
+REMOTE_REPOSITORY_ENABLE_PROFILING=true
+
 # Enable detailed API request logging
 REMOTE_REPOSITORY_LOG_REQUESTS=true
 
 # Set maximum URL length for GET requests
 REMOTE_REPOSITORY_MAX_URL_LENGTH=2048
 ```
+
+**Configuration Options:**
+- `REMOTE_REPOSITORY_ENABLE_PROFILING`: Controls whether profiling is active (default: false)
+- `REMOTE_REPOSITORY_LOG_REQUESTS`: Enable detailed request/response logging (default: false)
+- `REMOTE_REPOSITORY_MAX_URL_LENGTH`: Maximum URL length for logs (default: 255)
 
 ## Troubleshooting Performance Issues
 
