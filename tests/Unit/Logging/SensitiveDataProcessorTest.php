@@ -351,8 +351,8 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $processor->__invoke($record);
 
-        // Non-PII fields should remain (they're not affected by preserve logic)
-        $this->assertEquals('12345', $processed['context']['data']['zip_code']);
+        // Preserve logic should not match unintended substrings; PII still redacts zip_code
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['zip_code']);
         $this->assertEquals('Alice', $processed['context']['data']['ship_to']);
 
         // IP should be preserved despite PII redaction being enabled

@@ -226,6 +226,8 @@ abstract class RequestLoggingMiddleware
      *
      * @param  mixed  $response
      * @param  array  $metrics  Performance metrics
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     protected function logRequestComplete(Request $request, $response, array $context, array $metrics = []): void
     {
@@ -233,23 +235,35 @@ abstract class RequestLoggingMiddleware
             return;
         }
 
-        $statusCode = $response ? $response->getStatusCode() : 0;
-        $responseSize = $response && method_exists($response, 'getContent')
-            ? strlen($response->getContent())
+        $statusCode = ($response && method_exists($response, 'getStatusCode'))
+            ? $response->getStatusCode()
             : 0;
 
+        $responseSize = 0;
+        if ($response && isset($response->headers)) {
+            $len = $response->headers->get('Content-Length');
+            if (is_numeric($len)) {
+                $responseSize = (int) $len;
+            }
+        }
+
+        if ($responseSize === 0 && $response && method_exists($response, 'getContent')) {
+            $content = $response->getContent();
+            $responseSize = is_string($content) ? strlen($content) : 0; // avoid TypeError on streamed responses
+        }
+
         Log::info('Request complete', [
-            'target' => $this->getServiceName(),
-            'feature' => 'requests',
-            'action' => 'request.complete',
+            LogFields::TARGET   => $this->getServiceName(),
+            LogFields::FEATURE  => 'requests',
+            LogFields::ACTION   => 'request.complete',
             'request' => [
                 LogFields::REQUEST_METHOD => $request->method(),
-                LogFields::REQUEST_PATH => $request->path(),
-                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+                LogFields::REQUEST_PATH   => $request->path(),
+                'route_name'              => $request->route() ? $request->route()->getName() : 'unknown',
             ],
             'response' => [
-                'status' => $statusCode,
-                'size_bytes' => $responseSize,
+                LogFields::STATUS                 => $statusCode,
+                LogFields::RESPONSE_SIZE_BYTES    => $responseSize,
             ],
             'performance' => $metrics,
         ]);
