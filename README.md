@@ -109,6 +109,17 @@ class ServiceRequestLogger extends RequestLoggingMiddleware {
         $context['user_id'] = $request->route('userId');
         return $context;
     }
+
+    // 3. Optional: Add payload logging for POST/PUT/PATCH/DELETE requests
+    protected function logRequestStart($request, $context): void {
+        parent::logRequestStart($request, $context);
+
+        // Use helper method for consistent payload logging
+        $this->logRequestPayload($request, [
+            'feature' => 'authentication',
+            'user_id' => $context['user_id'] ?? null,
+        ]);
+    }
 }
 
 // 2. Register in Kernel.php
@@ -116,7 +127,7 @@ protected $middleware = [
     \App\Http\Middleware\ServiceRequestLogger::class,
 ];
 
-// 3. Service calls automatically propagate traces
+// 4. Service calls automatically propagate traces
 $this->productRepository->findByIds($productIds);
 // Headers automatically include X-Amzn-Trace-Id
 ```
