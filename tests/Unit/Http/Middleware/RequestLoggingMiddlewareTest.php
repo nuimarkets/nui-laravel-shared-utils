@@ -37,10 +37,10 @@ class RequestLoggingMiddlewareTest extends TestCase
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
                 return $context['request_id'] === 'test-request-id' &&
-                       $context['request']['request.method'] === 'GET' &&
-                       $context['request']['request.path'] === 'api/orders' &&
-                       isset($context['request']['request.ip']) &&
-                       isset($context['request']['request.user_agent']);
+                       $context['request.method'] === 'GET' &&
+                       $context['request.path'] === 'api/orders' &&
+                       isset($context['request.ip']) &&
+                       isset($context['request.user_agent']);
             })
         );
     }
@@ -92,10 +92,10 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 123 &&
-                       $context['org_id'] === 456 &&
-                       $context['user_email'] === 'test@example.com' &&
-                       $context['user_type'] === 'buyer';
+                return $context['request.user_id'] === 123 &&
+                       $context['request.org_id'] === 456 &&
+                       $context['request.user_email'] === 'test@example.com' &&
+                       $context['request.user_type'] === 'buyer';
             })
         );
     }
@@ -183,9 +183,9 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 789 &&
-                       $context['org_id'] === null &&
-                       $context['user_email'] === 'noorg@example.com';
+                return $context['request.user_id'] === 789 &&
+                       $context['request.org_id'] === null &&
+                       $context['request.user_email'] === 'noorg@example.com';
             })
         );
     }
@@ -209,8 +209,8 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 999 &&
-                       $context['org_id'] === 888;
+                return $context['request.user_id'] === 999 &&
+                       $context['request.org_id'] === 888;
             })
         );
     }

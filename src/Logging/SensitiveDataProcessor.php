@@ -37,15 +37,34 @@ class SensitiveDataProcessor
     ];
 
     /**
-     * Additional PII fields that can be redacted when privacy mode is enabled
+     * Default PII keys to redact when PII redaction is enabled.
+     * Based on actual field usage patterns in Connect/NUI applications.
      */
     protected array $piiRedactKeys = [
-        // Personal Identifiable Information (PII)
+        // Contact Information (commonly used)
         'email',
         'phone',
+        'user_email',
+
+        // Network/System Information
+        'ip_address',   // Common Laravel field name
+        'client_ip',
+        'remote_ip',
+        'request.ip',   // LogFields constant
+        '.ip',          // Catches request.ip, user.ip, etc.
+
+        // Personal Identifiers (commonly used)
+        'user_id',      // User identifiers are PII
+        'customer_id',
+        'account_id',
+
+        // Address Information (commonly used in B2B)
+        'address',
+
+        // Less Common PII (kept for compliance)
         'mobile',
-        'ip', // IP addresses are PII under GDPR
-        'user_id', // User identifiers are PII
+        'postal_code',
+        'zip_code',
         'ssn',
         'social_security',
         'credit_card',
@@ -53,11 +72,8 @@ class SensitiveDataProcessor
         'cvv',
         'dob',
         'date_of_birth',
-        'address',
-        'postal_code',
-        'zip_code',
 
-        // Financial Information
+        // Financial Information (B2B context)
         'bank_account',
         'routing_number',
         'iban',
@@ -88,9 +104,9 @@ class SensitiveDataProcessor
 
     /**
      * Configure which fields to preserve from redaction.
-     * Useful for preserving debugging-friendly fields like 'email' or 'ip_address'.
+     * Useful for preserving debugging-friendly fields like 'user_email' or 'ip_address'.
      *
-     * @param  array  $fields  Field substrings to preserve (e.g., ['email', 'ip'])
+     * @param  array  $fields  Exact field names to preserve (e.g., ['user_email', 'ip_address'])
      */
     public function preserveFields(array $fields): self
     {
@@ -177,27 +193,28 @@ class SensitiveDataProcessor
             $keyString = is_string($key) ? $key : (string) $key;
             $keyLower = strtolower($keyString);
 
-            // Check if field should be preserved from redaction
-            if ($this->shouldPreserveField($keyLower)) {
-                // Skip redaction for preserved fields
-            } else {
-                // Check auth fields (always redacted)
-                foreach ($this->redactKeys as $sensitiveKey) {
-                    if (str_contains($keyLower, $sensitiveKey)) {
+            // Check auth fields (always redacted, exact match only)
+            foreach ($this->redactKeys as $sensitiveKey) {
+                if (str_contains($keyLower, $sensitiveKey)) {
+                    $shouldRedact = true;
+                    break;
+                }
+            }
+
+            // Check PII fields (exact match only if PII redaction is enabled)
+            if (! $shouldRedact && $this->redactPii) {
+                foreach ($this->piiRedactKeys as $piiKey) {
+                    if (str_contains($keyLower, $piiKey)) {
                         $shouldRedact = true;
                         break;
                     }
                 }
+            }
 
-                // Check PII fields (only if PII redaction is enabled)
-                if (! $shouldRedact && $this->redactPii) {
-                    foreach ($this->piiRedactKeys as $piiKey) {
-                        if (str_contains($keyLower, $piiKey)) {
-                            $shouldRedact = true;
-                            break;
-                        }
-                    }
-                }
+            // Check if field should be preserved (only if not already marked for redaction)
+            if ($shouldRedact && $this->shouldPreserveField($keyLower)) {
+                // Preserve field even though it would normally be redacted
+                $shouldRedact = false;
             }
 
             if ($shouldRedact) {
@@ -220,7 +237,7 @@ class SensitiveDataProcessor
     protected function shouldPreserveField(string $keyLower): bool
     {
         foreach ($this->preserveFields as $preserveField) {
-            if (str_contains($keyLower, strtolower($preserveField))) {
+            if ($keyLower === strtolower($preserveField)) {
                 return true;
             }
         }

@@ -47,6 +47,10 @@ abstract class LogFields
 
     const REQUEST_USER_AGENT = 'request.user_agent';
 
+    const REQUEST_USER_EMAIL = 'request.user_email'; // PII: Email from JWT/session
+
+    const REQUEST_USER_TYPE = 'request.user_type'; // User type from JWT/session
+
     const REQUEST_HEADERS = 'request.headers';
 
     const REQUEST_QUERY = 'request.query';
@@ -238,6 +242,8 @@ abstract class LogFields
                 'REQUEST_USER_ID' => self::REQUEST_USER_ID,
                 'REQUEST_ORG_ID' => self::REQUEST_ORG_ID,
                 'REQUEST_USER_AGENT' => self::REQUEST_USER_AGENT,
+                'REQUEST_USER_EMAIL' => self::REQUEST_USER_EMAIL,
+                'REQUEST_USER_TYPE' => self::REQUEST_USER_TYPE,
                 'TRACE_ID' => self::TRACE_ID,
                 'TRACE_ID_HEADER' => self::TRACE_ID_HEADER,
             ],
@@ -348,6 +354,7 @@ abstract class LogFields
         return [
             'REQUEST_IP' => self::REQUEST_IP,
             'REQUEST_USER_ID' => self::REQUEST_USER_ID,
+            'REQUEST_USER_EMAIL' => self::REQUEST_USER_EMAIL,
             'USER_ID' => self::USER_ID,
             'USER_EMAIL' => self::USER_EMAIL,
             'USER_NAME' => self::USER_NAME,

@@ -29,7 +29,7 @@ class ServiceRequestLogger extends RequestLoggingMiddleware {
 // Register as global middleware → Automatic request start/complete + X-Ray correlation + performance metrics
 
 // Add comprehensive health checks instantly
-Route::get('/healthcheck', [HealthCheckController::class, 'check']);
+Route::get('/healthcheck', [HealthCheckController::class, 'detailed']);
 ```
 
 ## Key Features
@@ -110,26 +110,21 @@ class ServiceRequestLogger extends RequestLoggingMiddleware {
         return $context;
     }
 
-    // 3. Optional: Add payload logging for POST/PUT/PATCH/DELETE requests
-    protected function logRequestStart($request, $context): void {
-        parent::logRequestStart($request, $context);
+    // 3. Payload logging is disabled by default for security
+    // Enable only when needed for debugging/development
 
-        // Use helper method for consistent payload logging
-        $this->logRequestPayload($request, [
-            'feature' => 'authentication',
-            'user_id' => $context['user_id'] ?? null,
-        ]);
-    }
-
-    // 4. Optional: Configure path exclusions and other options
+    // 4. Optional: Configure path exclusions and payload logging
     public function __construct() {
         $this->configure([
-            'excluded_paths' => ['/healthcheck', '/health', '/metrics'], // Custom exclusions
+            'excluded_paths' => ['/health*', '/metrics'], // Supports exact matches, globs, and prefixes
             'request_id_header' => 'X-Request-ID',
+            // SECURITY: Payload logging disabled by default - only enable when needed
+            'log_request_payload' => true, // Enable for debugging/development only
             // Both enabled by default - only specify if you want to disable:
             // 'add_request_id_to_response' => false,
             // 'add_trace_id_to_response' => false,
         ]);
+        // Note: middleware-level exclusions complement any global defaults
     }
 }
 
@@ -153,7 +148,9 @@ class OrderLogFields extends LogFields {
 }
 
 // 2. Configure Monolog
-class CustomizeMonoLog extends BaseCustomizeMonoLog {
+use NuiMarkets\LaravelSharedUtils\Logging\CustomizeMonoLog as BaseCustomizeMonoLog;
+
+class ServiceCustomizeMonoLog extends BaseCustomizeMonoLog {
     protected function createTargetProcessor() {
         return new AddTargetProcessor('order-service');
     }
@@ -207,7 +204,7 @@ class CreateOrderRequest extends FormRequest {
 
 ```php
 // Routes automatically available at /healthcheck
-Route::get('/healthcheck', [HealthCheckController::class, 'check']);
+Route::get('/healthcheck', [HealthCheckController::class, 'detailed']);
 
 // Response includes all infrastructure status
 {
@@ -254,6 +251,10 @@ $processor = new SensitiveDataProcessor(['user_email', 'ip_address']);
 // Fluent configuration
 $processor = (new SensitiveDataProcessor())
     ->preserveFields(['user_email', 'ip_address']);
+
+// Note: Some organizations treat user-agent as PII
+// To preserve user-agent for debugging while redacting other PII:
+$processor = new SensitiveDataProcessor(['user_agent']);
 
 // Disable PII redaction (only auth fields)
 $processor = new SensitiveDataProcessor([], false);

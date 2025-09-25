@@ -42,18 +42,29 @@ abstract class RequestLoggingMiddleware
     protected array $excludedPaths = [];
 
     /**
+     * Whether to include request payload in request start logs.
+     * Disabled by default for security - only enable when needed.
+     */
+    protected bool $logRequestPayload = false;
+
+    /**
      * Handle an incoming request and set logging context.
      *
      * @return mixed
      */
     public function handle(Request $request, Closure $next)
     {
-        // Skip excluded paths (configurable)
+        // Skip excluded paths (configurable) - supports exact matches, prefixes, and globs
         $requestPath = '/'.ltrim($request->path(), '/');
         $excluded = array_map(static fn ($path) => '/'.ltrim($path, '/'), $this->excludedPaths);
 
-        if (in_array($requestPath, $excluded, true)) {
-            return $next($request);
+        foreach ($excluded as $pattern) {
+            if ($requestPath === $pattern
+                || \Illuminate\Support\Str::is($pattern, $requestPath)
+                || \Illuminate\Support\Str::startsWith($requestPath, rtrim($pattern, '/*'))
+            ) {
+                return $next($request);
+            }
         }
 
         // Mark performance start time
@@ -146,12 +157,10 @@ abstract class RequestLoggingMiddleware
             LogFields::REQUEST_ID => $requestId,
             LogFields::TRACE_ID => $this->extractTraceId($request),
             LogFields::TRACE_ID_HEADER => $request->headers->get('X-Amzn-Trace-Id'),
-            'request' => [
-                LogFields::REQUEST_METHOD => $request->method(),
-                LogFields::REQUEST_PATH => $request->path(),
-                LogFields::REQUEST_IP => $request->ip(),
-                LogFields::REQUEST_USER_AGENT => $request->userAgent(),
-            ],
+            LogFields::REQUEST_METHOD => $request->method(),
+            LogFields::REQUEST_PATH => $request->path(),
+            LogFields::REQUEST_IP => $request->ip(),
+            LogFields::REQUEST_USER_AGENT => $request->userAgent(),
         ];
     }
 
@@ -162,16 +171,17 @@ abstract class RequestLoggingMiddleware
     {
         try {
             if ($user = $request->user()) {
-                $context[LogFields::USER_ID] = $this->getUserId($user);
-                $context[LogFields::ORG_ID] = $this->getUserOrgId($user);
+                // Use REQUEST_ constants since this data comes from JWT/session
+                $context[LogFields::REQUEST_USER_ID] = $this->getUserId($user);
+                $context[LogFields::REQUEST_ORG_ID] = $this->getUserOrgId($user);
 
-                // Add additional user fields if available
+                // Add additional user fields if available from JWT/session context
                 if ($email = $this->getUserEmail($user)) {
-                    $context[LogFields::USER_EMAIL] = $email;
+                    $context[LogFields::REQUEST_USER_EMAIL] = $email;
                 }
 
                 if ($userType = $this->getUserType($user)) {
-                    $context[LogFields::USER_TYPE] = $userType;
+                    $context[LogFields::REQUEST_USER_TYPE] = $userType;
                 }
             }
         } catch (\Exception $e) {
@@ -191,6 +201,8 @@ abstract class RequestLoggingMiddleware
     /**
      * Log the start of a request.
      * Provides default implementation - override if needed.
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
      */
     protected function logRequestStart(Request $request, array $context): void
     {
@@ -198,18 +210,31 @@ abstract class RequestLoggingMiddleware
             return;
         }
 
-        Log::info('Request start', [
-            'target' => $this->getServiceName(),
-            'feature' => 'requests',
-            'action' => 'request.start',
-            'request' => [
-                LogFields::REQUEST_METHOD => $request->method(),
-                LogFields::REQUEST_PATH => $request->path(),
-                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
-                LogFields::REQUEST_IP => $request->ip(),
-                LogFields::REQUEST_USER_AGENT => $request->userAgent(),
-            ],
-        ]);
+        $logData = [
+            LogFields::TARGET => $this->getServiceName(),
+            LogFields::FEATURE => 'requests',
+            LogFields::ACTION => 'request.start',
+            LogFields::REQUEST_METHOD => $request->method(),
+            LogFields::REQUEST_PATH => $request->path(),
+            LogFields::REQUEST_IP => $request->ip(),
+            LogFields::REQUEST_USER_AGENT => $request->userAgent(),
+            'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+        ];
+
+        // Add payload for POST/PUT/PATCH/DELETE requests (only if enabled)
+        if ($this->logRequestPayload && in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'])) {
+            // Exclude files and binary content; limit payload size
+            $payload = $request->except(array_keys($request->allFiles()));
+            // Optionally trim large string fields
+            array_walk_recursive($payload, static function (&$v) {
+                if (is_string($v) && strlen($v) > 2000) {
+                    $v = substr($v, 0, 2000).'…';
+                }
+            });
+            $logData[LogFields::REQUEST_BODY] = $payload;
+        }
+
+        Log::info('Request start', $logData);
     }
 
     /**
@@ -253,17 +278,17 @@ abstract class RequestLoggingMiddleware
         }
 
         Log::info('Request complete', [
-            LogFields::TARGET   => $this->getServiceName(),
-            LogFields::FEATURE  => 'requests',
-            LogFields::ACTION   => 'request.complete',
+            LogFields::TARGET => $this->getServiceName(),
+            LogFields::FEATURE => 'requests',
+            LogFields::ACTION => 'request.complete',
             'request' => [
-                LogFields::REQUEST_METHOD => $request->method(),
-                LogFields::REQUEST_PATH   => $request->path(),
-                'route_name'              => $request->route() ? $request->route()->getName() : 'unknown',
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
             ],
             'response' => [
-                LogFields::STATUS                 => $statusCode,
-                LogFields::RESPONSE_SIZE_BYTES    => $responseSize,
+                LogFields::STATUS => $statusCode,
+                LogFields::RESPONSE_SIZE_BYTES => $responseSize,
             ],
             'performance' => $metrics,
         ]);
@@ -332,32 +357,6 @@ abstract class RequestLoggingMiddleware
     }
 
     /**
-     * Helper method to log request payload with consistent structure.
-     * Services can use this for standardized payload logging.
-     */
-    protected function logRequestPayload(Request $request, array $additionalContext = []): void
-    {
-        if (! in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'])) {
-            return;
-        }
-
-        $payload = $request->all();
-
-        $logContext = array_merge([
-            'target' => $this->getServiceName(),
-            'feature' => 'requests',
-            'action' => 'request.payload',
-            'request' => [
-                LogFields::REQUEST_METHOD => $request->method(),
-                LogFields::REQUEST_PATH => $request->path(),
-                'payload' => $payload,
-            ],
-        ], $additionalContext);
-
-        Log::info('Request payload', $logContext);
-    }
-
-    /**
      * Configure the middleware from an array of options.
      */
     public function configure(array $options): self
@@ -376,6 +375,10 @@ abstract class RequestLoggingMiddleware
 
         if (isset($options['excluded_paths'])) {
             $this->excludedPaths = (array) $options['excluded_paths'];
+        }
+
+        if (isset($options['log_request_payload'])) {
+            $this->logRequestPayload = (bool) $options['log_request_payload'];
         }
 
         return $this;

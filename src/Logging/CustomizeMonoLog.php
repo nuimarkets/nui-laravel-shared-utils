@@ -19,10 +19,8 @@ class CustomizeMonoLog
 {
     /**
      * Customize the Monolog instance.
-     *
-     * @param  \Monolog\Logger  $logger
      */
-    public function __invoke($logger): void
+    public function __invoke(\Monolog\Logger $logger): void
     {
         // Add target processor for Elasticsearch routing
         $targetProcessor = $this->createTargetProcessor();
@@ -77,7 +75,11 @@ class CustomizeMonoLog
      */
     protected function createSensitiveDataProcessor(): SensitiveDataProcessor
     {
-        return new SensitiveDataProcessor;
+        $cfg = (array) config('logging-utils.processors.sensitive_data', []);
+        $preserve = $cfg['preserve_fields'] ?? [];
+        $redactPii = $cfg['redact_pii'] ?? true;
+
+        return new SensitiveDataProcessor($preserve, (bool) $redactPii);
     }
 
     /**

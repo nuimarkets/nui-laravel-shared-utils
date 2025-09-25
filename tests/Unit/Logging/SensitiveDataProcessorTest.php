@@ -215,7 +215,7 @@ class SensitiveDataProcessorTest extends TestCase
 
     public function test_preserve_fields_override()
     {
-        $processor = new SensitiveDataProcessor(['email', 'ip'], true); // Preserve email and ip, enable PII redaction
+        $processor = new SensitiveDataProcessor(['user_email', 'ip_address'], true); // Preserve exact fields, enable PII redaction
 
         $record = $this->createLogRecord([
             'debug_info' => [
@@ -241,7 +241,7 @@ class SensitiveDataProcessorTest extends TestCase
     {
         $processor = (new SensitiveDataProcessor)
             ->enablePiiRedaction(true)
-            ->preserveFields(['email']);
+            ->preserveFields(['user_email']);
 
         $record = $this->createLogRecord([
             'data' => [
@@ -334,32 +334,34 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals(\Monolog\Level::Info, $processed->level);
     }
 
-    public function test_preserve_fields_do_not_match_unintended_substrings()
+    public function test_preserve_fields_exact_match_only()
     {
         $processor = (new SensitiveDataProcessor)
             ->enablePiiRedaction(true)
-            ->preserveFields(['ip']); // substring that could match other fields
+            ->preserveFields(['ip_address']); // Exact field name only
 
         $record = $this->createLogRecord([
             'data' => [
-                'zip_code' => '12345', // should NOT be preserved (contains 'ip')
-                'ship_to' => 'Alice',  // should NOT be preserved (contains 'ip')
-                'ip_address' => '192.168.0.1', // should be preserved (matches 'ip')
-                'user_email' => 'test@example.com', // should be redacted (PII enabled)
+                'zip_code' => '12345', // Should be redacted (PII field)
+                'ship_to' => 'Alice',  // Should not be redacted (not PII)
+                'ip_address' => '192.168.0.1', // Should be preserved (exact match)
+                'client_ip' => '10.0.0.1', // Should be redacted (PII but not preserved)
+                'user_email' => 'test@example.com', // Should be redacted (PII, not preserved)
             ],
         ]);
 
         $processed = $processor->__invoke($record);
 
-        // Preserve logic should not match unintended substrings; PII still redacts zip_code
+        // PII fields should be redacted unless exactly preserved
         $this->assertEquals('[REDACTED]', $processed['context']['data']['zip_code']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['client_ip']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['user_email']);
+
+        // Non-PII fields should remain untouched
         $this->assertEquals('Alice', $processed['context']['data']['ship_to']);
 
-        // IP should be preserved despite PII redaction being enabled
+        // Exactly preserved fields should remain visible
         $this->assertEquals('192.168.0.1', $processed['context']['data']['ip_address']);
-
-        // Email should be redacted since PII is enabled and not preserved
-        $this->assertEquals('[REDACTED]', $processed['context']['data']['user_email']);
     }
 
     public function test_authorization_header_case_variants()
