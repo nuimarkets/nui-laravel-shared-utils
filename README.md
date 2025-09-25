@@ -15,19 +15,27 @@ composer require nuimarkets/laravel-shared-utils
 ```
 
 ```php
-// Enable distributed tracing in 2 minutes
+// Enable complete request lifecycle logging in 2 minutes
 class MyRequestLogger extends RequestLoggingMiddleware {
+    protected function getServiceName(): string {
+        return 'my-service'; // Your service name
+    }
+
     protected function addServiceContext($request, $context) {
-        $context['service_name'] = 'my-service';
+        $context['resource_id'] = $request->route('id');
         return $context;
     }
 }
+// Register as global middleware → Automatic request start/complete + X-Ray correlation + performance metrics
 
 // Add comprehensive health checks instantly
 Route::get('/healthcheck', [HealthCheckController::class, 'check']);
 ```
 
 ## Key Features
+
+### **Request Lifecycle Logging** 🚀
+Complete request tracking with automatic performance metrics, X-Ray trace correlation, and customizable service context. One middleware class gives you request start/complete logs, duration tracking, memory usage, and business logic correlation.
 
 ### **Distributed Tracing**
 Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration.
@@ -88,13 +96,17 @@ php artisan vendor:publish --tag=intercom-config
 
 ### Quick Examples
 
-#### Enable Distributed Tracing
+#### Enable Request Lifecycle Logging
 
 ```php
 // 1. Extend RequestLoggingMiddleware
 class ServiceRequestLogger extends RequestLoggingMiddleware {
+    protected function getServiceName(): string {
+        return 'auth-service';
+    }
+
     protected function addServiceContext($request, $context) {
-        $context['service_name'] = 'auth-service';
+        $context['user_id'] = $request->route('userId');
         return $context;
     }
 }

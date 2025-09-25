@@ -106,6 +106,7 @@ class RequestLoggingMiddlewareTest extends TestCase
         $request->setRouteResolver(function () {
             $route = \Mockery::mock();
             $route->shouldReceive('parameters')->andReturn(['id' => '12345']);
+            $route->shouldReceive('getName')->andReturn('test.route');
 
             return $route;
         });

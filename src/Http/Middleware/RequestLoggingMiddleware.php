@@ -37,6 +37,15 @@ abstract class RequestLoggingMiddleware
      */
     public function handle(Request $request, Closure $next)
     {
+        // Skip health check requests
+        if ($request->path() === '/') {
+            return $next($request);
+        }
+
+        // Mark performance start time
+        $startTime = microtime(true);
+        $startMemory = memory_get_usage();
+
         // Generate or retrieve request ID
         $requestId = $this->getRequestId($request);
 
@@ -63,8 +72,17 @@ abstract class RequestLoggingMiddleware
             $response->headers->set($this->requestIdHeader, $requestId);
         }
 
-        // Log the request completion if enabled
-        $this->logRequestComplete($request, $response, $context);
+        // Calculate performance metrics
+        $duration = microtime(true) - $startTime;
+        $memoryUsage = memory_get_usage() - $startMemory;
+        $peakMemory = memory_get_peak_usage(true);
+
+        // Log the request completion with metrics
+        $this->logRequestComplete($request, $response, $context, [
+            'duration_ms' => round($duration * 1000, 2),
+            'memory_usage_mb' => round($memoryUsage / (1024 * 1024), 2),
+            'peak_memory_mb' => round($peakMemory / (1024 * 1024), 2),
+        ]);
 
         return $response;
     }
@@ -120,18 +138,23 @@ abstract class RequestLoggingMiddleware
      */
     protected function addUserContext(Request $request, array $context): array
     {
-        if ($user = $request->user()) {
-            $context[LogFields::USER_ID] = $this->getUserId($user);
-            $context[LogFields::ORG_ID] = $this->getUserOrgId($user);
+        try {
+            if ($user = $request->user()) {
+                $context[LogFields::USER_ID] = $this->getUserId($user);
+                $context[LogFields::ORG_ID] = $this->getUserOrgId($user);
 
-            // Add additional user fields if available
-            if ($email = $this->getUserEmail($user)) {
-                $context[LogFields::USER_EMAIL] = $email;
-            }
+                // Add additional user fields if available
+                if ($email = $this->getUserEmail($user)) {
+                    $context[LogFields::USER_EMAIL] = $email;
+                }
 
-            if ($userType = $this->getUserType($user)) {
-                $context[LogFields::USER_TYPE] = $userType;
+                if ($userType = $this->getUserType($user)) {
+                    $context[LogFields::USER_TYPE] = $userType;
+                }
             }
+        } catch (\Exception $e) {
+            // Auth guard not configured or other auth issues - continue without user context
+            // This commonly happens in test environments
         }
 
         return $context;
@@ -145,22 +168,85 @@ abstract class RequestLoggingMiddleware
 
     /**
      * Log the start of a request.
-     * Override this method to enable request start logging.
+     * Provides default implementation - override if needed.
      */
     protected function logRequestStart(Request $request, array $context): void
     {
-        // Override in child classes if request start logging is desired
+        if (!$this->shouldLogRequestStart()) {
+            return;
+        }
+
+        Log::info('Request start', [
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.start',
+            'request' => [
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ],
+        ]);
+    }
+
+    /**
+     * Whether to log request start. Override to control logging behavior.
+     */
+    protected function shouldLogRequestStart(): bool
+    {
+        return true;
     }
 
     /**
      * Log the completion of a request.
-     * Override this method to enable request completion logging.
+     * Provides default implementation - override if needed.
      *
      * @param  mixed  $response
+     * @param  array  $metrics Performance metrics
      */
-    protected function logRequestComplete(Request $request, $response, array $context): void
+    protected function logRequestComplete(Request $request, $response, array $context, array $metrics = []): void
     {
-        // Override in child classes if request completion logging is desired
+        if (!$this->shouldLogRequestComplete()) {
+            return;
+        }
+
+        $statusCode = $response ? $response->getStatusCode() : 0;
+        $responseSize = $response && method_exists($response, 'getContent')
+            ? strlen($response->getContent())
+            : 0;
+
+        Log::info('Request complete', [
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.complete',
+            'request' => [
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+            ],
+            'response' => [
+                'status' => $statusCode,
+                'size_bytes' => $responseSize,
+            ],
+            'performance' => $metrics,
+        ]);
+    }
+
+    /**
+     * Whether to log request completion. Override to control logging behavior.
+     */
+    protected function shouldLogRequestComplete(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the service name for logging. Override in child classes.
+     */
+    protected function getServiceName(): string
+    {
+        return 'service';
     }
 
     /**
