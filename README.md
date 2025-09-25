@@ -34,7 +34,7 @@ Route::get('/healthcheck', [HealthCheckController::class, 'check']);
 
 ## Key Features
 
-### **Request Lifecycle Logging** 🚀
+### **Request Lifecycle Logging**
 Complete request tracking with automatic performance metrics, X-Ray trace correlation, and customizable service context. One middleware class gives you request start/complete logs, duration tracking, memory usage, and business logic correlation.
 
 ### **Distributed Tracing**

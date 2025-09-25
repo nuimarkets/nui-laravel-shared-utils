@@ -100,7 +100,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('user@example.com', $processed['context']['data']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['email']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password_confirmation']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['old_password']);
@@ -125,9 +125,8 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('[REDACTED]', $processed['context']['config']['auth_token']);
         $this->assertEquals('not-redacted', $processed['context']['config']['regular_field']);
 
-        // Note: api_key doesn't contain 'token', 'authorization', 'password', or 'secret' as substring
-        // so it should not be redacted based on the current implementation
-        $this->assertEquals('key-12345', $processed['context']['config']['api_key']);
+        // Note: api_key contains 'key' as substring, so it should be redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['config']['api_key']);
     }
 
     public function test_handles_nested_sensitive_data()
@@ -146,7 +145,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('test@example.com', $processed['context']['request']['user']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['email']);
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['api_token']);
     }
@@ -166,7 +165,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $this->assertEquals(123, $processed['context']['user_id']);
         $this->assertEquals('login', $processed['context']['action']);
-        $this->assertEquals('192.168.1.1', $processed['context']['metadata']['ip_address']);
+        $this->assertEquals('[REDACTED]', $processed['context']['metadata']['ip_address']);
         $this->assertEquals('Mozilla/5.0', $processed['context']['metadata']['user_agent']);
     }
 

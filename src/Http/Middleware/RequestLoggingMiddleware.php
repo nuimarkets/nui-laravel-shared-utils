@@ -296,6 +296,32 @@ abstract class RequestLoggingMiddleware
     }
 
     /**
+     * Helper method to log request payload with consistent structure.
+     * Services can use this for standardized payload logging.
+     */
+    protected function logRequestPayload(Request $request, array $additionalContext = []): void
+    {
+        if (! in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'])) {
+            return;
+        }
+
+        $payload = $request->all();
+
+        $logContext = array_merge([
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.payload',
+            'request' => [
+                'method' => $request->method(),
+                'path' => $request->path(),
+                'payload' => $payload,
+            ],
+        ], $additionalContext);
+
+        Log::info('Request payload', $logContext);
+    }
+
+    /**
      * Configure the middleware from an array of options.
      */
     public function configure(array $options): self
