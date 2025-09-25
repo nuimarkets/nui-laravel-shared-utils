@@ -24,6 +24,7 @@ class JsonApiValidationIntegrationTest extends TestCase
         // Create test route with FormRequest using JsonApiValidation
         Route::post('/test-validation', function (TestValidationRequest $request) {
             $request->validated(); // ensure usage and triggers validation pipeline
+
             return response()->json(['success' => true]);
         });
     }

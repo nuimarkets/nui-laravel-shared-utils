@@ -6,7 +6,20 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
  * Base class for standard field names following snake_case convention.
  * Services can extend this class to add their own domain-specific fields.
  *
+ * PRIVACY NOTE: Fields marked with "PII" contain Personally Identifiable Information.
+ * Consider these fields when implementing log redaction policies:
+ * - USER_ID, REQUEST_USER_ID, AUDIT_USER_ID: Personal identifiers
+ * - USER_EMAIL: Email addresses
+ * - USER_NAME: Personal names
+ * - REQUEST_IP, AUDIT_IP: IP addresses (may identify individuals)
+ *
+ * Services should evaluate whether to redact these fields based on:
+ * - Privacy compliance requirements (GDPR, CCPA, etc.)
+ * - Debugging and operational needs
+ * - Data retention and access policies
+ *
  * @see https://github.com/nuimarkets/connect-docs/blob/main/php-services/logging.md
+ * @see SensitiveDataProcessor for configurable field redaction
  */
 abstract class LogFields
 {
@@ -26,11 +39,13 @@ abstract class LogFields
 
     const REQUEST_PATH = 'request.path';
 
-    const REQUEST_IP = 'request.ip';
+    const REQUEST_IP = 'request.ip'; // PII: Contains IP address
 
-    const REQUEST_USER_ID = 'request.user_id';
+    const REQUEST_USER_ID = 'request.user_id'; // PII: Personal identifier
 
     const REQUEST_ORG_ID = 'request.org_id';
+
+    const REQUEST_USER_AGENT = 'request.user_agent';
 
     const REQUEST_HEADERS = 'request.headers';
 
@@ -44,7 +59,7 @@ abstract class LogFields
     const TRACE_ID_HEADER = 'request.amz_trace_id';
 
     // User and organization fields
-    const USER_ID = 'user_id';
+    const USER_ID = 'user_id'; // PII: Personal identifier
 
     const ORG_ID = 'org_id';
 
@@ -52,9 +67,9 @@ abstract class LogFields
 
     const USER_TYPE = 'user_type';
 
-    const USER_EMAIL = 'user_email';
+    const USER_EMAIL = 'user_email'; // PII: Personal email address
 
-    const USER_NAME = 'user_name';
+    const USER_NAME = 'user_name'; // PII: Personal name
 
     // Action and operation fields
     const FEATURE = 'feature';
@@ -173,9 +188,9 @@ abstract class LogFields
     // Audit and security fields
     const AUDIT_ACTION = 'audit.action';
 
-    const AUDIT_USER_ID = 'audit.user_id';
+    const AUDIT_USER_ID = 'audit.user_id'; // PII: Personal identifier
 
-    const AUDIT_IP = 'audit.ip';
+    const AUDIT_IP = 'audit.ip'; // PII: Contains IP address
 
     const AUDIT_USER_AGENT = 'audit.user_agent';
 
@@ -191,9 +206,13 @@ abstract class LogFields
      */
     public static function getAllFields(): array
     {
-        $reflection = new \ReflectionClass(static::class);
+        static $cache = [];
+        $cls = static::class;
+        if (! isset($cache[$cls])) {
+            $cache[$cls] = (new \ReflectionClass($cls))->getConstants();
+        }
 
-        return $reflection->getConstants();
+        return $cache[$cls];
     }
 
     /**
@@ -218,6 +237,7 @@ abstract class LogFields
                 'REQUEST_IP' => self::REQUEST_IP,
                 'REQUEST_USER_ID' => self::REQUEST_USER_ID,
                 'REQUEST_ORG_ID' => self::REQUEST_ORG_ID,
+                'REQUEST_USER_AGENT' => self::REQUEST_USER_AGENT,
                 'TRACE_ID' => self::TRACE_ID,
                 'TRACE_ID_HEADER' => self::TRACE_ID_HEADER,
             ],
@@ -243,20 +263,31 @@ abstract class LogFields
                 'ERROR_MESSAGE' => self::ERROR_MESSAGE,
                 'ERROR_CODE' => self::ERROR_CODE,
                 'ERROR_TYPE' => self::ERROR_TYPE,
+                'ERROR_FILE' => self::ERROR_FILE,
+                'ERROR_LINE' => self::ERROR_LINE,
+                'ERROR_TRACE' => self::ERROR_TRACE,
                 'VALIDATION_ERRORS' => self::VALIDATION_ERRORS,
             ],
             'performance' => [
                 'DURATION_MS' => self::DURATION_MS,
                 'MEMORY_MB' => self::MEMORY_MB,
+                'MEMORY_PEAK_MB' => self::MEMORY_PEAK_MB,
                 'QUERY_COUNT' => self::QUERY_COUNT,
                 'QUERY_TIME_MS' => self::QUERY_TIME_MS,
+                'CPU_TIME_MS' => self::CPU_TIME_MS,
+                'RESPONSE_SIZE_BYTES' => self::RESPONSE_SIZE_BYTES,
+                'REQUEST_SIZE_BYTES' => self::REQUEST_SIZE_BYTES,
             ],
             'api' => [
                 'API_SERVICE' => self::API_SERVICE,
                 'API_ENDPOINT' => self::API_ENDPOINT,
+                'API_METHOD' => self::API_METHOD,
                 'API_STATUS' => self::API_STATUS,
                 'API_DURATION_MS' => self::API_DURATION_MS,
                 'API_SUCCESS' => self::API_SUCCESS,
+                'API_REQUEST_ID' => self::API_REQUEST_ID,
+                'API_ERROR' => self::API_ERROR,
+                'API_RETRY_COUNT' => self::API_RETRY_COUNT,
             ],
             'entity' => [
                 'ENTITY_ID' => self::ENTITY_ID,
@@ -268,6 +299,8 @@ abstract class LogFields
             'database' => [
                 'DB_CONNECTION' => self::DB_CONNECTION,
                 'DB_QUERY' => self::DB_QUERY,
+                'DB_BINDINGS' => self::DB_BINDINGS,
+                'DB_TIME_MS' => self::DB_TIME_MS,
                 'DB_ROWS_AFFECTED' => self::DB_ROWS_AFFECTED,
             ],
             'queue' => [
@@ -302,6 +335,39 @@ abstract class LogFields
     public static function isValidField(string $fieldName): bool
     {
         return in_array($fieldName, static::getAllFields(), true);
+    }
+
+    /**
+     * Get fields that contain Personally Identifiable Information (PII).
+     * These fields may require special handling for privacy compliance.
+     *
+     * @return array<string, string>
+     */
+    public static function getPiiFields(): array
+    {
+        return [
+            'REQUEST_IP' => self::REQUEST_IP,
+            'REQUEST_USER_ID' => self::REQUEST_USER_ID,
+            'USER_ID' => self::USER_ID,
+            'USER_EMAIL' => self::USER_EMAIL,
+            'USER_NAME' => self::USER_NAME,
+            'AUDIT_USER_ID' => self::AUDIT_USER_ID,
+            'AUDIT_IP' => self::AUDIT_IP,
+        ];
+    }
+
+    /**
+     * Check if a field contains PII.
+     *
+     * @param  string  $fieldName  The field name to check (accepts constant name or value)
+     * @return bool True if field contains PII
+     */
+    public static function isPiiField(string $fieldName): bool
+    {
+        // Accept either the field value (e.g., 'user_email') or the constant key (e.g., 'USER_EMAIL')
+        $piiMap = static::getPiiFields();
+
+        return in_array($fieldName, array_values($piiMap), true) || array_key_exists($fieldName, $piiMap);
     }
 
     /**

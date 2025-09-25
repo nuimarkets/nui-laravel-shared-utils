@@ -100,7 +100,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('user@example.com', $processed['context']['data']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['email']); // PII redacted by default
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password_confirmation']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['old_password']);
@@ -125,9 +125,8 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('[REDACTED]', $processed['context']['config']['auth_token']);
         $this->assertEquals('not-redacted', $processed['context']['config']['regular_field']);
 
-        // Note: api_key doesn't contain 'token', 'authorization', 'password', or 'secret' as substring
-        // so it should not be redacted based on the current implementation
-        $this->assertEquals('key-12345', $processed['context']['config']['api_key']);
+        // Note: api_key contains 'key' as substring, so it should be redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['config']['api_key']);
     }
 
     public function test_handles_nested_sensitive_data()
@@ -146,7 +145,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('test@example.com', $processed['context']['request']['user']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['email']); // PII redacted by default
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['api_token']);
     }
@@ -159,15 +158,105 @@ class SensitiveDataProcessorTest extends TestCase
             'metadata' => [
                 'ip_address' => '192.168.1.1',
                 'user_agent' => 'Mozilla/5.0',
+                'feature_flag' => 'dark_mode_enabled',
             ],
         ]);
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals(123, $processed['context']['user_id']);
-        $this->assertEquals('login', $processed['context']['action']);
-        $this->assertEquals('192.168.1.1', $processed['context']['metadata']['ip_address']);
-        $this->assertEquals('Mozilla/5.0', $processed['context']['metadata']['user_agent']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_id']); // PII redacted by default
+        $this->assertEquals('login', $processed['context']['action']); // Non-sensitive preserved
+        $this->assertEquals('[REDACTED]', $processed['context']['metadata']['ip_address']); // PII redacted by default
+        $this->assertEquals('Mozilla/5.0', $processed['context']['metadata']['user_agent']); // Non-sensitive preserved
+        $this->assertEquals('dark_mode_enabled', $processed['context']['metadata']['feature_flag']); // Non-sensitive preserved
+    }
+
+    public function test_configurable_pii_redaction_enabled_by_default()
+    {
+        $record = $this->createLogRecord([
+            'user_data' => [
+                'email' => 'user@example.com',
+                'password' => 'secret-password',
+                'phone' => '+1234567890',
+                'address' => '123 Main St',
+            ],
+        ]);
+
+        $processed = $this->processor->__invoke($record);
+
+        // With PII redaction enabled by default, both auth and PII fields are redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['phone']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['address']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['password']);
+    }
+
+    public function test_configurable_pii_redaction_enabled()
+    {
+        $processor = new SensitiveDataProcessor([], true); // Enable PII redaction
+
+        $record = $this->createLogRecord([
+            'user_data' => [
+                'email' => 'user@example.com',
+                'password' => 'secret-password',
+                'phone' => '+1234567890',
+                'address' => '123 Main St',
+            ],
+        ]);
+
+        $processed = $processor->__invoke($record);
+
+        // With PII redaction enabled, both auth and PII fields are redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['phone']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['address']);
+        $this->assertEquals('[REDACTED]', $processed['context']['user_data']['password']);
+    }
+
+    public function test_preserve_fields_override()
+    {
+        $processor = new SensitiveDataProcessor(['email', 'ip'], true); // Preserve email and ip, enable PII redaction
+
+        $record = $this->createLogRecord([
+            'debug_info' => [
+                'user_email' => 'debug@example.com', // Should be preserved
+                'ip_address' => '192.168.1.1', // Should be preserved
+                'phone' => '+1234567890', // Should be redacted (PII enabled, not preserved)
+                'password' => 'secret', // Should be redacted (auth field)
+            ],
+        ]);
+
+        $processed = $processor->__invoke($record);
+
+        // Preserved fields should remain visible
+        $this->assertEquals('debug@example.com', $processed['context']['debug_info']['user_email']);
+        $this->assertEquals('192.168.1.1', $processed['context']['debug_info']['ip_address']);
+
+        // Non-preserved fields should be redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['debug_info']['phone']);
+        $this->assertEquals('[REDACTED]', $processed['context']['debug_info']['password']);
+    }
+
+    public function test_fluent_configuration_methods()
+    {
+        $processor = (new SensitiveDataProcessor)
+            ->enablePiiRedaction(true)
+            ->preserveFields(['email']);
+
+        $record = $this->createLogRecord([
+            'data' => [
+                'user_email' => 'preserved@example.com',
+                'phone' => '+1234567890',
+                'password' => 'secret',
+            ],
+        ]);
+
+        $processed = $processor->__invoke($record);
+
+        // Email should be preserved, phone and password redacted
+        $this->assertEquals('preserved@example.com', $processed['context']['data']['user_email']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['phone']);
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['password']);
     }
 
     public function test_processes_extra_data()
@@ -229,7 +318,7 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertInstanceOf('\Monolog\LogRecord', $processed);
 
         // Assert that sensitive data in context is redacted
-        $this->assertEquals(123, $processed->context['user_id']);
+        $this->assertEquals('[REDACTED]', $processed->context['user_id']); // PII redacted by default
         $this->assertEquals('[REDACTED]', $processed->context['password']);
         $this->assertEquals('[REDACTED]', $processed->context['api_token']);
         $this->assertEquals('should-remain', $processed->context['normal_field']);
@@ -243,5 +332,53 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('Test message with sensitive data', $processed->message);
         $this->assertEquals('test', $processed->channel);
         $this->assertEquals(\Monolog\Level::Info, $processed->level);
+    }
+
+    public function test_preserve_fields_do_not_match_unintended_substrings()
+    {
+        $processor = (new SensitiveDataProcessor)
+            ->enablePiiRedaction(true)
+            ->preserveFields(['ip']); // substring that could match other fields
+
+        $record = $this->createLogRecord([
+            'data' => [
+                'zip_code' => '12345', // should NOT be preserved (contains 'ip')
+                'ship_to' => 'Alice',  // should NOT be preserved (contains 'ip')
+                'ip_address' => '192.168.0.1', // should be preserved (matches 'ip')
+                'user_email' => 'test@example.com', // should be redacted (PII enabled)
+            ],
+        ]);
+
+        $processed = $processor->__invoke($record);
+
+        // Non-PII fields should remain (they're not affected by preserve logic)
+        $this->assertEquals('12345', $processed['context']['data']['zip_code']);
+        $this->assertEquals('Alice', $processed['context']['data']['ship_to']);
+
+        // IP should be preserved despite PII redaction being enabled
+        $this->assertEquals('192.168.0.1', $processed['context']['data']['ip_address']);
+
+        // Email should be redacted since PII is enabled and not preserved
+        $this->assertEquals('[REDACTED]', $processed['context']['data']['user_email']);
+    }
+
+    public function test_authorization_header_case_variants()
+    {
+        $processor = new SensitiveDataProcessor;
+
+        $record = $this->createLogRecord([
+            'headers' => [
+                'Authorization' => 'Bearer token123',
+                'AUTHORIZATION' => 'Bearer token456',
+                'authorization' => 'Bearer token789',
+            ],
+        ]);
+
+        $processed = $processor->__invoke($record);
+
+        // All authorization header variants should be redacted
+        $this->assertEquals('[REDACTED]', $processed['context']['headers']['Authorization']);
+        $this->assertEquals('[REDACTED]', $processed['context']['headers']['AUTHORIZATION']);
+        $this->assertEquals('[REDACTED]', $processed['context']['headers']['authorization']);
     }
 }

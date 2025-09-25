@@ -15,13 +15,18 @@ composer require nuimarkets/laravel-shared-utils
 ```
 
 ```php
-// Enable distributed tracing in 2 minutes
-class MyRequestLogger extends RequestLoggingMiddleware {
+// Enable complete request lifecycle logging in 2 minutes
+class ServiceRequestLogger extends RequestLoggingMiddleware {
+    protected function getServiceName(): string {
+        return 'my-service'; // Your service name
+    }
+
     protected function addServiceContext($request, $context) {
-        $context['service_name'] = 'my-service';
+        $context['resource_id'] = $request->route('id');
         return $context;
     }
 }
+// Register as global middleware → Automatic request start/complete + X-Ray correlation + performance metrics
 
 // Add comprehensive health checks instantly
 Route::get('/healthcheck', [HealthCheckController::class, 'check']);
@@ -29,11 +34,14 @@ Route::get('/healthcheck', [HealthCheckController::class, 'check']);
 
 ## Key Features
 
+### **Request Lifecycle Logging**
+Complete request tracking with automatic performance metrics, X-Ray trace correlation, and customizable service context. One middleware class gives you request start/complete logs, duration tracking, memory usage, and business logic correlation.
+
 ### **Distributed Tracing**
-Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration.
+Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration. Automatic response headers (`X-Request-ID` and `X-Trace-ID`) for frontend correlation.
 
 ### **Advanced Logging**
-Production-ready logging with automatic Elasticsearch routing, sensitive data redaction, and structured JSON formatting. Fixes common logging issues that cause logs to end up in wrong indexes.
+Production-ready logging with automatic Elasticsearch routing, configurable sensitive data redaction, and structured JSON formatting. Fixes common logging issues that cause logs to end up in wrong indexes. Supports privacy compliance with flexible field-level redaction controls.
 
 ### **Health Monitoring**
 Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cache, and PHP environment. Get detailed diagnostics with a single endpoint.
@@ -88,14 +96,40 @@ php artisan vendor:publish --tag=intercom-config
 
 ### Quick Examples
 
-#### Enable Distributed Tracing
+#### Enable Request Lifecycle Logging
 
 ```php
 // 1. Extend RequestLoggingMiddleware
 class ServiceRequestLogger extends RequestLoggingMiddleware {
+    protected function getServiceName(): string {
+        return 'auth-service';
+    }
+
     protected function addServiceContext($request, $context) {
-        $context['service_name'] = 'auth-service';
+        $context['user_id'] = $request->route('userId');
         return $context;
+    }
+
+    // 3. Optional: Add payload logging for POST/PUT/PATCH/DELETE requests
+    protected function logRequestStart($request, $context): void {
+        parent::logRequestStart($request, $context);
+
+        // Use helper method for consistent payload logging
+        $this->logRequestPayload($request, [
+            'feature' => 'authentication',
+            'user_id' => $context['user_id'] ?? null,
+        ]);
+    }
+
+    // 4. Optional: Configure path exclusions and other options
+    public function __construct() {
+        $this->configure([
+            'excluded_paths' => ['/healthcheck', '/health', '/metrics'], // Custom exclusions
+            'request_id_header' => 'X-Request-ID',
+            // Both enabled by default - only specify if you want to disable:
+            // 'add_request_id_to_response' => false,
+            // 'add_trace_id_to_response' => false,
+        ]);
     }
 }
 
@@ -104,7 +138,7 @@ protected $middleware = [
     \App\Http\Middleware\ServiceRequestLogger::class,
 ];
 
-// 3. Service calls automatically propagate traces
+// 4. Service calls automatically propagate traces
 $this->productRepository->findByIds($productIds);
 // Headers automatically include X-Amzn-Trace-Id
 ```
@@ -125,7 +159,21 @@ class CustomizeMonoLog extends BaseCustomizeMonoLog {
     }
 }
 
-// 3. Logs automatically route to correct Elasticsearch index
+// 3. Configure sensitive data redaction
+// Option 1: Default behavior (auth + PII fields redacted)
+$processor = new SensitiveDataProcessor();
+
+// Option 2: Preserve debugging fields while still redacting PII
+$processor = new SensitiveDataProcessor(['user_email', 'ip_address']);
+
+// Option 3: Fluent configuration
+$processor = (new SensitiveDataProcessor())
+    ->preserveFields(['user_email', 'ip_address']); // Keep email and IP for debugging
+
+// Option 4: Disable PII redaction (only auth fields)
+$processor = new SensitiveDataProcessor([], false);
+
+// 4. Logs automatically route to correct Elasticsearch index
 Log::info('Order processed', ['order_id' => $order->id]);
 ```
 
@@ -171,6 +219,50 @@ Route::get('/healthcheck', [HealthCheckController::class, 'check']);
     }
 }
 ```
+
+## Advanced Configuration
+
+### Configurable Path Exclusions
+
+Customize which paths to exclude from request logging:
+
+```php
+class ServiceRequestLogger extends RequestLoggingMiddleware {
+    public function __construct() {
+        $this->configure([
+            'excluded_paths' => ['/healthcheck', '/health', '/metrics', '/status'],
+            'request_id_header' => 'X-Request-ID',
+            // Response headers enabled by default - only specify to disable:
+            // 'add_request_id_to_response' => false,
+            // 'add_trace_id_to_response' => false,
+        ]);
+    }
+}
+```
+
+### Flexible Sensitive Data Redaction
+
+Balance privacy compliance with debugging needs:
+
+```php
+// Default: PII redaction enabled by default
+$processor = new SensitiveDataProcessor();
+
+// Debugging-friendly: Preserve email and IP for troubleshooting
+$processor = new SensitiveDataProcessor(['user_email', 'ip_address']);
+
+// Fluent configuration
+$processor = (new SensitiveDataProcessor())
+    ->preserveFields(['user_email', 'ip_address']);
+
+// Disable PII redaction (only auth fields)
+$processor = new SensitiveDataProcessor([], false);
+```
+
+**Field Categories:**
+- **Auth fields** (always redacted): password, token, secret, api_key, jwt, bearer
+- **PII fields** (redacted by default): email, phone, address, ssn, credit_card, bank_account
+- **Preserve fields**: Override redaction for specific debugging-friendly fields
 
 ## Architecture
 

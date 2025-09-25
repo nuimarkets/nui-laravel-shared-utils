@@ -37,10 +37,10 @@ class RequestLoggingMiddlewareTest extends TestCase
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
                 return $context['request_id'] === 'test-request-id' &&
-                       $context['request']['method'] === 'GET' &&
-                       $context['request']['path'] === 'api/orders' &&
-                       isset($context['request']['ip']) &&
-                       isset($context['request']['user_agent']);
+                       $context['request']['request.method'] === 'GET' &&
+                       $context['request']['request.path'] === 'api/orders' &&
+                       isset($context['request']['request.ip']) &&
+                       isset($context['request']['request.user_agent']);
             })
         );
     }
@@ -106,6 +106,7 @@ class RequestLoggingMiddlewareTest extends TestCase
         $request->setRouteResolver(function () {
             $route = \Mockery::mock();
             $route->shouldReceive('parameters')->andReturn(['id' => '12345']);
+            $route->shouldReceive('getName')->andReturn('test.route');
 
             return $route;
         });

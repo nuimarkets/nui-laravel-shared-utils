@@ -509,7 +509,7 @@ class HealthCheckController extends Controller
         }
 
         // Try to get version from phpinfo if not found yet
-        if (!isset($frankenphpInfo['version'])) {
+        if (! isset($frankenphpInfo['version'])) {
             $phpinfoData = $this->getPhpInfoData();
             $frankenphpInfo['version'] = $this->extractFrankenPhpVersionFromPhpInfo($phpinfoData);
         }
@@ -543,13 +543,13 @@ class HealthCheckController extends Controller
     /**
      * Get phpinfo output as a string for parsing
      *
-     * @param int $what What to show. Defaults to INFO_GENERAL
+     * @param  int  $what  What to show. Defaults to INFO_GENERAL
      * @return string|null phpinfo output or null if unavailable
      */
     protected function getPhpInfoData(int $what = INFO_GENERAL): ?string
     {
         // Check if phpinfo is disabled before attempting to use it
-        if (!function_exists('phpinfo')) {
+        if (! function_exists('phpinfo')) {
             return null;
         }
 
@@ -562,8 +562,9 @@ class HealthCheckController extends Controller
         } catch (Exception $e) {
             Log::debug('Failed to get phpinfo data', [
                 'error' => $e->getMessage(),
-                'what' => $what
+                'what' => $what,
             ]);
+
             return null;
         }
     }
@@ -576,12 +577,12 @@ class HealthCheckController extends Controller
      * - #1237: Add documentation on how to detect the FrankenPHP version and the Caddy version underneath
      * - #1225: Prometheus metrics to get FrankenPHP and PHP version
      *
-     * @param string|null $phpinfoData Raw phpinfo output
+     * @param  string|null  $phpinfoData  Raw phpinfo output
      * @return string|null FrankenPHP version if found
      */
     protected function extractFrankenPhpVersionFromPhpInfo(?string $phpinfoData): ?string
     {
-        if (!$phpinfoData) {
+        if (! $phpinfoData) {
             return null;
         }
 
@@ -606,14 +607,14 @@ class HealthCheckController extends Controller
     /**
      * Extract specific information from phpinfo data using regex
      *
-     * @param string|null $phpinfoData Raw phpinfo output
-     * @param string $pattern Regex pattern to match
-     * @param int $group Capture group to return (default: 1)
+     * @param  string|null  $phpinfoData  Raw phpinfo output
+     * @param  string  $pattern  Regex pattern to match
+     * @param  int  $group  Capture group to return (default: 1)
      * @return string|null Matched value if found
      */
     protected function extractFromPhpInfo(?string $phpinfoData, string $pattern, int $group = 1): ?string
     {
-        if (!$phpinfoData) {
+        if (! $phpinfoData) {
             return null;
         }
 

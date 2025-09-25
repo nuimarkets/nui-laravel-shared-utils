@@ -31,9 +31,9 @@ class CustomizeMonoLog
         }
 
         // Add standard processors
-        $logger->pushProcessor(new SourceLocationProcessor);
-        $logger->pushProcessor(new EnvironmentProcessor);
-        $logger->pushProcessor(new SensitiveDataProcessor);
+        $logger->pushProcessor($this->createSourceLocationProcessor());
+        $logger->pushProcessor($this->createEnvironmentProcessor());
+        $logger->pushProcessor($this->createSensitiveDataProcessor());
 
         // Add any service-specific processors
         $this->addServiceProcessors($logger);
@@ -51,6 +51,33 @@ class CustomizeMonoLog
         }
 
         return AddTargetProcessor::fromConfig($config);
+    }
+
+    /**
+     * Create the source location processor.
+     * Services can override this to customize source location behavior.
+     */
+    protected function createSourceLocationProcessor(): SourceLocationProcessor
+    {
+        return new SourceLocationProcessor;
+    }
+
+    /**
+     * Create the environment processor.
+     * Services can override this to customize environment context.
+     */
+    protected function createEnvironmentProcessor(): EnvironmentProcessor
+    {
+        return new EnvironmentProcessor;
+    }
+
+    /**
+     * Create the sensitive data processor with service-specific configuration.
+     * Services can override this to customize field preservation.
+     */
+    protected function createSensitiveDataProcessor(): SensitiveDataProcessor
+    {
+        return new SensitiveDataProcessor;
     }
 
     /**

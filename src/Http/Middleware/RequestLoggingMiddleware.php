@@ -31,12 +31,35 @@ abstract class RequestLoggingMiddleware
     protected bool $addRequestIdToResponse = true;
 
     /**
+     * Whether to add the trace ID to response headers.
+     */
+    protected bool $addTraceIdToResponse = true;
+
+    /**
+     * Paths to exclude from logging (empty by default).
+     * Services can override this property to customize excluded paths.
+     */
+    protected array $excludedPaths = [];
+
+    /**
      * Handle an incoming request and set logging context.
      *
      * @return mixed
      */
     public function handle(Request $request, Closure $next)
     {
+        // Skip excluded paths (configurable)
+        $requestPath = '/'.ltrim($request->path(), '/');
+        $excluded = array_map(static fn ($path) => '/'.ltrim($path, '/'), $this->excludedPaths);
+
+        if (in_array($requestPath, $excluded, true)) {
+            return $next($request);
+        }
+
+        // Mark performance start time
+        $startTime = microtime(true);
+        $startMemory = memory_get_usage();
+
         // Generate or retrieve request ID
         $requestId = $this->getRequestId($request);
 
@@ -63,8 +86,25 @@ abstract class RequestLoggingMiddleware
             $response->headers->set($this->requestIdHeader, $requestId);
         }
 
-        // Log the request completion if enabled
-        $this->logRequestComplete($request, $response, $context);
+        // Add trace ID to response headers if enabled
+        if ($this->addTraceIdToResponse && $response) {
+            $traceId = $this->extractTraceId($request);
+            if ($traceId) {
+                $response->headers->set('X-Trace-ID', $traceId);
+            }
+        }
+
+        // Calculate performance metrics
+        $duration = microtime(true) - $startTime;
+        $memoryUsage = memory_get_usage() - $startMemory;
+        $peakMemory = memory_get_peak_usage(true);
+
+        // Log the request completion with metrics
+        $this->logRequestComplete($request, $response, $context, [
+            'duration_ms' => round($duration * 1000, 2),
+            'memory_usage_mb' => round($memoryUsage / (1024 * 1024), 2),
+            'peak_memory_mb' => round($peakMemory / (1024 * 1024), 2),
+        ]);
 
         return $response;
     }
@@ -107,10 +147,10 @@ abstract class RequestLoggingMiddleware
             LogFields::TRACE_ID => $this->extractTraceId($request),
             LogFields::TRACE_ID_HEADER => $request->headers->get('X-Amzn-Trace-Id'),
             'request' => [
-                'method' => $request->method(),
-                'path' => $request->path(),
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
+                LogFields::REQUEST_METHOD => $request->method(),
+                LogFields::REQUEST_PATH => $request->path(),
+                LogFields::REQUEST_IP => $request->ip(),
+                LogFields::REQUEST_USER_AGENT => $request->userAgent(),
             ],
         ];
     }
@@ -120,18 +160,23 @@ abstract class RequestLoggingMiddleware
      */
     protected function addUserContext(Request $request, array $context): array
     {
-        if ($user = $request->user()) {
-            $context[LogFields::USER_ID] = $this->getUserId($user);
-            $context[LogFields::ORG_ID] = $this->getUserOrgId($user);
+        try {
+            if ($user = $request->user()) {
+                $context[LogFields::USER_ID] = $this->getUserId($user);
+                $context[LogFields::ORG_ID] = $this->getUserOrgId($user);
 
-            // Add additional user fields if available
-            if ($email = $this->getUserEmail($user)) {
-                $context[LogFields::USER_EMAIL] = $email;
-            }
+                // Add additional user fields if available
+                if ($email = $this->getUserEmail($user)) {
+                    $context[LogFields::USER_EMAIL] = $email;
+                }
 
-            if ($userType = $this->getUserType($user)) {
-                $context[LogFields::USER_TYPE] = $userType;
+                if ($userType = $this->getUserType($user)) {
+                    $context[LogFields::USER_TYPE] = $userType;
+                }
             }
+        } catch (\Exception $e) {
+            // Auth guard not configured or other auth issues - continue without user context
+            // This commonly happens in test environments
         }
 
         return $context;
@@ -145,22 +190,85 @@ abstract class RequestLoggingMiddleware
 
     /**
      * Log the start of a request.
-     * Override this method to enable request start logging.
+     * Provides default implementation - override if needed.
      */
     protected function logRequestStart(Request $request, array $context): void
     {
-        // Override in child classes if request start logging is desired
+        if (! $this->shouldLogRequestStart()) {
+            return;
+        }
+
+        Log::info('Request start', [
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.start',
+            'request' => [
+                LogFields::REQUEST_METHOD => $request->method(),
+                LogFields::REQUEST_PATH => $request->path(),
+                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+                LogFields::REQUEST_IP => $request->ip(),
+                LogFields::REQUEST_USER_AGENT => $request->userAgent(),
+            ],
+        ]);
+    }
+
+    /**
+     * Whether to log request start. Override to control logging behavior.
+     */
+    protected function shouldLogRequestStart(): bool
+    {
+        return true;
     }
 
     /**
      * Log the completion of a request.
-     * Override this method to enable request completion logging.
+     * Provides default implementation - override if needed.
      *
      * @param  mixed  $response
+     * @param  array  $metrics  Performance metrics
      */
-    protected function logRequestComplete(Request $request, $response, array $context): void
+    protected function logRequestComplete(Request $request, $response, array $context, array $metrics = []): void
     {
-        // Override in child classes if request completion logging is desired
+        if (! $this->shouldLogRequestComplete()) {
+            return;
+        }
+
+        $statusCode = $response ? $response->getStatusCode() : 0;
+        $responseSize = $response && method_exists($response, 'getContent')
+            ? strlen($response->getContent())
+            : 0;
+
+        Log::info('Request complete', [
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.complete',
+            'request' => [
+                LogFields::REQUEST_METHOD => $request->method(),
+                LogFields::REQUEST_PATH => $request->path(),
+                'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
+            ],
+            'response' => [
+                'status' => $statusCode,
+                'size_bytes' => $responseSize,
+            ],
+            'performance' => $metrics,
+        ]);
+    }
+
+    /**
+     * Whether to log request completion. Override to control logging behavior.
+     */
+    protected function shouldLogRequestComplete(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the service name for logging. Override in child classes.
+     */
+    protected function getServiceName(): string
+    {
+        return 'service';
     }
 
     /**
@@ -210,6 +318,32 @@ abstract class RequestLoggingMiddleware
     }
 
     /**
+     * Helper method to log request payload with consistent structure.
+     * Services can use this for standardized payload logging.
+     */
+    protected function logRequestPayload(Request $request, array $additionalContext = []): void
+    {
+        if (! in_array($request->method(), ['POST', 'PATCH', 'PUT', 'DELETE'])) {
+            return;
+        }
+
+        $payload = $request->all();
+
+        $logContext = array_merge([
+            'target' => $this->getServiceName(),
+            'feature' => 'requests',
+            'action' => 'request.payload',
+            'request' => [
+                LogFields::REQUEST_METHOD => $request->method(),
+                LogFields::REQUEST_PATH => $request->path(),
+                'payload' => $payload,
+            ],
+        ], $additionalContext);
+
+        Log::info('Request payload', $logContext);
+    }
+
+    /**
      * Configure the middleware from an array of options.
      */
     public function configure(array $options): self
@@ -220,6 +354,14 @@ abstract class RequestLoggingMiddleware
 
         if (isset($options['add_request_id_to_response'])) {
             $this->addRequestIdToResponse = (bool) $options['add_request_id_to_response'];
+        }
+
+        if (isset($options['add_trace_id_to_response'])) {
+            $this->addTraceIdToResponse = (bool) $options['add_trace_id_to_response'];
+        }
+
+        if (isset($options['excluded_paths'])) {
+            $this->excludedPaths = (array) $options['excluded_paths'];
         }
 
         return $this;

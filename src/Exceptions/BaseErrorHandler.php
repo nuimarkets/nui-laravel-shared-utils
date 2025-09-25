@@ -241,6 +241,7 @@ class BaseErrorHandler extends ExceptionHandler
         if (str_contains((string) $request->header('Accept', ''), 'application/vnd.api+json')) {
             $headers['Content-Type'] = 'application/vnd.api+json';
         }
+
         return new JsonResponse([
             'meta' => [
                 'message' => $errorData['title'],
