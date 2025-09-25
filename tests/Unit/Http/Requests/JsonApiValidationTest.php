@@ -21,6 +21,7 @@ class JsonApiValidationTest extends TestCase
 
         return $method->invoke($request, $validator);
     }
+
     public function test_failed_validation_throws_validation_exception_without_custom_response()
     {
         $request = new class extends FormRequest

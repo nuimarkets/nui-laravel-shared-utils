@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use NuiMarkets\LaravelSharedUtils\Auth\JWTUser;
 use NuiMarkets\LaravelSharedUtils\Http\Middleware\RequestLoggingMiddleware;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
@@ -37,10 +38,10 @@ class RequestLoggingMiddlewareTest extends TestCase
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
                 return $context['request_id'] === 'test-request-id' &&
-                       $context['request']['method'] === 'GET' &&
-                       $context['request']['path'] === 'api/orders' &&
-                       isset($context['request']['ip']) &&
-                       isset($context['request']['user_agent']);
+                       $context['request.method'] === 'GET' &&
+                       $context['request.path'] === 'api/orders' &&
+                       isset($context['request.ip']) &&
+                       isset($context['request.user_agent']);
             })
         );
     }
@@ -77,7 +78,7 @@ class RequestLoggingMiddlewareTest extends TestCase
         $user->id = 123;
         $user->org_id = 456;
         $user->email = 'test@example.com';
-        $user->type = 'buyer';
+        $user->role = 'buyer';
 
         $request = Request::create('/api/profile', 'GET');
         $request->setUserResolver(function () use ($user) {
@@ -92,10 +93,10 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 123 &&
-                       $context['org_id'] === 456 &&
-                       $context['user_email'] === 'test@example.com' &&
-                       $context['user_type'] === 'buyer';
+                return $context['request.user_id'] === 123 &&
+                       $context['request.org_id'] === 456 &&
+                       $context['request.user_email'] === 'test@example.com' &&
+                       $context['request.user_type'] === 'buyer';
             })
         );
     }
@@ -106,6 +107,7 @@ class RequestLoggingMiddlewareTest extends TestCase
         $request->setRouteResolver(function () {
             $route = \Mockery::mock();
             $route->shouldReceive('parameters')->andReturn(['id' => '12345']);
+            $route->shouldReceive('getName')->andReturn('test.route');
 
             return $route;
         });
@@ -182,18 +184,18 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 789 &&
-                       $context['org_id'] === null &&
-                       $context['user_email'] === 'noorg@example.com';
+                return $context['request.user_id'] === 789 &&
+                       $context['request.org_id'] === null &&
+                       $context['request.user_email'] === 'noorg@example.com';
             })
         );
     }
 
-    public function test_handles_user_with_organization_id_instead_of_org_id()
+    public function test_handles_user_with_non_standard_org_property()
     {
         $user = new \stdClass;
         $user->id = 999;
-        $user->organization_id = 888; // Different property name
+        $user->organization_id = 888; // Non-standard property name (should result in null)
 
         $request = Request::create('/api/test', 'GET');
         $request->setUserResolver(function () use ($user) {
@@ -208,8 +210,8 @@ class RequestLoggingMiddlewareTest extends TestCase
 
         Log::shouldHaveReceived('withContext')->once()->with(
             \Mockery::on(function ($context) {
-                return $context['user_id'] === 999 &&
-                       $context['org_id'] === 888;
+                return $context['request.user_id'] === 999 &&
+                       $context['request.org_id'] === null; // null because org_id property is missing
             })
         );
     }
@@ -286,6 +288,71 @@ class RequestLoggingMiddlewareTest extends TestCase
             \Mockery::on(function ($context) {
                 return $context['request.trace_id'] === 'InvalidTraceIdFormat' &&
                        $context['request.amz_trace_id'] === 'InvalidTraceIdFormat';
+            })
+        );
+    }
+
+    public function test_extracts_context_from_jwt_user_object()
+    {
+        $jwtUser = new JWTUser(
+            id: 'jwt-user-123',
+            org_id: 'jwt-org-456',
+            role: 'seller',
+            email: 'jwt@example.com',
+            org_name: 'JWT Company',
+            org_type: 'buyer'
+        );
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(function () use ($jwtUser) {
+            return $jwtUser;
+        });
+
+        $response = new Response('Test', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.user_id'] === 'jwt-user-123' &&
+                       $context['request.org_id'] === 'jwt-org-456' &&
+                       $context['request.user_email'] === 'jwt@example.com' &&
+                       $context['request.user_type'] === 'seller' &&
+                       $context['request.org_name'] === 'JWT Company' &&
+                       $context['request.org_type'] === 'buyer';
+            })
+        );
+    }
+
+    public function test_handles_jwt_user_with_minimal_properties()
+    {
+        $jwtUser = new JWTUser(
+            id: 'minimal-user',
+            org_id: 'minimal-org',
+            role: 'machine'
+        );
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(function () use ($jwtUser) {
+            return $jwtUser;
+        });
+
+        $response = new Response('Test', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return $context['request.user_id'] === 'minimal-user' &&
+                       $context['request.org_id'] === 'minimal-org' &&
+                       $context['request.user_type'] === 'machine' &&
+                       ! array_key_exists('request.user_email', $context) &&
+                       ! array_key_exists('request.org_name', $context) &&
+                       ! array_key_exists('request.org_type', $context);
             })
         );
     }

@@ -19,10 +19,8 @@ class CustomizeMonoLog
 {
     /**
      * Customize the Monolog instance.
-     *
-     * @param  \Monolog\Logger  $logger
      */
-    public function __invoke($logger): void
+    public function __invoke(\Monolog\Logger $logger): void
     {
         // Add target processor for Elasticsearch routing
         $targetProcessor = $this->createTargetProcessor();
@@ -31,9 +29,9 @@ class CustomizeMonoLog
         }
 
         // Add standard processors
-        $logger->pushProcessor(new SourceLocationProcessor);
-        $logger->pushProcessor(new EnvironmentProcessor);
-        $logger->pushProcessor(new SensitiveDataProcessor);
+        $logger->pushProcessor($this->createSourceLocationProcessor());
+        $logger->pushProcessor($this->createEnvironmentProcessor());
+        $logger->pushProcessor($this->createSensitiveDataProcessor());
 
         // Add any service-specific processors
         $this->addServiceProcessors($logger);
@@ -51,6 +49,37 @@ class CustomizeMonoLog
         }
 
         return AddTargetProcessor::fromConfig($config);
+    }
+
+    /**
+     * Create the source location processor.
+     * Services can override this to customize source location behavior.
+     */
+    protected function createSourceLocationProcessor(): SourceLocationProcessor
+    {
+        return new SourceLocationProcessor;
+    }
+
+    /**
+     * Create the environment processor.
+     * Services can override this to customize environment context.
+     */
+    protected function createEnvironmentProcessor(): EnvironmentProcessor
+    {
+        return new EnvironmentProcessor;
+    }
+
+    /**
+     * Create the sensitive data processor with service-specific configuration.
+     * Services can override this to customize field preservation.
+     */
+    protected function createSensitiveDataProcessor(): SensitiveDataProcessor
+    {
+        $cfg = (array) config('logging-utils.processors.sensitive_data', []);
+        $preserve = $cfg['preserve_fields'] ?? [];
+        $redactPii = $cfg['redact_pii'] ?? true;
+
+        return new SensitiveDataProcessor($preserve, (bool) $redactPii);
     }
 
     /**

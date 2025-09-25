@@ -58,7 +58,7 @@ class HealthCheckController extends Controller
         }
 
         // Only add Queue check if queue is configured (not sync or null)
-        if (config('queue.default') && config('queue.default') !== 'sync') {
+        if (config('queue.default') && ! in_array(config('queue.default'), ['sync', 'null'], true)) {
             $checks['queue'] = $this->checkQueue();
         }
 
@@ -312,38 +312,47 @@ class HealthCheckController extends Controller
         try {
             $start = microtime(true);
 
-            $connectionClass = config('rabbit.use_ssl')
-                ? \PhpAmqpLib\Connection\AMQPSSLConnection::class
-                : \PhpAmqpLib\Connection\AMQPStreamConnection::class;
+            $useSsl = (bool) config('rabbit.use_ssl');
 
-            // Set up common connection parameters
-            $connectionParams = [
-                config('rabbit.host'),
-                config('rabbit.port'),
-                config('rabbit.username'),
-                config('rabbit.password'),
-                config('rabbit.vhost', '/'),
-            ];
-
-            // Add SSL options if using SSL
-            if (config('rabbit.use_ssl')) {
+            if ($useSsl) {
                 $sslOptions = [
                     'verify_peer' => false,
                     'verify_peer_name' => false,
                     'allow_self_signed' => true,
                 ];
-                $connectionParams[] = $sslOptions;
+                $options = [
+                    'connection_timeout' => 3.0,
+                    'read_write_timeout' => 3.0,
+                    'heartbeat' => 0,
+                ];
+                $connection = new \PhpAmqpLib\Connection\AMQPSSLConnection(
+                    config('rabbit.host'),
+                    (int) config('rabbit.port'),
+                    (string) config('rabbit.username'),
+                    (string) config('rabbit.password'),
+                    (string) config('rabbit.vhost', '/'),
+                    $sslOptions,
+                    $options
+                );
+            } else {
+                // AMQPStreamConnection doesn't accept an options array; pass explicit parameters
+                $connection = new \PhpAmqpLib\Connection\AMQPStreamConnection(
+                    config('rabbit.host'),
+                    (int) config('rabbit.port'),
+                    (string) config('rabbit.username'),
+                    (string) config('rabbit.password'),
+                    (string) config('rabbit.vhost', '/'),
+                    false,              // $insist
+                    'AMQPLAIN',         // $login_method
+                    null,               // $login_response
+                    'en_US',            // $locale
+                    3.0,                // $connection_timeout
+                    3.0,                // $read_write_timeout
+                    null,               // $context
+                    false,              // $keepalive
+                    0                   // $heartbeat
+                );
             }
-
-            // Add common options
-            $connectionParams[] = [
-                'connection_timeout' => 3.0,
-                'read_write_timeout' => 3.0,
-                'heartbeat' => 0,
-            ];
-
-            // Create the connection with the appropriate class and parameters
-            $connection = new $connectionClass(...$connectionParams);
 
             if (! $connection->isConnected()) {
                 throw new Exception('Failed to establish connection');
@@ -371,7 +380,7 @@ class HealthCheckController extends Controller
                 ],
             ];
 
-        } catch (AMQPIOException $e) {
+        } catch (\PhpAmqpLib\Exception\AMQPIOException $e) {
             Log::error('Health check failed: RabbitMQ connection error', [
                 'error' => $e->getMessage(),
                 'connection_details' => [
@@ -509,7 +518,7 @@ class HealthCheckController extends Controller
         }
 
         // Try to get version from phpinfo if not found yet
-        if (!isset($frankenphpInfo['version'])) {
+        if (! isset($frankenphpInfo['version'])) {
             $phpinfoData = $this->getPhpInfoData();
             $frankenphpInfo['version'] = $this->extractFrankenPhpVersionFromPhpInfo($phpinfoData);
         }
@@ -543,13 +552,13 @@ class HealthCheckController extends Controller
     /**
      * Get phpinfo output as a string for parsing
      *
-     * @param int $what What to show. Defaults to INFO_GENERAL
+     * @param  int  $what  What to show. Defaults to INFO_GENERAL
      * @return string|null phpinfo output or null if unavailable
      */
     protected function getPhpInfoData(int $what = INFO_GENERAL): ?string
     {
         // Check if phpinfo is disabled before attempting to use it
-        if (!function_exists('phpinfo')) {
+        if (! function_exists('phpinfo')) {
             return null;
         }
 
@@ -562,8 +571,9 @@ class HealthCheckController extends Controller
         } catch (Exception $e) {
             Log::debug('Failed to get phpinfo data', [
                 'error' => $e->getMessage(),
-                'what' => $what
+                'what' => $what,
             ]);
+
             return null;
         }
     }
@@ -576,12 +586,12 @@ class HealthCheckController extends Controller
      * - #1237: Add documentation on how to detect the FrankenPHP version and the Caddy version underneath
      * - #1225: Prometheus metrics to get FrankenPHP and PHP version
      *
-     * @param string|null $phpinfoData Raw phpinfo output
+     * @param  string|null  $phpinfoData  Raw phpinfo output
      * @return string|null FrankenPHP version if found
      */
     protected function extractFrankenPhpVersionFromPhpInfo(?string $phpinfoData): ?string
     {
-        if (!$phpinfoData) {
+        if (! $phpinfoData) {
             return null;
         }
 
@@ -606,14 +616,14 @@ class HealthCheckController extends Controller
     /**
      * Extract specific information from phpinfo data using regex
      *
-     * @param string|null $phpinfoData Raw phpinfo output
-     * @param string $pattern Regex pattern to match
-     * @param int $group Capture group to return (default: 1)
+     * @param  string|null  $phpinfoData  Raw phpinfo output
+     * @param  string  $pattern  Regex pattern to match
+     * @param  int  $group  Capture group to return (default: 1)
      * @return string|null Matched value if found
      */
     protected function extractFromPhpInfo(?string $phpinfoData, string $pattern, int $group = 1): ?string
     {
-        if (!$phpinfoData) {
+        if (! $phpinfoData) {
             return null;
         }
 
