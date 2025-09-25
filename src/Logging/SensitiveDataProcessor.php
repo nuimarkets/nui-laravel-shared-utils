@@ -29,27 +29,6 @@ class SensitiveDataProcessor
         'key',
         'jwt',
         'bearer',
-
-        // Personal Identifiable Information (PII)
-        'email',
-        'phone',
-        'mobile',
-        'ssn',
-        'social_security',
-        'credit_card',
-        'card_number',
-        'cvv',
-        'dob',
-        'date_of_birth',
-        'address',
-        'postal_code',
-        'zip_code',
-
-        // Financial Information
-        'bank_account',
-        'routing_number',
-        'iban',
-        'account_number',
     ];
 
     /**

@@ -100,7 +100,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('[REDACTED]', $processed['context']['data']['email']);
+        $this->assertEquals('user@example.com', $processed['context']['data']['email']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['password_confirmation']);
         $this->assertEquals('[REDACTED]', $processed['context']['data']['old_password']);
@@ -145,7 +145,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $processed = $this->processor->__invoke($record);
 
-        $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['email']);
+        $this->assertEquals('test@example.com', $processed['context']['request']['user']['email']);
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['password']);
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['api_token']);
     }
@@ -165,7 +165,7 @@ class SensitiveDataProcessorTest extends TestCase
 
         $this->assertEquals(123, $processed['context']['user_id']);
         $this->assertEquals('login', $processed['context']['action']);
-        $this->assertEquals('[REDACTED]', $processed['context']['metadata']['ip_address']);
+        $this->assertEquals('192.168.1.1', $processed['context']['metadata']['ip_address']);
         $this->assertEquals('Mozilla/5.0', $processed['context']['metadata']['user_agent']);
     }
 
