@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use NuiMarkets\LaravelSharedUtils\Auth\JWTUser;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
 
 /**
@@ -183,6 +184,14 @@ abstract class RequestLoggingMiddleware
                 if ($userType = $this->getUserType($user)) {
                     $context[LogFields::REQUEST_USER_TYPE] = $userType;
                 }
+
+                if ($orgName = $this->getUserOrgName($user)) {
+                    $context[LogFields::REQUEST_ORG_NAME] = $orgName;
+                }
+
+                if ($orgType = $this->getUserOrgType($user)) {
+                    $context[LogFields::REQUEST_ORG_TYPE] = $orgType;
+                }
             }
         } catch (\Exception $e) {
             // Auth guard not configured or other auth issues - continue without user context
@@ -314,7 +323,7 @@ abstract class RequestLoggingMiddleware
      * Get the user ID from the authenticated user.
      * Services can override this to match their user model.
      *
-     * @param  mixed  $user
+     * @param  JWTUser|mixed  $user
      * @return mixed
      */
     protected function getUserId($user)
@@ -326,19 +335,19 @@ abstract class RequestLoggingMiddleware
      * Get the organization ID from the authenticated user.
      * Services can override this to match their user model.
      *
-     * @param  mixed  $user
+     * @param  JWTUser|mixed  $user
      * @return mixed
      */
     protected function getUserOrgId($user)
     {
-        return $user->org_id ?? $user->organization_id ?? null;
+        return $user->org_id ?? null;
     }
 
     /**
      * Get the email from the authenticated user.
      * Services can override this to match their user model.
      *
-     * @param  mixed  $user
+     * @param  JWTUser|mixed  $user
      */
     protected function getUserEmail($user): ?string
     {
@@ -349,11 +358,33 @@ abstract class RequestLoggingMiddleware
      * Get the user type from the authenticated user.
      * Services can override this to match their user model.
      *
-     * @param  mixed  $user
+     * @param  JWTUser|mixed  $user
      */
     protected function getUserType($user): ?string
     {
-        return $user->type ?? $user->user_type ?? null;
+        return $user->role ?? null;
+    }
+
+    /**
+     * Get the organization name from the authenticated user.
+     * Services can override this to match their user model.
+     *
+     * @param  JWTUser|mixed  $user
+     */
+    protected function getUserOrgName($user): ?string
+    {
+        return $user->org_name ?? null;
+    }
+
+    /**
+     * Get the organization type from the authenticated user.
+     * Services can override this to match their user model.
+     *
+     * @param  JWTUser|mixed  $user
+     */
+    protected function getUserOrgType($user): ?string
+    {
+        return $user->org_type ?? null;
     }
 
     /**

@@ -35,23 +35,30 @@ abstract class LogFields
     // Request context fields
     const REQUEST_ID = 'request_id';
 
+    // Basic request properties
     const REQUEST_METHOD = 'request.method';
 
     const REQUEST_PATH = 'request.path';
 
     const REQUEST_IP = 'request.ip'; // PII: Contains IP address
 
-    const REQUEST_USER_ID = 'request.user_id'; // PII: Personal identifier
-
-    const REQUEST_ORG_ID = 'request.org_id';
-
     const REQUEST_USER_AGENT = 'request.user_agent';
+
+    const REQUEST_HEADERS = 'request.headers';
+
+    // User context from JWT/session
+    const REQUEST_USER_ID = 'request.user_id'; // PII: Personal identifier
 
     const REQUEST_USER_EMAIL = 'request.user_email'; // PII: Email from JWT/session
 
     const REQUEST_USER_TYPE = 'request.user_type'; // User type from JWT/session
 
-    const REQUEST_HEADERS = 'request.headers';
+    // Organization context from JWT/session
+    const REQUEST_ORG_ID = 'request.org_id';
+
+    const REQUEST_ORG_NAME = 'request.org_name'; // Organization name from JWT/session
+
+    const REQUEST_ORG_TYPE = 'request.org_type'; // Organization type from JWT/session
 
     const REQUEST_QUERY = 'request.query';
 
@@ -238,12 +245,17 @@ abstract class LogFields
                 'REQUEST_ID' => self::REQUEST_ID,
                 'REQUEST_METHOD' => self::REQUEST_METHOD,
                 'REQUEST_PATH' => self::REQUEST_PATH,
+                // Basic request properties
                 'REQUEST_IP' => self::REQUEST_IP,
-                'REQUEST_USER_ID' => self::REQUEST_USER_ID,
-                'REQUEST_ORG_ID' => self::REQUEST_ORG_ID,
                 'REQUEST_USER_AGENT' => self::REQUEST_USER_AGENT,
+                // User context from JWT/session
+                'REQUEST_USER_ID' => self::REQUEST_USER_ID,
                 'REQUEST_USER_EMAIL' => self::REQUEST_USER_EMAIL,
                 'REQUEST_USER_TYPE' => self::REQUEST_USER_TYPE,
+                // Organization context from JWT/session
+                'REQUEST_ORG_ID' => self::REQUEST_ORG_ID,
+                'REQUEST_ORG_NAME' => self::REQUEST_ORG_NAME,
+                'REQUEST_ORG_TYPE' => self::REQUEST_ORG_TYPE,
                 'TRACE_ID' => self::TRACE_ID,
                 'TRACE_ID_HEADER' => self::TRACE_ID_HEADER,
             ],

@@ -106,7 +106,10 @@ class ServiceRequestLogger extends RequestLoggingMiddleware {
     }
 
     protected function addServiceContext($request, $context) {
-        $context['user_id'] = $request->route('userId');
+        // Add route-specific context (JWT user context is automatically added)
+        if ($userId = $request->route('userId')) {
+            $context['target_user_id'] = $userId; // Route parameter, not JWT user
+        }
         return $context;
     }
 
