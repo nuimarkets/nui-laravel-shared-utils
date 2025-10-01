@@ -471,6 +471,13 @@ class HealthCheckController extends Controller
             'php_sapi' => $sapi,
             'memory_limit' => ini_get('memory_limit'),
             'max_execution_time' => ini_get('max_execution_time').' seconds',
+            'max_input_time' => ini_get('max_input_time').' seconds',
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'post_max_size' => ini_get('post_max_size'),
+            'max_file_uploads' => ini_get('max_file_uploads'),
+            'file_uploads' => (bool) ini_get('file_uploads'),
+            'upload_tmp_dir' => ini_get('upload_tmp_dir') ?: sys_get_temp_dir(),
+            'max_input_vars' => ini_get('max_input_vars'),
             'loaded_extensions' => implode(', ', $extensions),
             'php_ini_paths' => [
                 'loaded_php_ini' => php_ini_loaded_file(),
