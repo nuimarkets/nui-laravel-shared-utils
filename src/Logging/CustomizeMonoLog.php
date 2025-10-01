@@ -19,8 +19,13 @@ class CustomizeMonoLog
 {
     /**
      * Customize the Monolog instance.
+     *
+     * Laravel's tap configuration passes Illuminate\Log\Logger (wrapper),
+     * which proxies all method calls to the underlying Monolog instance.
+     *
+     * @param  \Illuminate\Log\Logger  $logger
      */
-    public function __invoke(\Monolog\Logger $logger): void
+    public function __invoke($logger): void
     {
         // Add target processor for Elasticsearch routing
         $targetProcessor = $this->createTargetProcessor();
