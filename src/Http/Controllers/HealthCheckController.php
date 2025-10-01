@@ -501,6 +501,11 @@ class HealthCheckController extends Controller
 
     /**
      * Get FrankenPHP-specific information
+     *
+     * Note: FrankenPHP doesn't have standardized version detection yet.
+     * See GitHub issues:
+     * - https://github.com/dunglas/frankenphp/issues/1237: Add documentation on version detection
+     * - https://github.com/dunglas/frankenphp/issues/1225: Prometheus metrics for version info
      */
     protected function getFrankenPhpInfo(): array
     {
@@ -528,6 +533,36 @@ class HealthCheckController extends Controller
         if (! isset($frankenphpInfo['version'])) {
             $phpinfoData = $this->getPhpInfoData();
             $frankenphpInfo['version'] = $this->extractFrankenPhpVersionFromPhpInfo($phpinfoData);
+        }
+
+        // Try to get FrankenPHP version via extension info
+        // See: https://github.com/dunglas/frankenphp/issues/1237
+        if (! isset($frankenphpInfo['version']) && extension_loaded('frankenphp')) {
+            $frankenphpExtVersion = phpversion('frankenphp');
+            if ($frankenphpExtVersion && $frankenphpExtVersion !== false) {
+                $frankenphpInfo['version'] = $frankenphpExtVersion;
+            }
+        }
+
+        // Try to get version from reflection if frankenphp extension has constants
+        // See: https://github.com/dunglas/frankenphp/issues/1225
+        if (! isset($frankenphpInfo['version']) && extension_loaded('frankenphp')) {
+            try {
+                $reflection = new \ReflectionExtension('frankenphp');
+                $constants = $reflection->getConstants();
+                if (isset($constants['VERSION'])) {
+                    $frankenphpInfo['version'] = $constants['VERSION'];
+                } elseif (isset($constants['FRANKENPHP_VERSION'])) {
+                    $frankenphpInfo['version'] = $constants['FRANKENPHP_VERSION'];
+                }
+            } catch (\ReflectionException $e) {
+                // Extension reflection not available
+            }
+        }
+
+        // Environment variable fallback for Docker deployments
+        if (! isset($frankenphpInfo['version']) && getenv('FRANKENPHP_VERSION')) {
+            $frankenphpInfo['version'] = getenv('FRANKENPHP_VERSION');
         }
 
         // Check for FrankenPHP-specific functions
