@@ -809,8 +809,45 @@ class HealthCheckController extends Controller
             'GIT_COMMIT' => env('GIT_COMMIT'),
             'GIT_BRANCH' => env('GIT_BRANCH'),
             'GIT_TAG' => env('GIT_TAG'),
+            //
+            'shared_lib_version' => $this->getSharedLibVersion(),
 
         ];
 
+    }
+
+    /**
+     * Get the installed version of nuimarkets/laravel-shared-utils
+     */
+    protected function getSharedLibVersion(): string
+    {
+        try {
+            $composerLockPath = base_path('composer.lock');
+
+            if (! file_exists($composerLockPath)) {
+                return 'unknown (composer.lock not found)';
+            }
+
+            $composerLock = json_decode(file_get_contents($composerLockPath), true);
+
+            if (! $composerLock || ! isset($composerLock['packages'])) {
+                return 'unknown (invalid composer.lock)';
+            }
+
+            // Search in packages array
+            foreach ($composerLock['packages'] as $package) {
+                if ($package['name'] === 'nuimarkets/laravel-shared-utils') {
+                    return $package['version'] ?? 'unknown';
+                }
+            }
+
+            return 'not installed';
+        } catch (Exception $e) {
+            Log::warning('Failed to determine shared-lib version', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return 'error: '.$e->getMessage();
+        }
     }
 }
