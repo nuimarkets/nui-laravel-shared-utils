@@ -356,6 +356,65 @@ class RequestLoggingMiddlewareTest extends TestCase
             })
         );
     }
+
+    public function test_actually_writes_request_start_log()
+    {
+        $request = Request::create('/api/orders', 'POST');
+        $response = new Response('OK', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // Verify that Log::info was actually called for request start
+        Log::shouldHaveReceived('info')->with('Request start', \Mockery::type('array'));
+    }
+
+    public function test_actually_writes_request_complete_log()
+    {
+        $request = Request::create('/api/orders', 'GET');
+        $response = new Response('OK', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // Verify that Log::info was actually called for request complete
+        Log::shouldHaveReceived('info')->with('Request complete', \Mockery::type('array'));
+    }
+
+    public function test_excluded_paths_skip_all_logging()
+    {
+        $middleware = new TestRequestLoggingMiddleware;
+        $middleware->configure(['excluded_paths' => ['/']]);
+
+        $request = Request::create('/', 'GET');
+        $response = new Response('Health OK', 200);
+
+        $middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // Verify that NO logs were written for excluded path
+        Log::shouldNotHaveReceived('info');
+    }
+
+    public function test_non_excluded_paths_do_log()
+    {
+        $middleware = new TestRequestLoggingMiddleware;
+        $middleware->configure(['excluded_paths' => ['/']]);
+
+        $request = Request::create('/api/orders', 'POST');
+        $response = new Response('Created', 201);
+
+        $middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // Verify that logs WERE written for non-excluded path
+        Log::shouldHaveReceived('info')->with('Request start', \Mockery::type('array'));
+        Log::shouldHaveReceived('info')->with('Request complete', \Mockery::type('array'));
+    }
 }
 
 /**
@@ -376,5 +435,10 @@ class TestRequestLoggingMiddleware extends RequestLoggingMiddleware
         }
 
         return $context;
+    }
+
+    protected function getServiceName(): string
+    {
+        return 'test-service';
     }
 }
