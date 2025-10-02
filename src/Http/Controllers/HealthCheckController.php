@@ -23,6 +23,17 @@ class HealthCheckController extends Controller
      */
     protected const DEFAULT_TIMEOUT = 5;
 
+    /**
+     * Format duration in milliseconds
+     *
+     * @param float $duration Duration in seconds
+     * @return string Formatted duration with 'ms' suffix
+     */
+    protected function formatDuration(float $duration): string
+    {
+        return round($duration * 1000, 2).'ms';
+    }
+
     protected function isAuthorizedForDetailedInfo(): bool
     {
         $allowedEnvs = ['local', 'development'];
@@ -122,16 +133,25 @@ class HealthCheckController extends Controller
     protected function checkMysql(string $connectionName): array
     {
         $conn = DB::connection($connectionName);
+        $config = config("database.connections.{$connectionName}");
+
+        $connectionInfo = [
+            'driver' => 'mysql',
+            'database' => $config['database'] ?? null,
+            'host' => $config['host'] ?? null,
+            'port' => $config['port'] ?? 3306,
+        ];
 
         try {
             $start = microtime(true);
             $conn->getPdo();
-            $duration = microtime(true) - $start;
+            $duration = $this->formatDuration(microtime(true) - $start);
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $duration,
                 'message' => "MySQL [{$connectionName}] connection successful",
+                'connection' => array_merge($connectionInfo, ['state' => 'connected']),
             ];
         } catch (Exception $e) {
             Log::error("Health check failed: MySQL connection error for [{$connectionName}]", [
@@ -142,6 +162,7 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => "MySQL [{$connectionName}] connection failed: ".$e->getMessage(),
+                'connection' => array_merge($connectionInfo, ['state' => 'failed']),
             ];
         }
     }
@@ -154,6 +175,14 @@ class HealthCheckController extends Controller
     protected function checkPostgres(string $connectionName): array
     {
         $conn = DB::connection($connectionName);
+        $config = config("database.connections.{$connectionName}");
+
+        $connectionInfo = [
+            'driver' => 'pgsql',
+            'database' => $config['database'] ?? null,
+            'host' => $config['host'] ?? null,
+            'port' => $config['port'] ?? 5432,
+        ];
 
         try {
             $start = microtime(true);
@@ -162,8 +191,9 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => "PostgreSQL [{$connectionName}] connection successful",
+                'connection' => array_merge($connectionInfo, ['state' => 'connected']),
             ];
         } catch (Exception $e) {
             Log::error("Health check failed: PostgreSQL connection error for [{$connectionName}]", [
@@ -174,6 +204,7 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => "PostgreSQL [{$connectionName}] connection failed: ".$e->getMessage(),
+                'connection' => array_merge($connectionInfo, ['state' => 'failed']),
             ];
         }
     }
@@ -209,6 +240,14 @@ class HealthCheckController extends Controller
      */
     protected function checkRedis(): array
     {
+        $redisConfig = config('database.redis.default');
+
+        $connectionInfo = [
+            'host' => $redisConfig['host'] ?? null,
+            'port' => $redisConfig['port'] ?? 6379,
+            'database' => $redisConfig['database'] ?? 0,
+        ];
+
         try {
             $start = microtime(true);
             $testKey = 'health_check_test';
@@ -225,8 +264,9 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => 'Redis connection successful',
+                'connection' => array_merge($connectionInfo, ['state' => 'connected']),
             ];
         } catch (Exception $e) {
             Log::error('Health check failed: Redis connection error', [
@@ -236,6 +276,7 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => 'Redis connection failed: '.$e->getMessage(),
+                'connection' => array_merge($connectionInfo, ['state' => 'failed']),
             ];
         }
     }
@@ -245,6 +286,8 @@ class HealthCheckController extends Controller
      */
     protected function checkQueue(): array
     {
+        $queueConnection = config('queue.default');
+
         try {
             $start = microtime(true);
             Queue::size();
@@ -252,8 +295,10 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => 'Queue connection successful',
+                'connection' => $queueConnection,
+                'state' => 'connected',
             ];
         } catch (Exception $e) {
             Log::error('Health check failed: Queue connection error', [
@@ -263,6 +308,8 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => 'Queue connection failed: '.$e->getMessage(),
+                'connection' => $queueConnection,
+                'state' => 'failed',
             ];
         }
     }
@@ -272,6 +319,9 @@ class HealthCheckController extends Controller
      */
     protected function checkStorage(): array
     {
+        $defaultDisk = config('filesystems.default');
+        $diskConfig = config("filesystems.disks.{$defaultDisk}");
+
         try {
             $start = microtime(true);
             $testFile = 'health_check_test.txt';
@@ -288,8 +338,12 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => 'Storage access successful',
+                'disk' => $defaultDisk,
+                'driver' => $diskConfig['driver'] ?? null,
+                'root' => $diskConfig['root'] ?? null,
+                'state' => 'operational',
             ];
         } catch (Exception $e) {
             Log::error('Health check failed: Storage access error', [
@@ -299,6 +353,10 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => 'Storage access failed: '.$e->getMessage(),
+                'disk' => $defaultDisk,
+                'driver' => $diskConfig['driver'] ?? null,
+                'root' => $diskConfig['root'] ?? null,
+                'state' => 'failed',
             ];
         }
     }
@@ -308,11 +366,17 @@ class HealthCheckController extends Controller
 
         $connection = null;
         $channel = null;
+        $useSsl = (bool) config('rabbit.use_ssl');
+
+        $connectionInfo = [
+            'host' => config('rabbit.host'),
+            'port' => config('rabbit.port'),
+            'vhost' => config('rabbit.vhost', '/'),
+            'use_ssl' => $useSsl,
+        ];
 
         try {
             $start = microtime(true);
-
-            $useSsl = (bool) config('rabbit.use_ssl');
 
             if ($useSsl) {
                 $sslOptions = [
@@ -371,13 +435,9 @@ class HealthCheckController extends Controller
 
             return [
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => 'RabbitMQ connection successful',
-                'details' => [
-                    'host' => config('rabbit.host'),
-                    'vhost' => config('rabbit.vhost'),
-                    'connection_state' => 'connected',
-                ],
+                'connection' => array_merge($connectionInfo, ['state' => 'connected']),
             ];
 
         } catch (\PhpAmqpLib\Exception\AMQPIOException $e) {
@@ -394,6 +454,7 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => 'RabbitMQ connection failed: '.$e->getMessage(),
+                'connection' => array_merge($connectionInfo, ['state' => 'failed']),
             ];
 
         } catch (Exception $e) {
@@ -404,6 +465,7 @@ class HealthCheckController extends Controller
             return [
                 'status' => 'error',
                 'message' => 'RabbitMQ check failed: '.$e->getMessage(),
+                'connection' => array_merge($connectionInfo, ['state' => 'error']),
             ];
 
         } finally {
@@ -426,6 +488,19 @@ class HealthCheckController extends Controller
      */
     protected function checkCache(): array
     {
+        $cacheDriver = config('cache.default');
+        $cacheStore = config("cache.stores.{$cacheDriver}");
+
+        // Helper to add Redis info to result
+        $addRedisInfo = function (array $result) use ($cacheStore) {
+            if (isset($cacheStore['driver']) && $cacheStore['driver'] === 'redis') {
+                $result['redis_connection'] = $cacheStore['connection'] ?? 'cache';
+                $redisConfig = config("database.redis.{$cacheStore['connection']}");
+                $result['redis_database'] = $redisConfig['database'] ?? null;
+            }
+            return $result;
+        };
+
         try {
             $start = microtime(true);
             $testKey = 'health_check_test';
@@ -440,20 +515,24 @@ class HealthCheckController extends Controller
                 throw new Exception('Cache write/read test failed');
             }
 
-            return [
+            return $addRedisInfo([
                 'status' => 'ok',
-                'duration' => round($duration * 1000, 2).'ms',
+                'duration' => $this->formatDuration($duration),
                 'message' => 'Cache system operational',
-            ];
+                'driver' => $cacheDriver,
+                'state' => 'operational',
+            ]);
         } catch (Exception $e) {
             Log::error('Health check failed: Cache system error', [
                 'error' => $e->getMessage(),
             ]);
 
-            return [
+            return $addRedisInfo([
                 'status' => 'error',
                 'message' => 'Cache system failed: '.$e->getMessage(),
-            ];
+                'driver' => $cacheDriver,
+                'state' => 'failed',
+            ]);
         }
     }
 
@@ -472,12 +551,8 @@ class HealthCheckController extends Controller
             'memory_limit' => ini_get('memory_limit'),
             'max_execution_time' => ini_get('max_execution_time').' seconds',
             'max_input_time' => ini_get('max_input_time').' seconds',
-            'upload_max_filesize' => ini_get('upload_max_filesize'),
-            'post_max_size' => ini_get('post_max_size'),
-            'max_file_uploads' => ini_get('max_file_uploads'),
-            'file_uploads' => (bool) ini_get('file_uploads'),
-            'upload_tmp_dir' => ini_get('upload_tmp_dir') ?: sys_get_temp_dir(),
             'max_input_vars' => ini_get('max_input_vars'),
+            'file_uploads' => $this->getFileUploadConfiguration(),
             'loaded_extensions' => implode(', ', $extensions),
             'php_ini_paths' => [
                 'loaded_php_ini' => php_ini_loaded_file(),
@@ -497,6 +572,22 @@ class HealthCheckController extends Controller
         $environment['critical_extensions'] = $this->getCriticalExtensionStatus();
 
         return $environment;
+    }
+
+    /**
+     * Get file upload configuration
+     *
+     * @return array File upload related PHP settings
+     */
+    protected function getFileUploadConfiguration(): array
+    {
+        return [
+            'enabled' => (bool) ini_get('file_uploads'),
+            'max_filesize' => ini_get('upload_max_filesize'),
+            'post_max_size' => ini_get('post_max_size'),
+            'max_file_uploads' => (int) ini_get('max_file_uploads'),
+            'tmp_dir' => ini_get('upload_tmp_dir') ?: sys_get_temp_dir(),
+        ];
     }
 
     /**
@@ -792,28 +883,68 @@ class HealthCheckController extends Controller
     {
 
         return [
-            'app.env' => config('app.env'),
-            'app.name' => config('app.name'),
-            'app.debug' => config('app.debug'),
-            //
-            'DB_CONNECTION' => env('DB_CONNECTION'),
-            'DB_DATABASE' => env('DB_DATABASE'),
-            //
-            'REDIS_DB' => env('REDIS_DB'),
-            'REDIS_CACHE_DB' => env('REDIS_CACHE_DB'),
-            //
-            'QUEUE_CONNECTION' => env('QUEUE_CONNECTION'),
-            'CACHE_DRIVER' => env('CACHE_DRIVER'),
-            'RABBITMQ_HOST' => env('RABBITMQ_HOST'),
-            //
-            'GIT_COMMIT' => env('GIT_COMMIT'),
-            'GIT_BRANCH' => env('GIT_BRANCH'),
-            'GIT_TAG' => env('GIT_TAG'),
-            //
-            'shared_lib_version' => $this->getSharedLibVersion(),
-
+            'app' => $this->getAppConfiguration(),
+            'runtime' => $this->getRuntimeConfiguration(),
+            'composer' => $this->getComposerPackages(),
+            'git' => $this->getGitConfiguration(),
         ];
 
+    }
+
+    /**
+     * Get Composer package versions
+     *
+     * @return array Key package versions from composer.lock
+     */
+    protected function getComposerPackages(): array
+    {
+        return [
+            'laravel' => app()->version(),
+            'shared_lib' => $this->getSharedLibVersion(),
+        ];
+    }
+
+    /**
+     * Get runtime configuration
+     *
+     * @return array Runtime settings like timezone, URL, PHP version
+     */
+    protected function getRuntimeConfiguration(): array
+    {
+        return [
+            'php_version' => PHP_VERSION,
+            'php_sapi' => PHP_SAPI,
+            'timezone' => config('app.timezone'),
+            'url' => config('app.url'),
+        ];
+    }
+
+    /**
+     * Get application configuration
+     *
+     * @return array Application settings
+     */
+    protected function getAppConfiguration(): array
+    {
+        return [
+            'env' => config('app.env'),
+            'name' => config('app.name'),
+            'debug' => config('app.debug'),
+        ];
+    }
+
+    /**
+     * Get Git version control information
+     *
+     * @return array Git commit, branch, and tag information
+     */
+    protected function getGitConfiguration(): array
+    {
+        return [
+            'commit' => env('GIT_COMMIT'),
+            'branch' => env('GIT_BRANCH'),
+            'tag' => env('GIT_TAG'),
+        ];
     }
 
     /**
