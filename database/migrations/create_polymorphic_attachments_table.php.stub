@@ -16,7 +16,6 @@ return new class extends Migration
     {
         Schema::table('attachments', function (Blueprint $table) {
             $table->nullableMorphs('attachable');
-            $table->index(['attachable_type', 'attachable_id']);
         });
     }
 

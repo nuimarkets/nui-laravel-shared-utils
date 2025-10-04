@@ -28,9 +28,9 @@ trait ManagesAttachments
         }
 
         // Verify tenant isolation (if tenant context exists)
-        if (auth()->check() && property_exists($entity, 'tenant_uuid')) {
+        if (auth()->check()) {
             $userTenantId = auth()->user()->tenant_uuid ?? auth()->user()->tenant_id ?? null;
-            $entityTenantId = $entity->tenant_uuid ?? $entity->tenant_id ?? null;
+            $entityTenantId = data_get($entity, 'tenant_uuid') ?? data_get($entity, 'tenant_id');
 
             if ($userTenantId && $entityTenantId && $userTenantId !== $entityTenantId) {
                 throw new AuthorizationException('Unauthorized access to attachment');

@@ -63,17 +63,36 @@ class AttachmentService
             $files = [$files];
         }
 
-        $attachments = [];
-        DB::beginTransaction();
+        // Step 1: Upload all files to S3 first (outside transaction)
+        $uploadedData = [];
+        $uploadedPaths = []; // Track for cleanup on failure
 
         try {
             foreach ($files as $file) {
-                $attachment = $this->uploadAndCreateAttachment(
+                $data = $this->uploadFileToS3(
                     $file,
                     $parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null,
                     $type,
                     $userId ?? auth()->id() ?? 0
                 );
+                $uploadedData[] = $data;
+                $uploadedPaths[] = $data['bucket_path'];
+            }
+        } catch (\Exception $e) {
+            // Cleanup any uploaded files on upload failure
+            $this->cleanupS3Files($uploadedPaths);
+            throw $e;
+        }
+
+        // Step 2: Create database records in transaction
+        $attachments = [];
+        DB::beginTransaction();
+
+        try {
+            foreach ($uploadedData as $data) {
+                // Create attachment record
+                $attachmentModel = $this->attachmentModel;
+                $attachment = $attachmentModel::create($data);
 
                 // Attach to parent entity
                 if ($this->pivotTable) {
@@ -97,21 +116,25 @@ class AttachmentService
 
         } catch (\Exception $e) {
             DB::rollBack();
+            // Cleanup S3 files on database failure
+            $this->cleanupS3Files($uploadedPaths);
             throw $e;
         }
     }
 
     /**
-     * Upload file to S3 and create attachment record.
+     * Upload file to S3 and return data for database record creation.
+     *
+     * @return array Attachment data for database insertion
      *
      * @throws \Exception
      */
-    protected function uploadAndCreateAttachment(
+    protected function uploadFileToS3(
         UploadedFile $file,
         ?string $tenantIdentifier,
         ?string $type,
         int $userId
-    ) {
+    ): array {
         // Generate unique filename
         $originalFilename = $file->getClientOriginalName();
         $extension = $file->getClientOriginalExtension();
@@ -161,10 +184,8 @@ class AttachmentService
         // Determine attachment type
         $finalType = $type ?? $this->detectFileType($file);
 
-        // Create attachment record
-        $attachmentModel = $this->attachmentModel;
-
-        return $attachmentModel::create([
+        // Return data for database record creation
+        return [
             'uuid' => Str::uuid()->toString(),
             'tenant_uuid' => $tenantIdentifier,
             'file_name' => $originalFilename,
@@ -172,7 +193,29 @@ class AttachmentService
             'bucket_path' => $fullFilePath,
             'type' => $finalType,
             'created_by' => $userId,
-        ]);
+        ];
+    }
+
+    /**
+     * Cleanup S3 files on transaction failure.
+     *
+     * @param  array  $paths  S3 file paths to delete
+     */
+    protected function cleanupS3Files(array $paths): void
+    {
+        foreach ($paths as $path) {
+            try {
+                Storage::disk($this->diskName)->delete($path);
+                Log::info('S3: Cleaned up orphaned file after transaction failure', [
+                    'path' => $path,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('S3: Failed to cleanup orphaned file', [
+                    'path' => $path,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -238,12 +281,15 @@ class AttachmentService
                 // (parent relationship will be null after delete)
             }
 
-            // Delete from S3
+            // Delete from S3 (fail fast if S3 delete fails)
             if ($attachment->bucket_path) {
-                Storage::disk($this->diskName)->delete($attachment->bucket_path);
+                $deleted = Storage::disk($this->diskName)->delete($attachment->bucket_path);
+                if (! $deleted) {
+                    throw new \Exception("Failed to delete S3 object: {$attachment->bucket_path}");
+                }
             }
 
-            // Soft delete attachment record
+            // Delete attachment record (soft or hard delete depending on model configuration)
             $attachment->delete();
 
             DB::commit();
