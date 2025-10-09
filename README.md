@@ -47,7 +47,7 @@ Production-ready logging with automatic Elasticsearch routing, configurable sens
 Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cache, and PHP environment. Get detailed diagnostics with a single endpoint.
 
 ### **Service Communication**
-Enhanced RemoteRepository with retry logic, performance monitoring, intelligent caching, and automatic JWT authentication for service-to-service calls.
+Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, intelligent caching, and automatic JWT authentication. Tokens loaded on-demand during first request—improves instantiation speed and resilience.
 
 ### **Analytics Integration**
 Complete Intercom integration for user analytics and event tracking with queue-based processing and multi-tenant support.
