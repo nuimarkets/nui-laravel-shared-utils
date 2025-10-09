@@ -46,6 +46,9 @@ class RemoteRepositoryTracingTest extends TestCase
 
         $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
 
+        // Trigger token loading to populate headers
+        $repository->triggerTokenLoad();
+
         // Use reflection to access protected headers property
         $reflection = new \ReflectionClass(RemoteRepository::class);
         $headersProperty = $reflection->getProperty('headers');
@@ -67,6 +70,9 @@ class RemoteRepositoryTracingTest extends TestCase
         $mockTokenService = $this->createMockTokenService();
 
         $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+
+        // Trigger token loading to populate headers
+        $repository->triggerTokenLoad();
 
         // Use reflection to access protected headers property
         $reflection = new \ReflectionClass(RemoteRepository::class);
@@ -94,6 +100,9 @@ class RemoteRepositoryTracingTest extends TestCase
         $mockTokenService = $this->createMockTokenService();
 
         $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+
+        // Trigger token loading to populate headers
+        $repository->triggerTokenLoad();
 
         // Use reflection to access protected headers property
         $reflection = new \ReflectionClass(RemoteRepository::class);
@@ -128,5 +137,10 @@ class TestRemoteRepositoryTracing extends RemoteRepository
     {
         // Simple implementation for testing
         return $data;
+    }
+
+    public function triggerTokenLoad()
+    {
+        $this->ensureTokenLoaded();
     }
 }

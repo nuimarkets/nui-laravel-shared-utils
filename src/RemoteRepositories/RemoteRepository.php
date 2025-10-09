@@ -26,6 +26,16 @@ abstract class RemoteRepository
     private ?DocumentClientInterface $client = null;
 
     /**
+     * @var MachineTokenServiceInterface - Token service for lazy loading
+     */
+    private MachineTokenServiceInterface $machineTokenService;
+
+    /**
+     * @var string|null - Cached token (lazy-loaded on first request)
+     */
+    private ?string $token = null;
+
+    /**
      * @var array - Headers to be send with each request
      */
     private array $headers;
@@ -42,24 +52,40 @@ abstract class RemoteRepository
 
     /**
      * RemoteRepository constructor.
-     *
-     * @throws \InvalidArgumentException if machineTokenService is invalid
-     * @throws \RuntimeException if token retrieval fails
      */
     public function __construct(DocumentClientInterface $client, MachineTokenServiceInterface $machineTokenService)
     {
-        $this->validateMachineTokenService($machineTokenService);
-
         $this->client = $client;
         $this->client->setBaseUri($this->getConfiguredBaseUri());
 
-        $token = $this->retrieveAndValidateToken($machineTokenService);
+        // Store token service for lazy loading (token not retrieved until first request)
+        $this->machineTokenService = $machineTokenService;
 
+        // Initialize base headers (Authorization header will be added lazily)
         $this->headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer '.$token,
         ];
+
+        $this->data = new Collection;
+    }
+
+    /**
+     * Lazy-load the authentication token on first request.
+     * This ensures tokens are only retrieved when actually needed.
+     *
+     * @throws \RuntimeException if token retrieval fails
+     */
+    protected function ensureTokenLoaded(): void
+    {
+        if ($this->token !== null) {
+            return; // Token already loaded
+        }
+
+        $this->token = $this->retrieveAndValidateToken($this->machineTokenService);
+
+        // Update Authorization header with the loaded token
+        $this->headers['Authorization'] = 'Bearer '.$this->token;
 
         // Add request ID if available
         $requestId = $this->getCurrentRequestId();
@@ -78,21 +104,6 @@ abstract class RemoteRepository
         if ($traceId) {
             $this->headers['X-Correlation-ID'] = $traceId;
         }
-        $this->data = new Collection;
-    }
-
-    /**
-     * Validate that the machine token service is properly configured
-     *
-     * @throws \InvalidArgumentException
-     */
-    protected function validateMachineTokenService(MachineTokenServiceInterface $machineTokenService): void
-    {
-        if (! is_object($machineTokenService)) {
-            throw new \InvalidArgumentException(
-                'Machine token service must be an object, '.gettype($machineTokenService).' given'
-            );
-        }
     }
 
     /**
@@ -100,7 +111,7 @@ abstract class RemoteRepository
      *
      * @throws \RuntimeException
      */
-    protected function retrieveAndValidateToken($machineTokenService): string
+    protected function retrieveAndValidateToken(MachineTokenServiceInterface $machineTokenService): string
     {
         try {
             $token = $machineTokenService->getToken();
@@ -285,6 +296,9 @@ abstract class RemoteRepository
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
 
+        // Lazy-load token on first request
+        $this->ensureTokenLoaded();
+
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
 
@@ -352,6 +366,9 @@ abstract class RemoteRepository
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
 
+        // Lazy-load token on first request
+        $this->ensureTokenLoaded();
+
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
 
@@ -398,6 +415,9 @@ abstract class RemoteRepository
         if (! $this->client) {
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
+
+        // Lazy-load token on first request
+        $this->ensureTokenLoaded();
 
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;

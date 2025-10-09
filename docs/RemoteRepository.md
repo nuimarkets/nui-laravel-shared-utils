@@ -21,6 +21,7 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 
 ### Core Functionality
 - **JSON API Client Integration** - Built on `swisnl/json-api-client` for standardized API communication
+- **Lazy Token Loading** - Authentication tokens loaded on-demand to improve instantiation performance
 - **JWT Authentication** - Automatic machine token injection for service-to-service communication
 - **Retry Logic** - Configurable retry attempts with exponential backoff
 - **URL Length Validation** - Prevents HTTP 414 errors by validating request URL lengths
@@ -405,19 +406,41 @@ Must be implemented by child classes to handle data filtering and retrieval logi
 
 ## Best Practices
 
-### 1. Error Handling
+### 1. Lazy Token Loading
+The RemoteRepository uses lazy token loading for optimal performance:
+
+```php
+// ✓ Token is NOT retrieved during instantiation
+$repository = new ProductRepository($client, $tokenService);
+
+// ✓ Token is loaded on first actual API request
+$products = $repository->findByIds([1, 2, 3]);
+
+// ✓ Subsequent requests reuse the same token
+$product = $repository->findById('product-456');
+```
+
+**Benefits:**
+- **Faster instantiation** - No token service calls during object creation
+- **Better resilience** - Repository can be created even if token service is temporarily unavailable
+- **Reduced overhead** - Token only loaded when actually needed
+- **Automatic caching** - Token retrieved once and reused for all requests
+
+**Note:** Non-request operations (like `query()`, `hasId()`) do not trigger token loading.
+
+### 2. Error Handling
 Always catch and handle `RemoteServiceException`.
 
-### 2. URL Length Management
+### 3. URL Length Management
 Use POST for large requests when URL length exceeds limits.
 
-### 3. Efficient Caching
+### 4. Efficient Caching
 Leverage cache to minimize API calls.
 
-### 4. Performance Monitoring
+### 5. Performance Monitoring
 Enable profiling in production for monitoring.
 
-### 5. Configuration
+### 6. Configuration
 Use environment-specific configuration.
 
 ## Troubleshooting
