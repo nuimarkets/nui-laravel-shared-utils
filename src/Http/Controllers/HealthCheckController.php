@@ -26,7 +26,7 @@ class HealthCheckController extends Controller
     /**
      * Format duration in milliseconds
      *
-     * @param float $duration Duration in seconds
+     * @param  float  $duration  Duration in seconds
      * @return string Formatted duration with 'ms' suffix
      */
     protected function formatDuration(float $duration): string
@@ -498,6 +498,7 @@ class HealthCheckController extends Controller
                 $redisConfig = config("database.redis.{$cacheStore['connection']}");
                 $result['redis_database'] = $redisConfig['database'] ?? null;
             }
+
             return $result;
         };
 

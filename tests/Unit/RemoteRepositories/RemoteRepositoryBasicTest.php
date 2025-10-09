@@ -525,7 +525,7 @@ class RemoteRepositoryBasicTest extends TestCase
         };
     }
 
-    public function test_constructor_handles_token_retrieval_failure()
+    public function test_token_retrieval_failure_occurs_on_first_request()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
         $mockClient->expects($this->once())
@@ -540,19 +540,28 @@ class RemoteRepositoryBasicTest extends TestCase
             }
         };
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Failed to retrieve token from machine token service: Token service unavailable');
-
-        new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        // Constructor should NOT throw exception anymore (lazy loading)
+        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
         {
             protected function filter(array $data)
             {
                 return $data;
             }
+
+            public function triggerTokenLoad()
+            {
+                $this->ensureTokenLoaded();
+            }
         };
+
+        // Exception should be thrown when token is actually needed
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to retrieve token from machine token service: Token service unavailable');
+
+        $repository->triggerTokenLoad();
     }
 
-    public function test_constructor_validates_token_is_non_empty_string()
+    public function test_token_validation_occurs_on_first_request()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
         $mockClient->expects($this->once())
@@ -568,19 +577,28 @@ class RemoteRepositoryBasicTest extends TestCase
             }
         };
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Machine token service returned invalid token. Expected non-empty string, got: empty string');
-
-        new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        // Constructor should NOT throw exception anymore (lazy loading)
+        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
         {
             protected function filter(array $data)
             {
                 return $data;
             }
+
+            public function triggerTokenLoad()
+            {
+                $this->ensureTokenLoaded();
+            }
         };
+
+        // Exception should be thrown when token is actually needed
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Machine token service returned invalid token. Expected non-empty string, got: empty string');
+
+        $repository->triggerTokenLoad();
     }
 
-    public function test_constructor_validates_token_is_string()
+    public function test_token_type_validation_occurs_on_first_request()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
         $mockClient->expects($this->once())
@@ -596,15 +614,24 @@ class RemoteRepositoryBasicTest extends TestCase
             }
         };
 
-        $this->expectException(\TypeError::class);
-
-        new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        // Constructor should NOT throw exception anymore (lazy loading)
+        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
         {
             protected function filter(array $data)
             {
                 return $data;
             }
+
+            public function triggerTokenLoad()
+            {
+                $this->ensureTokenLoaded();
+            }
         };
+
+        // Exception should be thrown when token is actually needed
+        $this->expectException(\TypeError::class);
+
+        $repository->triggerTokenLoad();
     }
 
     private function createMockMachineTokenService(): MachineTokenServiceInterface
