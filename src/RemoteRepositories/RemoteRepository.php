@@ -52,13 +52,9 @@ abstract class RemoteRepository
 
     /**
      * RemoteRepository constructor.
-     *
-     * @throws \InvalidArgumentException if machineTokenService is invalid
      */
     public function __construct(DocumentClientInterface $client, MachineTokenServiceInterface $machineTokenService)
     {
-        $this->validateMachineTokenService($machineTokenService);
-
         $this->client = $client;
         $this->client->setBaseUri($this->getConfiguredBaseUri());
 
@@ -72,20 +68,6 @@ abstract class RemoteRepository
         ];
 
         $this->data = new Collection;
-    }
-
-    /**
-     * Validate that the machine token service is properly configured
-     *
-     * @throws \InvalidArgumentException
-     */
-    protected function validateMachineTokenService(MachineTokenServiceInterface $machineTokenService): void
-    {
-        if (! is_object($machineTokenService)) {
-            throw new \InvalidArgumentException(
-                'Machine token service must be an object, '.gettype($machineTokenService).' given'
-            );
-        }
     }
 
     /**
