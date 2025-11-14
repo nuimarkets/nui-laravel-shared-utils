@@ -126,7 +126,7 @@ abstract class RequestLoggingMiddleware
      */
     protected function getRequestId(Request $request): string
     {
-        return $request->headers->get($this->requestIdHeader, Str::uuid()->toString());
+        return $request->headers->get($this->requestIdHeader, (string) Str::uuid());
     }
 
     /**

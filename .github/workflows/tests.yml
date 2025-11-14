@@ -5,19 +5,19 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ "**" ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     strategy:
       fail-fast: false
       matrix:
         php-version: [8.3]
-        laravel-version: [9.*, 10.*]
-        dependency-version: [prefer-lowest, prefer-stable]
+        laravel-version: [8.*, 9.*, 10.*]
 
-    name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} - ${{ matrix.dependency-version }}
+    name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }}
 
     steps:
     - uses: actions/checkout@v4
@@ -37,6 +37,9 @@ jobs:
         php-version: ${{ matrix.php-version }}
         extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv
         coverage: none
+        # Use Composer 2.3 to avoid security advisory blocking for Laravel 8.*
+        # Can upgrade to latest Composer once Laravel 8 support is dropped
+        tools: composer:2.3
 
     - name: Setup problem matchers
       run: |
@@ -46,7 +49,7 @@ jobs:
     - name: Install dependencies
       run: |
         composer require "laravel/framework:${{ matrix.laravel-version }}" --no-interaction --no-update
-        composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction
+        composer update --prefer-stable --prefer-dist --no-interaction
 
     - name: List Installed Dependencies
       run: composer show -D
@@ -56,7 +59,7 @@ jobs:
 
   code-quality:
     runs-on: ubuntu-latest
-    
+
     name: Code Quality
 
     steps:
@@ -68,6 +71,9 @@ jobs:
         php-version: 8.3
         extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, soap, intl, gd, exif, iconv
         coverage: none
+        # Use Composer 2.3 to avoid security advisory blocking for Laravel 8.*
+        # Can upgrade to latest Composer once Laravel 8 support is dropped
+        tools: composer:2.3
 
     - name: Cache dependencies
       uses: actions/cache@v3

@@ -2,7 +2,7 @@
 *.cache
 .idea
 composer.lock
-
+*.log
 *temp*
 
 # Ignore all .md files in the root
