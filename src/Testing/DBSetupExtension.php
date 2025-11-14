@@ -122,6 +122,7 @@ class DBSetupExtension implements BeforeFirstTestHook
         $tempConnection['database'] = null;
 
         Config::set('database.connections.temp', $tempConnection);
+        app()['config']->set('database.connections.temp', $tempConnection);
 
         app('db')->setDefaultConnection('temp');
 
