@@ -114,17 +114,18 @@ class DBSetupExtension implements BeforeFirstTestHook
 
     protected function setTemporaryDefaultConnection(): void
     {
-
         // Create a new connection without specifying a database
         $tempConnection = Config::get('database.connections.'.env('DB_CONNECTION'));
 
         // Temporarily set to null so it won't complain about missing DB :(
         $tempConnection['database'] = null;
 
-        Config::set('database.connections.temp', $tempConnection);
+        // Set directly on the container's config repository to ensure DatabaseManager
+        // can resolve the temporary connection. During test bootstrapping, setting via
+        // the container is more reliable than using the Config facade.
+        app()['config']->set('database.connections.temp', $tempConnection);
 
         app('db')->setDefaultConnection('temp');
-
     }
 
     protected function resetDatabase(): void
