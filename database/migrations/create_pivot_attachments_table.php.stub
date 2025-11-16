@@ -1,0 +1,43 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Generic pivot table template for entity-attachment relationships.
+ *
+ * USAGE: Copy and rename to match your entity (e.g., product_attachments, order_attachments)
+ * Replace 'entity' with your entity name in table name and foreign key.
+ */
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('entity_attachments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('entity_id'); // Replace 'entity' with your model name
+            $table->unsignedBigInteger('attachment_id');
+            $table->unsignedBigInteger('added_by');
+            $table->timestamps();
+
+            $table->foreign('entity_id')
+                ->references('id')
+                ->on('entities') // Replace with your entity table name
+                ->onDelete('cascade');
+
+            $table->foreign('attachment_id')
+                ->references('id')
+                ->on('attachments')
+                ->onDelete('cascade');
+
+            $table->unique(['entity_id', 'attachment_id']);
+            $table->index('entity_id');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('entity_attachments');
+    }
+};
