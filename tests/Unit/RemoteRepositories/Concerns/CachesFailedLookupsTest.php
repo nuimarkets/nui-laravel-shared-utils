@@ -2,10 +2,6 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories\Concerns;
 
-use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use NuiMarkets\LaravelSharedUtils\Exceptions\CachedLookupFailureException;
@@ -13,10 +9,12 @@ use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\Concerns\CachesFailedLookups;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\GuzzleTestHelpers;
 
 class CachesFailedLookupsTest extends TestCase
 {
     use CachesFailedLookups;
+    use GuzzleTestHelpers;
 
     protected function setUp(): void
     {
@@ -96,9 +94,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_extracts_http_status_from_guzzle_client_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Not found', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         $status = $this->extractHttpStatus($exception);
 
@@ -107,9 +103,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_extracts_http_status_from_guzzle_server_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(500, [], 'Internal server error');
-        $exception = new RequestException('Server error', $request, $response);
+        $exception = $this->createGuzzle500Exception();
 
         $status = $this->extractHttpStatus($exception);
 
@@ -118,8 +112,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_returns_null_for_connect_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $exception = new ConnectException('Connection refused', $request);
+        $exception = $this->createGuzzleConnectException();
 
         $status = $this->extractHttpStatus($exception);
 
@@ -157,9 +150,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_extracts_http_status_from_wrapped_guzzle_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $guzzleException = new RequestException('Not found', $request, $response);
+        $guzzleException = $this->createGuzzle404Exception();
 
         // Wrap in a plain exception (not HttpException) so we traverse to Guzzle
         $wrappedException = new \RuntimeException('Wrapped error', 0, $guzzleException);
@@ -172,9 +163,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_traverses_exception_chain_to_find_guzzle_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(503, [], 'Service unavailable');
-        $guzzleException = new RequestException('Service unavailable', $request, $response);
+        $guzzleException = $this->createGuzzle503Exception();
 
         // Multiple levels of wrapping with plain exceptions (not HttpException)
         $level1 = new \RuntimeException('Level 1', 0, $guzzleException);
@@ -198,9 +187,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_http_exception_status_takes_precedence_over_wrapped_guzzle(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(500, [], 'Server error');
-        $guzzleException = new RequestException('Server error', $request, $response);
+        $guzzleException = $this->createGuzzle500Exception();
 
         // RemoteServiceException wrapping Guzzle - the HTTP exception status takes precedence
         $wrappedException = new RemoteServiceException('Wrapped error', 502, $guzzleException);
@@ -213,9 +200,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_respects_max_depth_when_traversing_exception_chain(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $guzzleException = new RequestException('Not found', $request, $response);
+        $guzzleException = $this->createGuzzle404Exception();
 
         // Create a chain deeper than max depth (5)
         $current = $guzzleException;
@@ -298,8 +283,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_classifies_timeout_from_connect_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $exception = new ConnectException('cURL error 28: Operation timed out', $request);
+        $exception = $this->createGuzzleTimeoutException();
 
         $category = $this->classifyFailure($exception, null);
 
@@ -308,8 +292,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_classifies_connection_error_from_connect_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $exception = new ConnectException('cURL error 7: Connection refused', $request);
+        $exception = $this->createGuzzleConnectException('cURL error 7: Connection refused');
 
         $category = $this->classifyFailure($exception, null);
 
@@ -318,8 +301,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_classifies_wrapped_timeout_from_connect_exception(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $connectException = new ConnectException('cURL error 28: Operation timed out', $request);
+        $connectException = $this->createGuzzleTimeoutException();
         $wrappedException = new RemoteServiceException('Wrapped', 503, $connectException);
 
         $category = $this->classifyFailure($wrappedException, null);
@@ -392,9 +374,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_caches_failure_with_http_status_and_category(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Not found', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
 
@@ -409,8 +389,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_caches_failure_with_null_status_for_timeout(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $exception = new ConnectException('cURL error 28: Operation timed out', $request);
+        $exception = $this->createGuzzleTimeoutException();
 
         Log::shouldReceive('warning')->once();
 
@@ -428,9 +407,7 @@ class CachesFailedLookupsTest extends TestCase
             'not_found' => 600,
         ]]);
 
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Not found', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')
             ->once()
@@ -444,9 +421,7 @@ class CachesFailedLookupsTest extends TestCase
     public function test_caches_failure_with_correct_structure(): void
     {
         // Use a Guzzle exception so HTTP status extraction works correctly
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(500, [], 'Server error');
-        $exception = new RequestException('Test error message', $request, $response);
+        $exception = $this->createGuzzleRequestException(500, 'Test error message', 'Server error');
 
         Log::shouldReceive('warning')->once();
 
@@ -455,7 +430,7 @@ class CachesFailedLookupsTest extends TestCase
         $cached = $this->getCachedFailureData('test_lookup', 'id1', 'id2');
 
         $this->assertNotNull($cached);
-        $this->assertEquals(RequestException::class, $cached['exception_class']);
+        $this->assertEquals(\GuzzleHttp\Exception\RequestException::class, $cached['exception_class']);
         $this->assertEquals('Test error message', $cached['exception_message']);
         $this->assertEquals(500, $cached['http_status']);
         $this->assertEquals('server_error', $cached['failure_category']);
@@ -478,9 +453,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_throws_cached_lookup_failure_exception_when_cached(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $originalException = new RequestException('Original error', $request, $response);
+        $originalException = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
 
@@ -495,9 +468,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_exception_contains_http_status(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Error', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
         Log::shouldReceive('info')->once();
@@ -514,9 +485,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_exception_contains_failure_category(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Error', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
         Log::shouldReceive('info')->once();
@@ -533,9 +502,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_exception_convenience_methods_work(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Error', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
         Log::shouldReceive('info')->once();
@@ -554,8 +521,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_transient_failures_are_detected(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $exception = new ConnectException('cURL error 28: Operation timed out', $request);
+        $exception = $this->createGuzzleTimeoutException();
 
         Log::shouldReceive('warning')->once();
         Log::shouldReceive('info')->once();
@@ -623,9 +589,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_logs_http_status_and_category_on_cache_hit(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Test error', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
 
@@ -648,9 +612,7 @@ class CachesFailedLookupsTest extends TestCase
 
     public function test_logs_http_status_and_category_on_cache_store(): void
     {
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(500, [], 'Server error');
-        $exception = new RequestException('Test error', $request, $response);
+        $exception = $this->createGuzzle500Exception();
 
         Log::shouldReceive('warning')
             ->once()
@@ -672,9 +634,7 @@ class CachesFailedLookupsTest extends TestCase
         config(['app.remote_repository.failure_cache_ttl' => 120]);
         config(['app.remote_repository.failure_cache_ttl_by_category' => null]);
 
-        $request = new Request('GET', 'http://example.com');
-        $response = new Response(404, [], 'Not found');
-        $exception = new RequestException('Error', $request, $response);
+        $exception = $this->createGuzzle404Exception();
 
         Log::shouldReceive('warning')->once();
 

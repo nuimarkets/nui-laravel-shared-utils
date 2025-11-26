@@ -22,7 +22,7 @@ class DBSetupExtensionTest extends TestCase
         // Ensure DB_SETUP is not set
         putenv('DB_SETUP');
 
-        $extension = new DBSetupExtension();
+        $extension = new DBSetupExtension;
 
         // This should return early without throwing exceptions
         $extension->executeBeforeFirstTest();
@@ -46,7 +46,8 @@ class DBSetupExtensionTest extends TestCase
 
         Config::set('database.connections.mysql_test', $originalConfig);
 
-        $extension = new class extends DBSetupExtension {
+        $extension = new class extends DBSetupExtension
+        {
             private string $connectionName;
 
             public function setConnectionName(string $name): void
@@ -54,7 +55,7 @@ class DBSetupExtensionTest extends TestCase
                 $this->connectionName = $name;
             }
 
-            public function testSetTemporaryDefaultConnection(): void
+            public function test_set_temporary_default_connection(): void
             {
                 // Override the getenv() call by directly manipulating the config
                 $tempConnection = Config::get("database.connections.{$this->connectionName}");
@@ -65,7 +66,7 @@ class DBSetupExtensionTest extends TestCase
         };
 
         $extension->setConnectionName('mysql_test');
-        $extension->testSetTemporaryDefaultConnection();
+        $extension->test_set_temporary_default_connection();
 
         // Verify temp connection was created without database
         $tempConnection = app()['config']->get('database.connections.temp');
@@ -89,7 +90,8 @@ class DBSetupExtensionTest extends TestCase
 
         Config::set('database.connections.pgsql_test', $originalConfig);
 
-        $extension = new class extends DBSetupExtension {
+        $extension = new class extends DBSetupExtension
+        {
             private string $connectionName;
 
             public function setConnectionName(string $name): void
@@ -97,7 +99,7 @@ class DBSetupExtensionTest extends TestCase
                 $this->connectionName = $name;
             }
 
-            public function testSetTemporaryDefaultConnection(): void
+            public function test_set_temporary_default_connection(): void
             {
                 $tempConnection = Config::get("database.connections.{$this->connectionName}");
                 $tempConnection['database'] = null;
@@ -108,7 +110,7 @@ class DBSetupExtensionTest extends TestCase
         };
 
         $extension->setConnectionName('pgsql_test');
-        $extension->testSetTemporaryDefaultConnection();
+        $extension->test_set_temporary_default_connection();
 
         // Verify config is accessible via container (not just facade)
         $containerConfig = app()['config']->get('database.connections.temp');
@@ -133,7 +135,8 @@ class DBSetupExtensionTest extends TestCase
 
         Config::set('database.connections.preserve_test', $originalConfig);
 
-        $extension = new class extends DBSetupExtension {
+        $extension = new class extends DBSetupExtension
+        {
             private string $connectionName;
 
             public function setConnectionName(string $name): void
@@ -141,7 +144,7 @@ class DBSetupExtensionTest extends TestCase
                 $this->connectionName = $name;
             }
 
-            public function testSetTemporaryDefaultConnection(): void
+            public function test_set_temporary_default_connection(): void
             {
                 $tempConnection = Config::get("database.connections.{$this->connectionName}");
                 $tempConnection['database'] = null;
@@ -151,7 +154,7 @@ class DBSetupExtensionTest extends TestCase
         };
 
         $extension->setConnectionName('preserve_test');
-        $extension->testSetTemporaryDefaultConnection();
+        $extension->test_set_temporary_default_connection();
 
         // Verify original connection is unchanged
         $currentConfig = Config::get('database.connections.preserve_test');
@@ -178,7 +181,8 @@ class DBSetupExtensionTest extends TestCase
 
         Config::set('database.connections.manager_test', $originalConfig);
 
-        $extension = new class extends DBSetupExtension {
+        $extension = new class extends DBSetupExtension
+        {
             private string $connectionName;
 
             public function setConnectionName(string $name): void
@@ -186,7 +190,7 @@ class DBSetupExtensionTest extends TestCase
                 $this->connectionName = $name;
             }
 
-            public function testSetTemporaryDefaultConnection(): void
+            public function test_set_temporary_default_connection(): void
             {
                 $tempConnection = Config::get("database.connections.{$this->connectionName}");
                 $tempConnection['database'] = null;
@@ -196,7 +200,7 @@ class DBSetupExtensionTest extends TestCase
         };
 
         $extension->setConnectionName('manager_test');
-        $extension->testSetTemporaryDefaultConnection();
+        $extension->test_set_temporary_default_connection();
 
         // Verify DatabaseManager can see the temp connection config
         // (We can't actually connect without a real database, but we can verify the config exists)

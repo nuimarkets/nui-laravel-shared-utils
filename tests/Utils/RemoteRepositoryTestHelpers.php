@@ -1,6 +1,6 @@
 <?php
 
-namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
+namespace NuiMarkets\LaravelSharedUtils\Tests\Utils;
 
 use Mockery;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;

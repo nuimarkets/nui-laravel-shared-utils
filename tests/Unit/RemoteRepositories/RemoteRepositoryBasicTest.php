@@ -6,18 +6,19 @@ use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\ItemInterface;
 use Swis\JsonApi\Client\Item;
 
 class RemoteRepositoryBasicTest extends TestCase
 {
+    use RemoteRepositoryTestHelpers;
+
     protected function setUp(): void
     {
         parent::setUp();
-
-        // Set a default base URI for tests using the new config structure
-        config(['app.remote_repository.base_uri' => 'https://test.example.com']);
+        $this->setUpRemoteRepositoryConfig();
     }
 
     public function test_remote_repository_class_exists()
@@ -67,10 +68,7 @@ class RemoteRepositoryBasicTest extends TestCase
     {
         $testData = ['name' => 'Test Product', 'price' => 100];
 
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
         $result = $repository->makeRequestBody($testData);
 
         $this->assertInstanceOf(SimpleDocument::class, $result);
@@ -81,10 +79,7 @@ class RemoteRepositoryBasicTest extends TestCase
     {
         $testData = (object) ['name' => 'Test Product', 'price' => 100];
 
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
         $result = $repository->makeRequestBody($testData);
 
         $this->assertInstanceOf(SimpleDocument::class, $result);
@@ -93,10 +88,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_make_request_body_throws_exception_for_invalid_data_type()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
 
         $this->expectException(\NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
         $this->expectExceptionMessage('Failed to create request body: Data must be an array or object, string given');
@@ -106,10 +98,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_make_request_body_throws_exception_for_null_data()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
 
         $this->expectException(\NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException::class);
         $this->expectExceptionMessage('Failed to create request body: Data must be an array or object, NULL given');
@@ -119,11 +108,8 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_make_request_body_reguards_on_exception()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
         // Create a test repository that can verify guard state
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -157,10 +143,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_has_id_method_works()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
 
         // Add an item to the internal collection
         $mockItem = $this->createMock(ItemInterface::class);
@@ -173,10 +156,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_query_returns_collection()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
         $collection = $repository->query();
 
         $this->assertInstanceOf(\Illuminate\Support\Collection::class, $collection);
@@ -184,10 +164,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_find_by_id_without_retrieve_returns_cached_item()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository();
 
         $mockItem = $this->createMock(ItemInterface::class);
         $repository->query()->put('cached-id', $mockItem);
@@ -199,15 +176,10 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_allowed_get_request_validates_url_length()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
+        $mockClient = $this->createMockClient();
         $mockClient->method('getBaseUri')->willReturn('https://api.example.com');
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
 
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository($mockClient);
 
         // Test short URL (should be allowed)
         $this->assertTrue($repository->allowedGetRequest('/short'));
@@ -219,15 +191,10 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_allowed_get_request_validates_malicious_patterns()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
+        $mockClient = $this->createMockClient();
         $mockClient->method('getBaseUri')->willReturn('https://api.example.com');
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
 
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = $this->createConcreteRepository($mockClient, $mockMachineTokenService);
+        $repository = $this->createTestRepository($mockClient);
 
         // Test directory traversal attempts
         $this->assertFalse($repository->allowedGetRequest('/api/../../../etc/passwd'));
@@ -264,10 +231,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_is_valid_url_path_method_exists()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -300,10 +264,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_recoverable_error_patterns_can_be_configured()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -330,10 +291,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_recoverable_error_patterns_uses_config_default()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -354,9 +312,6 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_get_configured_base_uri_throws_exception_with_detailed_message()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
-
         // Clear all possible config values
         config(['app.remote_repository.base_uri' => null]);
         config(['jsonapi.base_uri' => null]);
@@ -366,7 +321,7 @@ class RemoteRepositoryBasicTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('No remote service base URI configured. Checked the following config keys: app.remote_repository.base_uri, jsonapi.base_uri, pxc.base_api_uri, remote.base_uri. Please set one of these configuration values.');
 
-        new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -378,7 +333,6 @@ class RemoteRepositoryBasicTest extends TestCase
     public function test_get_configured_base_uri_uses_first_available_config()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
 
         // Set different values for each config key
         config(['app.remote_repository.base_uri' => 'https://app.example.com']);
@@ -391,7 +345,7 @@ class RemoteRepositoryBasicTest extends TestCase
             ->method('setBaseUri')
             ->with('https://app.example.com');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($mockClient, $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -410,8 +364,7 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_recoverable_error_returns_document_interface()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
+        $mockClient = $this->createMockClient();
 
         // Mock a response with a recoverable error
         $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
@@ -435,18 +388,7 @@ class RemoteRepositoryBasicTest extends TestCase
             ->method('get')
             ->willReturn($mockResponse);
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicGet($url)
-            {
-                return $this->get($url);
-            }
-        };
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient);
 
         $result = $repository->publicGet('/test-url');
 
@@ -460,7 +402,6 @@ class RemoteRepositoryBasicTest extends TestCase
     public function test_get_configured_base_uri_uses_legacy_fallback_when_new_config_missing()
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockMachineTokenService = $this->createMockMachineTokenService();
 
         // Clear new config but set legacy configs
         config(['app.remote_repository.base_uri' => null]);
@@ -473,7 +414,7 @@ class RemoteRepositoryBasicTest extends TestCase
             ->method('setBaseUri')
             ->with('https://jsonapi.example.com');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
+        $repository = new class($mockClient, $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -492,12 +433,10 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_constructor_validates_machine_token_service()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-
         // Test with non-interface implementation - PHP will throw TypeError
         $this->expectException(\TypeError::class);
 
-        new class($mockClient, 'invalid') extends RemoteRepository
+        new class($this->createMockClient(), 'invalid') extends RemoteRepository
         {
             protected function filter(array $data)
             {
@@ -527,32 +466,10 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_token_retrieval_failure_occurs_on_first_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        $mockMachineTokenService = new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                throw new \Exception('Token service unavailable');
-            }
-        };
+        $failingTokenService = $this->createFailingTokenService('Token service unavailable');
 
         // Constructor should NOT throw exception anymore (lazy loading)
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function triggerTokenLoad()
-            {
-                $this->ensureTokenLoaded();
-            }
-        };
+        $repository = $this->createTestRepositoryWithTokenTrigger($this->createMockClient(), $failingTokenService);
 
         // Exception should be thrown when token is actually needed
         $this->expectException(\RuntimeException::class);
@@ -563,33 +480,10 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_token_validation_occurs_on_first_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Test with empty string token
-        $mockMachineTokenService = new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                return '   ';
-            }
-        };
+        $emptyTokenService = $this->createEmptyTokenService();
 
         // Constructor should NOT throw exception anymore (lazy loading)
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function triggerTokenLoad()
-            {
-                $this->ensureTokenLoaded();
-            }
-        };
+        $repository = $this->createTestRepositoryWithTokenTrigger($this->createMockClient(), $emptyTokenService);
 
         // Exception should be thrown when token is actually needed
         $this->expectException(\RuntimeException::class);
@@ -600,11 +494,6 @@ class RemoteRepositoryBasicTest extends TestCase
 
     public function test_token_type_validation_occurs_on_first_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
         // Test with non-string token - TypeError from return type gets caught and wrapped
         $mockMachineTokenService = new class implements MachineTokenServiceInterface
         {
@@ -615,51 +504,11 @@ class RemoteRepositoryBasicTest extends TestCase
         };
 
         // Constructor should NOT throw exception anymore (lazy loading)
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function triggerTokenLoad()
-            {
-                $this->ensureTokenLoaded();
-            }
-        };
+        $repository = $this->createTestRepositoryWithTokenTrigger($this->createMockClient(), $mockMachineTokenService);
 
         // Exception should be thrown when token is actually needed
         $this->expectException(\TypeError::class);
 
         $repository->triggerTokenLoad();
-    }
-
-    private function createMockMachineTokenService(): MachineTokenServiceInterface
-    {
-        return new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                return 'test-token';
-            }
-        };
-    }
-
-    private function createConcreteRepository($client, MachineTokenServiceInterface $machineTokenService)
-    {
-        // Set up client expectations if it's a mock
-        if (method_exists($client, 'expects')) {
-            $client->expects($this->once())
-                ->method('setBaseUri')
-                ->with($this->isType('string'));
-        }
-
-        return new class($client, $machineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-        };
     }
 }

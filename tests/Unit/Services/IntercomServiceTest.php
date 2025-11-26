@@ -8,28 +8,19 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use NuiMarkets\LaravelSharedUtils\Services\IntercomService;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\IntercomTestHelpers;
 
 class IntercomServiceTest extends TestCase
 {
+    use IntercomTestHelpers;
+
     private IntercomService $service;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Mock config for testing
-        Config::set('intercom', [
-            'token' => 'test-token',
-            'api_version' => '2.11',
-            'base_url' => 'https://api.intercom.io',
-            'enabled' => true,
-            'service_name' => 'connect-service-test',
-            'timeout' => 10,
-            'fail_silently' => true,
-            'batch_size' => 50,
-            'event_prefix' => 'connect',
-        ]);
-
+        $this->setUpIntercomConfig();
         $this->service = new IntercomService;
     }
 
@@ -45,7 +36,7 @@ class IntercomServiceTest extends TestCase
 
     public function test_service_disabled_when_no_token(): void
     {
-        Config::set('intercom.token', '');
+        $this->setUpIntercomConfigWithoutToken();
         $service = new IntercomService;
 
         $this->assertFalse($service->isEnabled());
@@ -53,7 +44,7 @@ class IntercomServiceTest extends TestCase
 
     public function test_service_disabled_when_not_enabled(): void
     {
-        Config::set('intercom.enabled', false);
+        $this->setUpIntercomConfigDisabled();
         $service = new IntercomService;
 
         $this->assertFalse($service->isEnabled());
@@ -61,12 +52,7 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_success(): void
     {
-        Http::fake([
-            'https://api.intercom.io/*' => Http::response([
-                'type' => 'event',
-                'id' => 'event-123',
-            ], 200),
-        ]);
+        $this->fakeIntercomApiSuccess();
 
         $result = $this->service->trackEvent('user-123', 'product_viewed', [
             'product_id' => 'prod-456',
@@ -90,11 +76,7 @@ class IntercomServiceTest extends TestCase
 
     public function test_track_event_failure(): void
     {
-        Http::fake([
-            'https://api.intercom.io/*' => Http::response([
-                'errors' => [['message' => 'Invalid user']],
-            ], 400),
-        ]);
+        $this->fakeIntercomApiError(400, [['message' => 'Invalid user']]);
 
         Log::shouldReceive('info')->twice(); // Once for trackEvent called, once for Sending event
         Log::shouldReceive('warning')->once();
@@ -108,7 +90,7 @@ class IntercomServiceTest extends TestCase
     {
         Http::fake();
 
-        Config::set('intercom.enabled', false);
+        $this->setUpIntercomConfigDisabled();
         $service = new IntercomService;
 
         $result = $service->trackEvent('user-123', 'test_event', []);

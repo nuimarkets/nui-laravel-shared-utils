@@ -2,26 +2,20 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging\Processors;
 
-use Monolog\Level;
 use Monolog\LogRecord;
 use NuiMarkets\LaravelSharedUtils\Logging\Processors\AddTargetProcessor;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\LoggingTestHelpers;
 
 class AddTargetProcessorTest extends TestCase
 {
+    use LoggingTestHelpers;
+
     public function test_adds_target_to_array_record()
     {
         $processor = new AddTargetProcessor('connect-order');
 
-        $record = [
-            'message' => 'Test message',
-            'context' => ['user_id' => 123],
-            'level' => 200,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+        $record = $this->createLogRecord(context: ['user_id' => 123]);
 
         $processed = $processor($record);
 
@@ -34,18 +28,12 @@ class AddTargetProcessorTest extends TestCase
     {
         $processor = new AddTargetProcessor('connect-order');
 
-        $record = [
-            'message' => 'Test message',
-            'context' => [
+        $record = $this->createLogRecord(
+            context: [
                 'target' => 'existing-target',
                 'user_id' => 123,
-            ],
-            'level' => 200,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+            ]
+        );
 
         $processed = $processor($record);
 
@@ -56,18 +44,12 @@ class AddTargetProcessorTest extends TestCase
     {
         $processor = new AddTargetProcessor('connect-order', true);
 
-        $record = [
-            'message' => 'Test message',
-            'context' => [
+        $record = $this->createLogRecord(
+            context: [
                 'target' => 'existing-target',
                 'user_id' => 123,
-            ],
-            'level' => 200,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+            ]
+        );
 
         $processed = $processor($record);
 
@@ -78,15 +60,7 @@ class AddTargetProcessorTest extends TestCase
     {
         $processor = new AddTargetProcessor('connect-auth');
 
-        $record = [
-            'message' => 'Test message',
-            'context' => [],
-            'level' => 200,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+        $record = $this->createLogRecord();
 
         $processed = $processor($record);
 
@@ -137,21 +111,11 @@ class AddTargetProcessorTest extends TestCase
 
     public function test_works_with_monolog3_log_record()
     {
-        // Skip if Monolog 3 is not available
-        if (! class_exists(LogRecord::class)) {
-            $this->markTestSkipped('Monolog 3 LogRecord not available');
-        }
+        $this->skipIfMonolog3NotAvailable();
 
         $processor = new AddTargetProcessor('connect-product');
 
-        $record = new LogRecord(
-            datetime: new \DateTimeImmutable,
-            channel: 'test',
-            level: Level::Info,
-            message: 'Test message',
-            context: ['user_id' => 456],
-            extra: []
-        );
+        $record = $this->createMonolog3Record(context: ['user_id' => 456]);
 
         $processed = $processor($record);
 
@@ -163,29 +127,22 @@ class AddTargetProcessorTest extends TestCase
 
     public function test_preserves_other_log_record_properties()
     {
-        // Skip if Monolog 3 is not available
-        if (! class_exists(LogRecord::class)) {
-            $this->markTestSkipped('Monolog 3 LogRecord not available');
-        }
+        $this->skipIfMonolog3NotAvailable();
 
         $processor = new AddTargetProcessor('connect-surplus');
-        $datetime = new \DateTimeImmutable;
 
-        $record = new LogRecord(
-            datetime: $datetime,
-            channel: 'custom-channel',
-            level: Level::Warning,
+        $record = $this->createMonolog3Record(
             message: 'Warning message',
-            context: [],
-            extra: ['custom' => 'extra']
+            level: self::LOG_LEVEL_WARNING,
+            extra: ['custom' => 'extra'],
+            channel: 'custom-channel'
         );
 
         $processed = $processor($record);
 
         // All other properties should remain unchanged
-        $this->assertEquals($datetime, $processed->datetime);
         $this->assertEquals('custom-channel', $processed->channel);
-        $this->assertEquals(Level::Warning, $processed->level);
+        $this->assertEquals(\Monolog\Level::Warning, $processed->level);
         $this->assertEquals('Warning message', $processed->message);
         $this->assertEquals(['custom' => 'extra'], $processed->extra);
     }
