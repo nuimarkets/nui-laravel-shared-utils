@@ -35,27 +35,39 @@ Route::get('/healthcheck', [HealthCheckController::class, 'detailed']);
 ## Key Features
 
 ### **Request Lifecycle Logging**
+
 Complete request tracking with automatic performance metrics, X-Ray trace correlation, and customizable service context. One middleware class gives you request start/complete logs, duration tracking, memory usage, and business logic correlation.
 
 ### **Distributed Tracing**
+
 Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration. Automatic response headers (`X-Request-ID` and `X-Trace-ID`) for frontend correlation.
 
 ### **Advanced Logging**
+
 Production-ready logging with automatic Elasticsearch routing, configurable sensitive data redaction, and structured JSON formatting. Fixes common logging issues that cause logs to end up in wrong indexes. Supports privacy compliance with flexible field-level redaction controls.
 
 ### **Health Monitoring**
+
 Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cache, and PHP environment. Get detailed diagnostics with a single endpoint.
 
 ### **Service Communication**
-Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, intelligent caching, and automatic JWT authentication. Tokens loaded on-demand during first request—improves instantiation speed and resilience.
+
+Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, automatic JWT authentication, and proper HTTP status propagation.
+
+### **Failure Caching**
+
+Intelligent caching of remote service failures to prevent cascading timeouts during outages. HTTP status-aware TTLs cache 404s longer than transient errors like timeouts. Includes failure classification, configurable per-category TTLs, and convenience methods for handling cached failures gracefully.
 
 ### **Analytics Integration**
+
 Complete Intercom integration for user analytics and event tracking with queue-based processing and multi-tenant support.
 
 ### **JSON API Validation**
+
 Standardized JSON:API error handling with consistent validation responses. Provides unified error formatting across all services without configuration.
 
 ### **Testing Utilities**
+
 Automated test database management, specialized test jobs for queue testing, JSON API validation assertions, and base test cases for rapid test development.
 
 ## Requirements
@@ -90,6 +102,7 @@ php artisan vendor:publish --tag=intercom-config
 | **Distributed Tracing** | AWS X-Ray integration with request correlation | [Guide](docs/distributed-tracing.md) |
 | **Logging System** | Enhanced logging with Elasticsearch routing | [Guide](docs/logging-integration.md) |
 | **RemoteRepository** | Service-to-service communication framework | [Guide](docs/RemoteRepository.md) |
+| **Failure Caching** | Cache remote failures to prevent cascading timeouts | [Guide](docs/failure-caching.md) |
 | **JSON API Validation** | Standardized error handling with unified formatting | [Guide](docs/json-api-validation.md) |
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
@@ -264,6 +277,7 @@ $processor = new SensitiveDataProcessor([], false);
 ```
 
 **Field Categories:**
+
 - **Auth fields** (always redacted): password, token, secret, api_key, jwt, bearer
 - **PII fields** (redacted by default): email, phone, address, ssn, credit_card, bank_account
 - **Preserve fields**: Override redaction for specific debugging-friendly fields
@@ -271,6 +285,7 @@ $processor = new SensitiveDataProcessor([], false);
 ## Architecture
 
 This package follows a **trait-based architecture** allowing you to:
+
 - Use only the components you need
 - Extend base classes for customization
 - Integrate gradually into existing codebases
@@ -319,6 +334,14 @@ Add to your `config/app.php`:
     'base_uri' => env('API_GATEWAY_ENDPOINT'),
     'max_url_length' => env('REMOTE_REPOSITORY_MAX_URL_LENGTH', 2048),
     'log_requests' => env('REMOTE_REPOSITORY_LOG_REQUESTS', true),
+
+    // Failure caching (optional - defaults shown)
+    'failure_cache_ttl' => env('REMOTE_FAILURE_CACHE_TTL', 120),
+    'failure_cache_ttl_by_category' => [
+        'not_found' => 600,      // 10 min for 404s
+        'timeout' => 30,         // 30 sec for timeouts
+        'server_error' => 120,   // 2 min for 5xx errors
+    ],
 ],
 ```
 
@@ -365,7 +388,6 @@ We welcome contributions! Please follow these guidelines:
 - JWT token validation for service-to-service communication
 - Environment-aware security settings
 - No credentials stored in code
-
 
 ## License
 

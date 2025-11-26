@@ -11,6 +11,8 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 - [Basic Usage](#basic-usage)
 - [Configuration](#configuration)
 - [Error Handling](#error-handling)
+- [HTTP Status Code Preservation](#http-status-code-preservation)
+- [Failure Caching](#failure-caching)
 - [Performance Monitoring](#performance-monitoring)
 - [Caching](#caching)
 - [Testing](#testing)
@@ -20,6 +22,7 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 ## Features
 
 ### Core Functionality
+
 - **JSON API Client Integration** - Built on `swisnl/json-api-client` for standardized API communication
 - **Lazy Token Loading** - Authentication tokens loaded on-demand to improve instantiation performance
 - **JWT Authentication** - Automatic machine token injection for service-to-service communication
@@ -27,18 +30,23 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 - **URL Length Validation** - Prevents HTTP 414 errors by validating request URL lengths
 
 ### Enhanced Error Handling
+
 - **ValidationException Support** - Graceful handling of malformed API responses
+- **HTTP Status Preservation** - Original status codes (404, 500, etc.) preserved instead of 502
 - **Specialized Error Patterns** - Custom handling for known error scenarios
 - **Comprehensive Logging** - Detailed error reporting with Sentry integration
 - **Fallback Mechanisms** - Graceful degradation when external services are unavailable
+- **Failure Caching** - Cache failed lookups to prevent cascading timeouts
 
 ### Performance Features
+
 - **ProfilingTrait Integration** - Built-in performance monitoring and timing breakdowns
 - **Request/Response Logging** - Configurable debug logging for API calls
 - **Caching Support** - Intelligent caching for single items and collections
 - **Memory Efficient** - Optimized for high-throughput scenarios
 
 ### Configuration Flexibility
+
 - **Multi-Config Fallback** - Supports multiple configuration sources (`jsonapi`, `pxc`, `remote`)
 - **Environment Awareness** - Adapts behavior based on application environment
 - **Tenant Isolation** - Full support for multi-tenant architectures
@@ -54,6 +62,7 @@ composer require nuimarkets/laravel-shared-utils
 ### Dependencies
 
 Required dependencies are automatically installed:
+
 - `swisnl/json-api-client: ^2.2`
 - `laravel/framework: ^8.0|^9.0|^10.0`
 
@@ -146,17 +155,22 @@ public function getProducts(array $productIds)
 
 ### Base URI Configuration
 
-The RemoteRepository supports multiple configuration sources with automatic fallback:
+The RemoteRepository requires a base URI configuration:
 
 ```php
-// config/jsonapi.php (Primary)
-'base_uri' => env('JSONAPI_BASE_URI', 'https://api.example.com'),
+// config/app.php (Recommended)
+'remote_repository' => [
+    'base_uri' => env('REMOTE_BASE_URI', 'https://api.example.com'),
+],
+```
 
-// config/pxc.php (Fallback)
-'base_api_uri' => env('PXC_BASE_API_URI', 'https://pxc-api.example.com'),
+**Legacy fallback keys** (deprecated, will log warnings):
 
-// config/remote.php (Final Fallback)
-'base_uri' => env('REMOTE_BASE_URI', 'https://remote-api.example.com'),
+```php
+// These still work but will trigger deprecation warnings:
+// - config/jsonapi.php: 'base_uri'
+// - config/pxc.php: 'base_api_uri'
+// - config/remote.php: 'base_uri'
 ```
 
 ### Request Configuration
@@ -210,6 +224,178 @@ $response = $repository->get('/api/delivery-addresses');
 // Returns: (object) ['error' => 'Duplicate active delivery...']
 // Instead of throwing an exception
 ```
+
+## HTTP Status Code Preservation
+
+The RemoteRepository now preserves original HTTP status codes from remote services instead of wrapping all errors as 502 (Bad Gateway).
+
+### Before vs After
+
+| Remote Response | Before | After |
+|-----------------|--------|-------|
+| 404 Not Found | 502 | 404 |
+| 500 Server Error | 502 | 500 |
+| 503 Service Unavailable | 502 | 503 |
+| 429 Rate Limited | 502 | 429 |
+| 401 Unauthorized | 502 | 401 |
+| 403 Forbidden | 502 | 403 |
+
+### Benefits
+
+- **Smarter retry logic** - Don't retry 404s, do retry 503s
+- **Better failure classification** - Distinguish between "doesn't exist" and "server down"
+- **Accurate monitoring** - Dashboards show real error distribution
+- **Intelligent caching** - Cache 404s longer than transient errors
+
+### Handling Status Codes
+
+```php
+use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
+
+try {
+    $product = $repository->findById('product-123');
+} catch (RemoteServiceException $e) {
+    match ($e->getStatusCode()) {
+        404 => return null,           // Product doesn't exist
+        429 => sleep(60),             // Rate limited, wait
+        503 => $this->retry(),        // Server down, retry
+        401, 403 => throw $e,         // Auth error, don't retry
+        default => throw $e,
+    };
+}
+```
+
+### Breaking Change Note
+
+> **Important:** Code checking `$e->getCode() === 502` should be updated to use `$e->getStatusCode()` and handle specific status codes appropriately.
+
+## Failure Caching
+
+The `CachesFailedLookups` trait prevents cascading timeouts by caching failed lookups for a configurable TTL. When a lookup fails, subsequent requests receive a cached failure response instead of retrying the expensive call.
+
+### When to Use
+
+- **High-traffic endpoints** that call external services
+- **Relationship lookups** between entities
+- **Any lookup** where repeated failures would cause cascading timeouts
+
+### Basic Usage
+
+```php
+use NuiMarkets\LaravelSharedUtils\RemoteRepositories\Concerns\CachesFailedLookups;
+use NuiMarkets\LaravelSharedUtils\Exceptions\CachedLookupFailureException;
+
+class ProductRepository extends RemoteRepository
+{
+    use CachesFailedLookups;
+
+    public function getById(string $id)
+    {
+        // Check cache first - throws CachedLookupFailureException if recently failed
+        $this->throwIfCachedLookupFailed('product', $id);
+
+        try {
+            $res = $this->get("api/products/{$id}");
+            return $this->handleResponse($res);
+        } catch (\Exception $e) {
+            // Cache failure for subsequent requests
+            $this->cacheLookupFailure('product', $e, $id);
+            throw $e;
+        }
+    }
+}
+```
+
+### Handling Cached Failures
+
+```php
+try {
+    $product = $repo->getById($productId);
+} catch (CachedLookupFailureException $e) {
+    // Check failure type with convenience methods
+    if ($e->isNotFound()) {
+        return null;  // Resource genuinely doesn't exist
+    }
+    if ($e->isTransient()) {
+        // Timeout, server error, rate limited - might recover
+        Log::info('Transient failure', [
+            'category' => $e->getFailureCategory(),
+            'http_status' => $e->getHttpStatus(),
+        ]);
+    }
+    return $defaultValue;
+} catch (RemoteServiceException $e) {
+    // Real failure (first occurrence)
+    throw $e;
+}
+```
+
+### Failure Categories
+
+| Category | HTTP Status | Default TTL | Description |
+|----------|-------------|-------------|-------------|
+| `not_found` | 404 | 10 min | Resource doesn't exist |
+| `auth_error` | 401, 403 | 5 min | Auth/permissions issue |
+| `rate_limited` | 429 | 1 min | Honor rate limiting |
+| `server_error` | 5xx | 2 min | Server problems |
+| `timeout` | - | 30 sec | Request timed out |
+| `connection_error` | - | 30 sec | Network failure |
+| `client_error` | 4xx | 5 min | Bad request data |
+| `unknown` | - | 2 min | Unclassified failure |
+
+### Configuration
+
+```php
+// config/app.php
+'remote_repository' => [
+    // Default TTL for all failure types (seconds)
+    'failure_cache_ttl' => env('REMOTE_FAILURE_CACHE_TTL', 120),
+
+    // Per-category TTL overrides (optional)
+    'failure_cache_ttl_by_category' => [
+        'not_found' => 600,       // 10 min
+        'auth_error' => 300,      // 5 min
+        'rate_limited' => 60,     // 1 min
+        'server_error' => 120,    // 2 min
+        'timeout' => 30,          // 30 sec
+        'connection_error' => 30, // 30 sec
+    ],
+],
+```
+
+### Cache Invalidation
+
+Clear cached failures after creating resources:
+
+```php
+public function create(array $data)
+{
+    $res = $this->post("api/products", $this->makeRequestBody($data));
+    $product = $this->handleResponse($res);
+
+    // Clear any cached 404 failure for this ID
+    $this->clearCachedLookupFailure('product', $product->id);
+
+    return $product;
+}
+```
+
+### Debugging
+
+```php
+// Get cached failure data for debugging
+$cachedData = $this->getCachedFailureData('product', $id);
+if ($cachedData) {
+    Log::debug('Found cached failure', [
+        'cached_at' => $cachedData['cached_at'],
+        'http_status' => $cachedData['http_status'],
+        'failure_category' => $cachedData['failure_category'],
+        'exception_class' => $cachedData['exception_class'],
+    ]);
+}
+```
+
+[See full failure caching guide →](failure-caching.md)
 
 ## Performance Monitoring
 
@@ -279,12 +465,14 @@ if ($repository->hasId('product-123')) {
     $product = $repository->findByIdWithoutRetrieve('product-123');
 }
 
-// Force API call even if cached
+// Retrieve item - uses cache if available, otherwise fetches from API
 $product = $repository->findById('product-123');
 
 // Access cache directly
 $allCached = $repository->query(); // Returns Collection
 ```
+
+**Note:** The in-memory cache is per-request. Items fetched during a request are cached for subsequent lookups within the same request. This is not persistent caching - each new request starts with an empty cache.
 
 ## Testing
 
@@ -364,42 +552,53 @@ use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 ### Core Methods
 
 #### `get(string $url): DocumentInterface`
+
 Performs GET request with automatic retry and error handling.
 
 #### `getUserUrl(string $url): DocumentInterface`
+
 Specialized GET method for user-related endpoints.
 
 #### `post(string $url, ItemDocumentInterface $data): DocumentInterface`
+
 Performs POST request with request body.
 
 ### Caching Methods
 
 #### `cache(DocumentInterface $response): void`
+
 Caches all items from a collection response.
 
 #### `cacheOne(DocumentInterface $response): void`
+
 Caches a single item from response.
 
 #### `hasId(string $id): bool`
+
 Checks if item exists in cache.
 
 #### `query(): Collection`
+
 Returns the internal cache collection.
 
 ### Utility Methods
 
 #### `makeRequestBody(array $data): SimpleDocument`
+
 Creates JSON API request body from array data.
 
 #### `allowedGetRequest(string $url): bool`
+
 Validates if GET request URL length is within limits.
 
 #### `handleResponse(DocumentInterface $response): mixed`
+
 Processes API response and extracts data.
 
 ### Abstract Methods
 
 #### `abstract protected filter(array $data): mixed`
+
 Must be implemented by child classes to handle data filtering and retrieval logic.
 
 ---
@@ -407,6 +606,7 @@ Must be implemented by child classes to handle data filtering and retrieval logi
 ## Best Practices
 
 ### 1. Lazy Token Loading
+
 The RemoteRepository uses lazy token loading for optimal performance:
 
 ```php
@@ -421,6 +621,7 @@ $product = $repository->findById('product-456');
 ```
 
 **Benefits:**
+
 - **Faster instantiation** - No token service calls during object creation
 - **Better resilience** - Repository can be created even if token service is temporarily unavailable
 - **Reduced overhead** - Token only loaded when actually needed
@@ -429,37 +630,79 @@ $product = $repository->findById('product-456');
 **Note:** Non-request operations (like `query()`, `hasId()`) do not trigger token loading.
 
 ### 2. Error Handling
-Always catch and handle `RemoteServiceException`.
+
+Always catch `RemoteServiceException` and handle based on HTTP status:
+
+```php
+try {
+    $data = $repository->findById($id);
+} catch (RemoteServiceException $e) {
+    if ($e->getStatusCode() === 404) {
+        return null; // Not found is often acceptable
+    }
+    throw $e; // Re-throw other errors
+}
+```
 
 ### 3. URL Length Management
-Use POST for large requests when URL length exceeds limits.
 
-### 4. Efficient Caching
-Leverage cache to minimize API calls.
+Use `allowedGetRequest()` to check URL length and fall back to POST for large payloads:
 
-### 5. Performance Monitoring
-Enable profiling in production for monitoring.
+```php
+$url = 'v1/products?ids=' . implode(',', $productIds);
 
-### 6. Configuration
-Use environment-specific configuration.
+if ($this->allowedGetRequest($url)) {
+    $response = $this->get($url);
+} else {
+    // Too many IDs - use POST instead
+    $body = $this->makeRequestBody(['ids' => $productIds]);
+    $response = $this->post('v1/products/filter', $body);
+}
+```
+
+### 4. Leverage In-Memory Caching
+
+The repository caches fetched items for the duration of the request. Fetch items once and reuse:
+
+```php
+// First call fetches from API and caches
+$products = $repository->findByIds($allProductIds);
+
+// Later lookups use cache - no API call
+foreach ($orderItems as $item) {
+    $product = $repository->findByIdWithoutRetrieve($item->product_id);
+}
+```
+
+### 5. Enable Request Logging for Debugging
+
+Set `REMOTE_REPOSITORY_LOG_REQUESTS=true` in development to see all API calls:
+
+```bash
+# .env
+REMOTE_REPOSITORY_LOG_REQUESTS=true
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Issue: "Client not initialized" error in tests**
+#### "Client not initialized" error in tests
+
 ```php
 // Solution: Mock the repository or bypass client initialization
 $repository = Mockery::mock(ProductRepository::class)->makePartial();
 ```
 
-**Issue: ValidationException on malformed responses**
+#### ValidationException on malformed responses
+
 ```php
 // Automatic handling - check logs for details
 Log::error('Remote API returned non-JSON API compliant response');
 ```
 
-**Issue: URL too long for GET requests**
+#### URL too long for GET requests
+
 ```php
 // Use allowedGetRequest() and fallback to POST
 if (!$this->allowedGetRequest($url)) {
