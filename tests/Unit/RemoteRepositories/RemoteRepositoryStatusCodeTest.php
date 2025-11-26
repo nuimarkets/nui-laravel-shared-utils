@@ -5,14 +5,9 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Support\Facades\Log;
 use Mockery;
-use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
-use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Psr\Http\Message\ResponseInterface;
-use Swis\JsonApi\Client\Error as JsonApiError;
-use Swis\JsonApi\Client\ErrorCollection;
-use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\DocumentInterface;
 
 /**
@@ -23,10 +18,12 @@ use Swis\JsonApi\Client\Interfaces\DocumentInterface;
  */
 class RemoteRepositoryStatusCodeTest extends TestCase
 {
+    use RemoteRepositoryTestHelpers;
+
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.remote_repository.base_uri' => 'https://test.example.com']);
+        $this->setUpRemoteRepositoryConfig();
     }
 
     // ========================================================================
@@ -148,10 +145,7 @@ class RemoteRepositoryStatusCodeTest extends TestCase
         Log::shouldReceive('error')->once();
 
         $repository = $this->createTestRepository();
-
-        $response = Mockery::mock(DocumentInterface::class);
-        $response->shouldReceive('hasErrors')->andReturn(true);
-        $response->shouldReceive('getResponse')->andReturn(null);
+        $response = $this->createNullHttpResponse();
 
         try {
             $repository->handleResponse($response);
@@ -223,63 +217,100 @@ class RemoteRepositoryStatusCodeTest extends TestCase
         }
     }
 
-    // ========================================================================
-    // Helper Methods
-    // ========================================================================
-
-    private function createTestRepository(): RemoteRepository
+    public function test_handle_response_does_not_include_endpoint_in_log(): void
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->any())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                // handleResponse() should NOT include api.endpoint since it doesn't know the URL
+                return $message === 'Remote service error'
+                    && ! isset($context['api.endpoint']);
+            });
 
-        $mockMachineTokenService = new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                return 'test-token';
-            }
-        };
+        $repository = $this->createTestRepository();
+        $response = $this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}');
 
-        return new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-        };
+        try {
+            $repository->handleResponse($response);
+        } catch (RemoteServiceException $e) {
+            // Expected
+        }
     }
 
-    private function createErrorResponse(int $statusCode, string $body): DocumentInterface
+    // ========================================================================
+    // handleApiErrors() / get() Endpoint Logging Tests
+    // ========================================================================
+
+    public function test_get_includes_endpoint_in_error_log(): void
     {
-        $httpResponse = Mockery::mock(ResponseInterface::class);
-        $httpResponse->shouldReceive('getStatusCode')->andReturn($statusCode);
-        $httpResponse->shouldReceive('getBody')->andReturn(Utils::streamFor($body));
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                return $message === 'Remote service error'
+                    && isset($context['api.endpoint'])
+                    && $context['api.endpoint'] === '/test/endpoint';
+            });
 
-        $response = Mockery::mock(DocumentInterface::class);
-        $response->shouldReceive('hasErrors')->andReturn(true);
-        $response->shouldReceive('getResponse')->andReturn($httpResponse);
-        $response->shouldReceive('getErrors')->andReturn($this->createErrorCollection('Error detail'));
+        $mockClient = $this->createMockClient();
+        $mockClient->expects($this->once())
+            ->method('get')
+            ->with('/test/endpoint', $this->anything())
+            ->willReturn($this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}'));
 
-        return $response;
+        $repository = $this->createTestRepository($mockClient);
+
+        try {
+            $repository->get('/test/endpoint');
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            // get() wraps all exceptions with 503 after retry exhaustion
+            $this->assertEquals(503, $e->getStatusCode());
+        }
     }
 
-    private function createErrorCollection(string $detail): ErrorCollection
+    public function test_get_includes_endpoint_in_null_response_error_log(): void
     {
-        $errorCollection = new ErrorCollection;
-        $error = new JsonApiError(
-            null, // id
-            null, // links
-            null, // status
-            null, // code
-            null, // title
-            $detail, // detail
-            null, // source
-            null  // meta
-        );
-        $errorCollection->push($error);
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                return $message === 'Remote service error: No HTTP response available'
+                    && isset($context['api.endpoint'])
+                    && $context['api.endpoint'] === '/test/null-response';
+            });
 
-        return $errorCollection;
+        $mockClient = $this->createMockClient();
+        $mockClient->expects($this->once())
+            ->method('get')
+            ->willReturn($this->createNullHttpResponse());
+
+        $repository = $this->createTestRepository($mockClient);
+
+        try {
+            $repository->get('/test/null-response');
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            // get() wraps all exceptions with 503 after retry exhaustion
+            $this->assertEquals(503, $e->getStatusCode());
+        }
+    }
+
+    public function test_handle_response_null_response_does_not_include_endpoint(): void
+    {
+        Log::shouldReceive('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                return $message === 'Remote service error: No HTTP response available'
+                    && ! isset($context['api.endpoint']);
+            });
+
+        $repository = $this->createTestRepository();
+        $response = $this->createNullHttpResponse();
+
+        try {
+            $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            $this->assertEquals(502, $e->getStatusCode());
+        }
     }
 }
