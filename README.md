@@ -52,7 +52,7 @@ Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cac
 
 ### **Service Communication**
 
-Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, intelligent caching, automatic JWT authentication, and **HTTP status code preservation**. Original status codes (404, 500, 503, etc.) are preserved instead of being wrapped as 502, enabling smarter retry logic and failure classification.
+Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, intelligent caching, automatic JWT authentication, and proper HTTP status propagation.
 
 ### **Failure Caching**
 
