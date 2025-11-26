@@ -36,7 +36,7 @@ abstract class RemoteRepository
     private ?string $token = null;
 
     /**
-     * @var array - Headers to be send with each request
+     * @var array - Headers to be sent with each request
      */
     private array $headers;
 
@@ -436,14 +436,21 @@ abstract class RemoteRepository
                 $res = $this->client->post($url, $data, $this->headers);
 
                 if ($res->hasErrors()) {
+                    $httpResponse = $res->getResponse();
+                    $statusCode = $httpResponse
+                        ? self::extractValidHttpStatusCode($httpResponse->getStatusCode())
+                        : 502;
+
                     $errorDetails = array_map(
                         static fn ($e) => $e->getDetail() ?? '',
                         $res->getErrors()->toArray()
                     );
 
-                    Log::error('Error calling service', [
-                        'url' => $url,
-                        'errors' => $errorDetails,
+                    Log::error('Remote service error', [
+                        'api.service' => static::class,
+                        'api.endpoint' => $url,
+                        'api.status' => $statusCode,
+                        'api.error' => implode('; ', $errorDetails),
                     ]);
 
                     foreach ($res->getErrors() as $error) {
@@ -451,7 +458,7 @@ abstract class RemoteRepository
                     }
 
                     $errorMessage = 'Error calling service. Returned: '.implode('; ', $errorDetails);
-                    throw new RemoteServiceException($errorMessage, 502);
+                    throw new RemoteServiceException($errorMessage, $statusCode);
                 }
 
                 $this->profileEnd(__METHOD__, $startTime);
@@ -509,15 +516,68 @@ abstract class RemoteRepository
     }
 
     /**
-     * Handle API errors from valid JSON API responses
+     * Handle API errors from valid JSON API responses.
+     *
+     * Preserves the original HTTP status code from the remote service instead of
+     * wrapping all errors as 502. This enables smarter retry logic and caching
+     * based on the actual error type.
      */
     private function handleApiErrors(DocumentInterface $response, string $url): void
     {
-        Log::error('Error calling service.'.PHP_EOL.'Body: '.$response->getResponse()->getBody());
-        foreach ($response->getErrors() as $error) {
-            Log::error($error->getDetail());
+        $httpResponse = $response->getResponse();
+
+        // Handle edge case where response is null
+        if ($httpResponse === null) {
+            Log::error('Remote service error: No HTTP response available', [
+                'api.service' => static::class,
+                'api.endpoint' => $url,
+            ]);
+            throw new RemoteServiceException('Error calling service: No response available', 502);
         }
-        throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody(), 502);
+
+        $statusCode = self::extractValidHttpStatusCode($httpResponse->getStatusCode());
+        $body = (string) $httpResponse->getBody();
+
+        // Collect error details for structured logging
+        $errorDetails = [];
+        foreach ($response->getErrors() as $error) {
+            $errorDetails[] = $error->getDetail();
+        }
+
+        Log::error('Remote service error', [
+            'api.service' => static::class,
+            'api.endpoint' => $url,
+            'api.status' => $statusCode,
+            'api.error' => implode('; ', $errorDetails),
+            'response_body' => $body,
+        ]);
+
+        throw new RemoteServiceException(
+            'Error calling service. Returned: '.$body,
+            $statusCode
+        );
+    }
+
+    /**
+     * Extract and validate HTTP status code, with fallback to 502 for invalid codes.
+     */
+    private static function extractValidHttpStatusCode(?int $statusCode): int
+    {
+        // Null or invalid status code - use 502
+        if ($statusCode === null || $statusCode < 100 || $statusCode >= 600) {
+            return 502;
+        }
+
+        // If status is 2xx but we're in error handling, something is wrong - use 502
+        if ($statusCode >= 200 && $statusCode < 300) {
+            Log::warning('Received 2xx status with errors array - using 502', [
+                'original_status' => $statusCode,
+            ]);
+
+            return 502;
+        }
+
+        return $statusCode;
     }
 
     /**
@@ -584,16 +644,45 @@ abstract class RemoteRepository
     }
 
     /**
+     * Handle response and extract data, or throw exception on error.
+     *
+     * Preserves the original HTTP status code from the remote service.
+     *
      * @throws RemoteServiceException
      */
     public function handleResponse(DocumentInterface $response)
     {
         if ($response->hasErrors()) {
-            Log::error('Error calling service.'.PHP_EOL.'Body: '.$response->getResponse()->getBody());
-            foreach ($response->getErrors() as $error) {
-                Log::error($error->getDetail());
+            $httpResponse = $response->getResponse();
+
+            // Handle edge case where response is null
+            if ($httpResponse === null) {
+                Log::error('Remote service error: No HTTP response available', [
+                    'api.service' => static::class,
+                ]);
+                throw new RemoteServiceException('Error calling service: No response available', 502);
             }
-            throw new RemoteServiceException('Error calling service. Returned: '.$response->getResponse()->getBody(), 502);
+
+            $statusCode = self::extractValidHttpStatusCode($httpResponse->getStatusCode());
+            $body = (string) $httpResponse->getBody();
+
+            // Collect error details for structured logging
+            $errorDetails = [];
+            foreach ($response->getErrors() as $error) {
+                $errorDetails[] = $error->getDetail();
+            }
+
+            Log::error('Remote service error', [
+                'api.service' => static::class,
+                'api.status' => $statusCode,
+                'api.error' => implode('; ', $errorDetails),
+                'response_body' => $body,
+            ]);
+
+            throw new RemoteServiceException(
+                'Error calling service. Returned: '.$body,
+                $statusCode
+            );
         }
 
         return $response->getData();
