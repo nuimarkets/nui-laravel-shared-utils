@@ -8,10 +8,13 @@ use Mockery;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\UuidValidatingRemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 
 class UuidValidatingRemoteRepositoryTest extends TestCase
 {
+    use RemoteRepositoryTestHelpers;
+
     protected $mockClient;
 
     protected $mockTokenService;
@@ -21,8 +24,9 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->setUpRemoteRepositoryConfig();
 
-        // Mock dependencies
+        // Mock dependencies using Mockery (specific to this test class)
         $this->mockClient = Mockery::mock(DocumentClientInterface::class);
         $this->mockTokenService = Mockery::mock(MachineTokenServiceInterface::class);
 

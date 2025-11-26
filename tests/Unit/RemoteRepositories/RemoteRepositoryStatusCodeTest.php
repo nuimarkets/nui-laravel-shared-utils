@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Mockery;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 use Psr\Http\Message\ResponseInterface;
 use Swis\JsonApi\Client\Interfaces\DocumentInterface;
 

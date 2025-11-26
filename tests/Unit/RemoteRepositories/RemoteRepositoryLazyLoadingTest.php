@@ -3,78 +3,48 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
-use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
-use Swis\JsonApi\Client\Document;
-use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
-use Swis\JsonApi\Client\Interfaces\ItemDocumentInterface;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 use Swis\JsonApi\Client\Item;
 
 class RemoteRepositoryLazyLoadingTest extends TestCase
 {
+    use RemoteRepositoryTestHelpers;
+
     protected function setUp(): void
     {
         parent::setUp();
-
-        config(['app.remote_repository.base_uri' => 'https://test.example.com']);
+        $this->setUpRemoteRepositoryConfig();
     }
 
     public function test_token_not_loaded_on_construction()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
+        $mockClient = $this->createMockClient();
 
         $mockMachineTokenService = $this->createMock(MachineTokenServiceInterface::class);
         $mockMachineTokenService->expects($this->never())
             ->method('getToken');
 
         // Create repository - token should NOT be loaded yet
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-        };
+        $this->createTestRepository($mockClient, $mockMachineTokenService);
 
         // Test passes if getToken() was never called during construction
     }
 
     public function test_token_loaded_on_first_get_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Mock successful response
-        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
-        $mockResponse->method('hasErrors')->willReturn(false);
-
+        $mockClient = $this->createMockClient();
         $mockClient->expects($this->once())
             ->method('get')
-            ->willReturn($mockResponse);
+            ->willReturn($this->createSuccessResponse());
 
         $mockMachineTokenService = $this->createMock(MachineTokenServiceInterface::class);
         $mockMachineTokenService->expects($this->once())
             ->method('getToken')
             ->willReturn('test-token');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicGet($url)
-            {
-                return $this->get($url);
-            }
-        };
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient, $mockMachineTokenService);
 
         // Make first request - token should be loaded exactly once
         $repository->publicGet('/test');
@@ -82,36 +52,17 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
     public function test_token_loaded_on_first_post_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Mock successful response
-        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
-        $mockResponse->method('hasErrors')->willReturn(false);
-
+        $mockClient = $this->createMockClient();
         $mockClient->expects($this->once())
             ->method('post')
-            ->willReturn($mockResponse);
+            ->willReturn($this->createSuccessResponse());
 
         $mockMachineTokenService = $this->createMock(MachineTokenServiceInterface::class);
         $mockMachineTokenService->expects($this->once())
             ->method('getToken')
             ->willReturn('test-token');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicPost($url, ItemDocumentInterface $data)
-            {
-                return $this->post($url, $data);
-            }
-        };
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient, $mockMachineTokenService);
 
         // Create mock document
         Item::unguard();
@@ -127,36 +78,17 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
     public function test_token_loaded_only_once_for_multiple_requests()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Mock successful response
-        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
-        $mockResponse->method('hasErrors')->willReturn(false);
-
+        $mockClient = $this->createMockClient();
         $mockClient->expects($this->exactly(3))
             ->method('get')
-            ->willReturn($mockResponse);
+            ->willReturn($this->createSuccessResponse());
 
         $mockMachineTokenService = $this->createMock(MachineTokenServiceInterface::class);
         $mockMachineTokenService->expects($this->once()) // Should only be called once
             ->method('getToken')
             ->willReturn('test-token');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicGet($url)
-            {
-                return $this->get($url);
-            }
-        };
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient, $mockMachineTokenService);
 
         // Make multiple requests - token should only be loaded once
         $repository->publicGet('/test1');
@@ -166,44 +98,20 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
     public function test_authorization_header_set_on_first_request()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Mock successful response
-        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
-        $mockResponse->method('hasErrors')->willReturn(false);
+        $mockClient = $this->createMockClient();
+        $successResponse = $this->createSuccessResponse();
 
         $capturedHeaders = null;
         $mockClient->expects($this->once())
             ->method('get')
-            ->willReturnCallback(function ($url, $headers) use (&$capturedHeaders, $mockResponse) {
+            ->willReturnCallback(function ($url, $headers) use (&$capturedHeaders, $successResponse) {
                 $capturedHeaders = $headers;
 
-                return $mockResponse;
+                return $successResponse;
             });
 
-        $mockMachineTokenService = new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                return 'lazy-loaded-token';
-            }
-        };
-
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicGet($url)
-            {
-                return $this->get($url);
-            }
-        };
+        $tokenService = $this->createMockTokenService('lazy-loaded-token');
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient, $tokenService);
 
         // Make request
         $repository->publicGet('/test');
@@ -215,48 +123,23 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
     public function test_lazy_loading_preserves_trace_headers()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
-
-        // Mock successful response
-        $mockResponse = $this->createMock(\Swis\JsonApi\Client\Interfaces\DocumentInterface::class);
-        $mockResponse->method('hasErrors')->willReturn(false);
+        $mockClient = $this->createMockClient();
+        $successResponse = $this->createSuccessResponse();
 
         $capturedHeaders = null;
         $mockClient->expects($this->once())
             ->method('get')
-            ->willReturnCallback(function ($url, $headers) use (&$capturedHeaders, $mockResponse) {
+            ->willReturnCallback(function ($url, $headers) use (&$capturedHeaders, $successResponse) {
                 $capturedHeaders = $headers;
 
-                return $mockResponse;
+                return $successResponse;
             });
-
-        $mockMachineTokenService = new class implements MachineTokenServiceInterface
-        {
-            public function getToken(): string
-            {
-                return 'test-token';
-            }
-        };
 
         // Set up request with trace headers
         $this->app['request']->headers->set('X-Amzn-Trace-Id', 'Root=1-67890-abc123');
         $this->app['request']->headers->set('X-Request-ID', 'req-12345');
 
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-
-            public function publicGet($url)
-            {
-                return $this->get($url);
-            }
-        };
+        $repository = $this->createTestRepositoryWithPublicMethods($mockClient);
 
         // Make request
         $repository->publicGet('/test');
@@ -270,23 +153,14 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
     public function test_repository_can_be_instantiated_without_immediate_token_service_call()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with($this->isType('string'));
+        $mockClient = $this->createMockClient();
 
         $mockMachineTokenService = $this->createMock(MachineTokenServiceInterface::class);
         $mockMachineTokenService->expects($this->never())
             ->method('getToken');
 
         // Create repository
-        $repository = new class($mockClient, $mockMachineTokenService) extends RemoteRepository
-        {
-            protected function filter(array $data)
-            {
-                return $data;
-            }
-        };
+        $repository = $this->createTestRepository($mockClient, $mockMachineTokenService);
 
         // Use repository for non-request operations - token should NOT be loaded
         $this->assertInstanceOf(\Illuminate\Support\Collection::class, $repository->query());

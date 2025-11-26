@@ -5,9 +5,12 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 use Monolog\Logger;
 use NuiMarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\LoggingTestHelpers;
 
 class ColoredJsonLineFormatterTest extends TestCase
 {
+    use LoggingTestHelpers;
+
     private ColoredJsonLineFormatter $formatter;
 
     protected function setUp(): void
@@ -19,18 +22,10 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_formats_monolog_2_array_record_correctly()
     {
-        // Monolog 2.x array format
-        $record = [
-            'message' => 'Test message',
-            'context' => ['key' => 'value'],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [
-                'source_file' => '/path/to/TestClass.php',
-            ],
-        ];
+        $record = $this->createLogRecord(
+            context: ['key' => 'value'],
+            extra: ['source_file' => '/path/to/TestClass.php']
+        );
 
         $output = $this->formatter->format($record);
 
@@ -44,16 +39,9 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_formats_monolog_3_log_record_correctly()
     {
-        if (! class_exists('Monolog\LogRecord')) {
-            $this->markTestSkipped('Monolog 3 LogRecord class not available');
-        }
+        $this->skipIfMonolog3NotAvailable();
 
-        // Monolog 3.x LogRecord format
-        $record = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable,
-            channel: 'test',
-            level: \Monolog\Level::Info,
-            message: 'Test message',
+        $record = $this->createMonolog3Record(
             context: ['key' => 'value'],
             extra: ['source_file' => '/path/to/TestClass.php']
         );
@@ -70,15 +58,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_handles_empty_context_gracefully()
     {
-        $record = [
-            'message' => 'Test message',
-            'context' => [],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+        $record = $this->createLogRecord();
 
         $output = $this->formatter->format($record);
 
@@ -91,17 +71,9 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_extracts_class_name_from_source_file()
     {
-        $record = [
-            'message' => 'Test message',
-            'context' => [],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [
-                'source_file' => '/app/src/Services/UserServiceTrait.php',
-            ],
-        ];
+        $record = $this->createLogRecord(
+            extra: ['source_file' => '/app/src/Services/UserServiceTrait.php']
+        );
 
         $output = $this->formatter->format($record);
 
@@ -113,15 +85,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_handles_missing_source_file()
     {
-        $record = [
-            'message' => 'Test message',
-            'context' => [],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+        $record = $this->createLogRecord();
 
         $output = $this->formatter->format($record);
 
@@ -134,9 +98,8 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_formats_nested_context_data()
     {
-        $record = [
-            'message' => 'Test message',
-            'context' => [
+        $record = $this->createLogRecord(
+            context: [
                 'user' => [
                     'id' => 123,
                     'name' => 'John Doe',
@@ -145,13 +108,8 @@ class ColoredJsonLineFormatterTest extends TestCase
                     'action' => 'login',
                     'ip' => '192.168.1.1',
                 ],
-            ],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+            ]
+        );
 
         $output = $this->formatter->format($record);
 
@@ -167,27 +125,19 @@ class ColoredJsonLineFormatterTest extends TestCase
     public function test_handles_different_log_levels()
     {
         $levels = [
-            ['level' => Logger::DEBUG, 'name' => 'DEBUG'],
-            ['level' => Logger::INFO, 'name' => 'INFO'],
-            ['level' => Logger::WARNING, 'name' => 'WARNING'],
-            ['level' => Logger::ERROR, 'name' => 'ERROR'],
-            ['level' => Logger::CRITICAL, 'name' => 'CRITICAL'],
+            self::LOG_LEVEL_DEBUG => 'DEBUG',
+            self::LOG_LEVEL_INFO => 'INFO',
+            self::LOG_LEVEL_WARNING => 'WARNING',
+            self::LOG_LEVEL_ERROR => 'ERROR',
+            self::LOG_LEVEL_CRITICAL => 'CRITICAL',
         ];
 
-        foreach ($levels as $levelData) {
-            $record = [
-                'message' => 'Test message',
-                'context' => [],
-                'level' => $levelData['level'],
-                'level_name' => $levelData['name'],
-                'channel' => 'test',
-                'datetime' => new \DateTimeImmutable,
-                'extra' => [],
-            ];
+        foreach ($levels as $level => $name) {
+            $record = $this->createLogRecord(level: $level);
 
             $output = $this->formatter->format($record);
 
-            $this->assertStringContainsString($levelData['name'], $output);
+            $this->assertStringContainsString($name, $output);
         }
     }
 

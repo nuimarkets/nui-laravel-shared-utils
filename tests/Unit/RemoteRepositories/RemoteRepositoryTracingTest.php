@@ -3,27 +3,23 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use Illuminate\Http\Request;
-use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
-use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 
 class RemoteRepositoryTracingTest extends TestCase
 {
+    use RemoteRepositoryTestHelpers;
+
     protected function setUp(): void
     {
         parent::setUp();
-
-        // Set a default base URI for tests
-        config(['app.remote_repository.base_uri' => 'https://test.example.com']);
+        $this->setUpRemoteRepositoryConfig();
     }
 
     public function test_does_not_include_request_id_header_when_not_available()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockTokenService = $this->createMockTokenService();
-
-        $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+        $repository = $this->createTestRepositoryWithTokenTrigger();
 
         // Use reflection to access protected headers property
         $reflection = new \ReflectionClass(RemoteRepository::class);
@@ -41,10 +37,7 @@ class RemoteRepositoryTracingTest extends TestCase
         $request->headers->set('X-Request-ID', 'fallback-request-456');
         $this->app->instance('request', $request);
 
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockTokenService = $this->createMockTokenService();
-
-        $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+        $repository = $this->createTestRepositoryWithTokenTrigger();
 
         // Trigger token loading to populate headers
         $repository->triggerTokenLoad();
@@ -66,10 +59,7 @@ class RemoteRepositoryTracingTest extends TestCase
         $request->headers->set('X-Amzn-Trace-Id', $fullTraceHeader);
         $this->app->instance('request', $request);
 
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockTokenService = $this->createMockTokenService();
-
-        $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+        $repository = $this->createTestRepositoryWithTokenTrigger();
 
         // Trigger token loading to populate headers
         $repository->triggerTokenLoad();
@@ -96,10 +86,7 @@ class RemoteRepositoryTracingTest extends TestCase
         $request->headers->set('X-Amzn-Trace-Id', $malformedHeader);
         $this->app->instance('request', $request);
 
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockTokenService = $this->createMockTokenService();
-
-        $repository = new TestRemoteRepositoryTracing($mockClient, $mockTokenService);
+        $repository = $this->createTestRepositoryWithTokenTrigger();
 
         // Trigger token loading to populate headers
         $repository->triggerTokenLoad();
@@ -117,30 +104,5 @@ class RemoteRepositoryTracingTest extends TestCase
         // Should also set correlation ID (malformed headers become fallback values)
         $this->assertArrayHasKey('X-Correlation-ID', $headers);
         $this->assertEquals($malformedHeader, $headers['X-Correlation-ID']);
-    }
-
-    protected function createMockTokenService(): MachineTokenServiceInterface
-    {
-        $mock = $this->createMock(MachineTokenServiceInterface::class);
-        $mock->method('getToken')->willReturn('test-token-123');
-
-        return $mock;
-    }
-}
-
-/**
- * Concrete implementation for testing RemoteRepository tracing functionality
- */
-class TestRemoteRepositoryTracing extends RemoteRepository
-{
-    protected function filter(array $data)
-    {
-        // Simple implementation for testing
-        return $data;
-    }
-
-    public function triggerTokenLoad()
-    {
-        $this->ensureTokenLoaded();
     }
 }

@@ -2,14 +2,15 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Http\Controllers\Traits;
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use NuiMarkets\LaravelSharedUtils\Events\IntercomEvent;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\TracksIntercomEvents;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\HttpRequestTestHelpers;
 
 class TracksIntercomEventsTest extends TestCase
 {
+    use HttpRequestTestHelpers;
     use TracksIntercomEvents;
 
     protected function setUp(): void
@@ -20,10 +21,7 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_product_view_dispatches_event_with_user_from_request(): void
     {
-        $request = Request::create('/test', 'GET', [
-            'userID' => 'user-123',
-            'tenant_uuid' => 'tenant-789',
-        ]);
+        $request = $this->createIntercomTrackingRequest('/test', 'user-123', 'tenant-789');
         $request->headers->set('User-Agent', 'Mozilla/5.0');
 
         $this->trackProductView('prod-456', ['name' => 'Test Product'], $request);
@@ -40,10 +38,8 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_product_view_includes_common_properties(): void
     {
-        $request = Request::create('/test', 'GET', ['userID' => 'user-123'], [], [], [
-            'HTTP_USER_AGENT' => 'Mozilla/5.0',
-            'REMOTE_ADDR' => '192.168.1.1',
-        ]);
+        $request = $this->createBrowserRequest('/test', 'Mozilla/5.0', '192.168.1.1');
+        $request->merge(['userID' => 'user-123']);
 
         $this->trackProductView('prod-456', [], $request);
 
@@ -59,7 +55,7 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_product_view_does_not_dispatch_when_no_user_id(): void
     {
-        $request = Request::create('/test', 'GET');
+        $request = $this->createHttpRequest('/test');
         // No userID parameter
 
         $this->trackProductView('prod-456', [], $request);
@@ -76,10 +72,7 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_event_dispatches_generic_event(): void
     {
-        $request = Request::create('/test', 'GET', [
-            'userID' => 'user-123',
-            'tenant_uuid' => 'tenant-789',
-        ]);
+        $request = $this->createIntercomTrackingRequest('/test', 'user-123', 'tenant-789');
 
         $this->trackEvent('user_logged_in', ['source' => 'web'], $request);
 
@@ -93,7 +86,7 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_event_merges_default_properties(): void
     {
-        $request = Request::create('/test', 'GET', ['userID' => 'user-123']);
+        $request = $this->createIntercomTrackingRequest('/test', 'user-123', null);
 
         $this->trackEvent('test_event', ['custom' => 'value'], $request);
 
@@ -108,7 +101,7 @@ class TracksIntercomEventsTest extends TestCase
 
     public function test_track_user_action_formats_event_name(): void
     {
-        $request = Request::create('/test', 'GET', ['userID' => 'user-123']);
+        $request = $this->createIntercomTrackingRequest('/test', 'user-123', null);
 
         $this->trackUserAction('created', 'product', 'prod-456', ['name' => 'Test'], $request);
 

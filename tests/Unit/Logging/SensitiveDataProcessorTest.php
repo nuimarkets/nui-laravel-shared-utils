@@ -4,31 +4,18 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
 use NuiMarkets\LaravelSharedUtils\Logging\SensitiveDataProcessor;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\LoggingTestHelpers;
 
 class SensitiveDataProcessorTest extends TestCase
 {
+    use LoggingTestHelpers;
+
     private SensitiveDataProcessor $processor;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->processor = new SensitiveDataProcessor;
-    }
-
-    /**
-     * Create a mock log record for testing
-     */
-    private function createLogRecord(array $context = [], array $extra = []): array
-    {
-        return [
-            'message' => 'Test message',
-            'context' => $context,
-            'level' => 200, // INFO level
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => $extra,
-        ];
     }
 
     public function test_redacts_authorization_header()
@@ -48,16 +35,10 @@ class SensitiveDataProcessorTest extends TestCase
 
     public function test_redacts_authorization_header_with_monolog_3_log_record()
     {
-        // Skip this test if Monolog 3 is not available
-        if (! class_exists('\Monolog\LogRecord')) {
-            $this->markTestSkipped('Monolog 3 LogRecord class not available');
-        }
+        $this->skipIfMonolog3NotAvailable();
 
         // Create a LogRecord with headers containing Authorization token
-        $logRecord = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable,
-            channel: 'test',
-            level: \Monolog\Level::Info,
+        $logRecord = $this->createMonolog3Record(
             message: 'HTTP request made',
             context: [
                 'headers' => [
@@ -65,8 +46,7 @@ class SensitiveDataProcessorTest extends TestCase
                     'Content-Type' => 'application/json',
                     'User-Agent' => 'TestClient/1.0',
                 ],
-            ],
-            extra: []
+            ]
         );
 
         $processed = $this->processor->__invoke($logRecord);
@@ -288,16 +268,10 @@ class SensitiveDataProcessorTest extends TestCase
 
     public function test_processes_monolog_3_log_record_object()
     {
-        // Skip this test if Monolog 3 is not available
-        if (! class_exists('\Monolog\LogRecord')) {
-            $this->markTestSkipped('Monolog 3 LogRecord class not available');
-        }
+        $this->skipIfMonolog3NotAvailable();
 
         // Create a real LogRecord object with sensitive data
-        $logRecord = new \Monolog\LogRecord(
-            datetime: new \DateTimeImmutable,
-            channel: 'test',
-            level: \Monolog\Level::Info,
+        $logRecord = $this->createMonolog3Record(
             message: 'Test message with sensitive data',
             context: [
                 'user_id' => 123,
