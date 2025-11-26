@@ -69,18 +69,18 @@ class OrganisationRepository extends RemoteRepository
 ### 2. Wrap Your Lookups
 
 ```php
-public function getRelationship(string $org1, string $org2)
+public function getById(string $id)
 {
     // Step 1: Check for cached failure
-    $this->throwIfCachedLookupFailed('relationship', $org1, $org2);
+    $this->throwIfCachedLookupFailed('product', $id);
 
     try {
         // Step 2: Make the actual request
-        $res = $this->get("v4/organisations/{$org1}/linked/{$org2}");
+        $res = $this->get("api/products/{$id}");
         return $this->handleResponse($res);
     } catch (\Exception $e) {
         // Step 3: Cache the failure
-        $this->cacheLookupFailure('relationship', $e, $org1, $org2);
+        $this->cacheLookupFailure('product', $e, $id);
         throw $e;
     }
 }
@@ -92,7 +92,7 @@ public function getRelationship(string $org1, string $org2)
 use NuiMarkets\LaravelSharedUtils\Exceptions\CachedLookupFailureException;
 
 try {
-    $rel = $repo->getRelationship($org1, $org2);
+    $product = $repo->getById($productId);
 } catch (CachedLookupFailureException $e) {
     // Service was recently unavailable
     return $defaultValue;
@@ -207,7 +207,7 @@ This exception is thrown when `throwIfCachedLookupFailed()` finds a cached failu
 
 ```php
 try {
-    $data = $repository->getRelationship($org1, $org2);
+    $data = $repository->getById($id);
 } catch (CachedLookupFailureException $e) {
     // This is a cached failure - don't retry
 
@@ -218,9 +218,8 @@ try {
 
     if ($e->isAuthError()) {
         // Auth issue - might need attention
-        Log::warning('Auth failure for relationship lookup', [
-            'org1' => $org1,
-            'org2' => $org2,
+        Log::warning('Auth failure for resource lookup', [
+            'id' => $id,
             'cached_at' => $e->getCachedAt(),
         ]);
         throw $e;
@@ -228,7 +227,7 @@ try {
 
     if ($e->isTransient()) {
         // Might recover - use fallback for now
-        return $this->getFallbackRelationship($org1, $org2);
+        return $this->getFallbackData($id);
     }
 
     throw $e;
@@ -245,13 +244,13 @@ try {
 Override `getRepositoryShortName()` to customize the cache key prefix:
 
 ```php
-class OrganisationRepository extends RemoteRepository
+class ProductRepository extends RemoteRepository
 {
     use CachesFailedLookups;
 
     protected function getRepositoryShortName(): string
     {
-        return 'org'; // Results in cache keys like: remote_failure:org:relationship:abc123
+        return 'product'; // Results in cache keys like: remote_failure:product:lookup:abc123
     }
 }
 ```
@@ -277,25 +276,25 @@ class CriticalServiceRepository extends RemoteRepository
 Use different lookup types for different operations:
 
 ```php
-class OrganisationRepository extends RemoteRepository
+class ProductRepository extends RemoteRepository
 {
     use CachesFailedLookups;
 
-    public function getRelationship(string $org1, string $org2)
+    public function getById(string $id)
     {
-        $this->throwIfCachedLookupFailed('relationship', $org1, $org2);
+        $this->throwIfCachedLookupFailed('product', $id);
         // ...
     }
 
-    public function getOrganisation(string $orgId)
+    public function getVariants(string $productId)
     {
-        $this->throwIfCachedLookupFailed('organisation', $orgId);
+        $this->throwIfCachedLookupFailed('variants', $productId);
         // ...
     }
 
-    public function getUsers(string $orgId)
+    public function getInventory(string $productId)
     {
-        $this->throwIfCachedLookupFailed('users', $orgId);
+        $this->throwIfCachedLookupFailed('inventory', $productId);
         // ...
     }
 }
@@ -304,21 +303,20 @@ class OrganisationRepository extends RemoteRepository
 ### Cache Invalidation After Mutations
 
 ```php
-public function createRelationship(string $org1, string $org2, array $data)
+public function create(array $data)
 {
-    $res = $this->post("v4/organisations/{$org1}/linked/{$org2}", $data);
+    $res = $this->post("api/products", $this->makeRequestBody($data));
+    $product = $this->handleResponse($res);
 
-    // Clear failure cache - relationship now exists
-    $this->clearCachedLookupFailure('relationship', $org1, $org2);
-    // Also clear reverse direction if applicable
-    $this->clearCachedLookupFailure('relationship', $org2, $org1);
+    // Clear any cached 404 failure for this ID
+    $this->clearCachedLookupFailure('product', $product->id);
 
-    return $this->handleResponse($res);
+    return $product;
 }
 
-public function deleteRelationship(string $org1, string $org2)
+public function delete(string $id)
 {
-    $res = $this->delete("v4/organisations/{$org1}/linked/{$org2}");
+    $res = $this->delete("api/products/{$id}");
 
     // Don't clear cache - next lookup should see 404
     // The 404 will be cached with appropriate TTL
@@ -332,7 +330,7 @@ public function deleteRelationship(string $org1, string $org2)
 ### Check Cached Failure Data
 
 ```php
-$cachedData = $this->getCachedFailureData('relationship', $org1, $org2);
+$cachedData = $this->getCachedFailureData('product', $id);
 
 if ($cachedData) {
     dump([
@@ -356,10 +354,10 @@ All cache operations are logged with structured context:
     "feature": "remote_repository",
     "action": "lookup_failure.cache_hit",
     "cache_hit": true,
-    "cache_key": "remote_failure:organisationrepository:relationship:abc123",
-    "api.service": "organisationrepository",
-    "entity_type": "relationship",
-    "entity_id": "uuid1,uuid2",
+    "cache_key": "remote_failure:productrepository:product:abc123",
+    "api.service": "productrepository",
+    "entity_type": "product",
+    "entity_id": "prod-12345",
     "http_status": 404,
     "failure_category": "not_found"
 }
@@ -369,7 +367,7 @@ All cache operations are logged with structured context:
     "message": "Remote lookup failed - caching failure",
     "feature": "remote_repository",
     "action": "lookup_failure.cached",
-    "cache_key": "remote_failure:organisationrepository:relationship:abc123",
+    "cache_key": "remote_failure:productrepository:product:abc123",
     "cache_ttl": 600,
     "http_status": 404,
     "failure_category": "not_found"
@@ -384,7 +382,7 @@ Cache keys follow this format:
 remote_failure:{repository_short_name}:{lookup_type}:{md5_hash_of_identifiers}
 ```
 
-Example: `remote_failure:organisationrepository:relationship:a1b2c3d4e5f6...`
+Example: `remote_failure:productrepository:product:a1b2c3d4e5f6...`
 
 ## Testing
 
@@ -393,20 +391,20 @@ Example: `remote_failure:organisationrepository:relationship:a1b2c3d4e5f6...`
 ```php
 public function test_returns_cached_failure_on_second_request(): void
 {
-    $repo = new OrganisationRepository($client, $tokenService);
+    $repo = new ProductRepository($client, $tokenService);
 
     // First request - real failure
     $client->shouldReceive('get')->once()->andThrow(new RequestException(...));
 
     try {
-        $repo->getRelationship('org1', 'org2');
+        $repo->getById('prod-123');
     } catch (\Exception $e) {
         // Expected
     }
 
     // Second request - cached failure
     $this->expectException(CachedLookupFailureException::class);
-    $repo->getRelationship('org1', 'org2');
+    $repo->getById('prod-123');
 }
 ```
 
@@ -415,26 +413,26 @@ public function test_returns_cached_failure_on_second_request(): void
 ```php
 public function test_clears_cache_after_create(): void
 {
-    $repo = new OrganisationRepository($client, $tokenService);
+    $repo = new ProductRepository($client, $tokenService);
 
     // Cache a failure manually for testing
-    Cache::put('remote_failure:organisationrepository:relationship:' . md5('org1:org2'), [
+    Cache::put('remote_failure:productrepository:product:' . md5('prod-123'), [
         'cached_at' => now()->toIso8601String(),
         'exception_class' => 'Exception',
         'exception_message' => 'Test failure',
         'http_status' => 404,
         'failure_category' => 'not_found',
-        'repository' => OrganisationRepository::class,
-        'lookup_type' => 'relationship',
-        'identifiers' => ['org1', 'org2'],
+        'repository' => ProductRepository::class,
+        'lookup_type' => 'product',
+        'identifiers' => ['prod-123'],
     ], 600);
 
-    // Create relationship
+    // Create product
     $client->shouldReceive('post')->once()->andReturn($successResponse);
-    $repo->createRelationship('org1', 'org2', $data);
+    $repo->create($data);
 
     // Cache should be cleared
-    $this->assertNull($repo->getCachedFailureData('relationship', 'org1', 'org2'));
+    $this->assertNull($repo->getCachedFailureData('product', 'prod-123'));
 }
 ```
 

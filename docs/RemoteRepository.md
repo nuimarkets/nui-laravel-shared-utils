@@ -285,21 +285,21 @@ The `CachesFailedLookups` trait prevents cascading timeouts by caching failed lo
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\Concerns\CachesFailedLookups;
 use NuiMarkets\LaravelSharedUtils\Exceptions\CachedLookupFailureException;
 
-class OrganisationRepository extends RemoteRepository
+class ProductRepository extends RemoteRepository
 {
     use CachesFailedLookups;
 
-    public function getRelationship(string $orgId1, string $orgId2)
+    public function getById(string $id)
     {
         // Check cache first - throws CachedLookupFailureException if recently failed
-        $this->throwIfCachedLookupFailed('relationship', $orgId1, $orgId2);
+        $this->throwIfCachedLookupFailed('product', $id);
 
         try {
-            $res = $this->get("v4/organisations/{$orgId1}/linked/{$orgId2}");
+            $res = $this->get("api/products/{$id}");
             return $this->handleResponse($res);
         } catch (\Exception $e) {
             // Cache failure for subsequent requests
-            $this->cacheLookupFailure('relationship', $e, $orgId1, $orgId2);
+            $this->cacheLookupFailure('product', $e, $id);
             throw $e;
         }
     }
@@ -310,7 +310,7 @@ class OrganisationRepository extends RemoteRepository
 
 ```php
 try {
-    $relationship = $repo->getRelationship($org1, $org2);
+    $product = $repo->getById($productId);
 } catch (CachedLookupFailureException $e) {
     // Check failure type with convenience methods
     if ($e->isNotFound()) {
@@ -368,14 +368,15 @@ try {
 Clear cached failures after creating resources:
 
 ```php
-public function createRelationship($org1, $org2, $data)
+public function create(array $data)
 {
-    $res = $this->post("v4/organisations/{$org1}/linked/{$org2}", $data);
+    $res = $this->post("api/products", $this->makeRequestBody($data));
+    $product = $this->handleResponse($res);
 
-    // Clear cached failure now that relationship exists
-    $this->clearCachedLookupFailure('relationship', $org1, $org2);
+    // Clear any cached 404 failure for this ID
+    $this->clearCachedLookupFailure('product', $product->id);
 
-    return $this->handleResponse($res);
+    return $product;
 }
 ```
 
@@ -383,7 +384,7 @@ public function createRelationship($org1, $org2, $data)
 
 ```php
 // Get cached failure data for debugging
-$cachedData = $this->getCachedFailureData('relationship', $org1, $org2);
+$cachedData = $this->getCachedFailureData('product', $id);
 if ($cachedData) {
     Log::debug('Found cached failure', [
         'cached_at' => $cachedData['cached_at'],
