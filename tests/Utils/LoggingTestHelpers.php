@@ -54,7 +54,7 @@ trait LoggingTestHelpers
      */
     protected function skipIfMonolog2NotAvailable(): void
     {
-        if ($this->isMonolog3Available() && ! class_exists(Logger::class)) {
+        if ($this->isMonolog3Available()) {
             $this->markTestSkipped('Monolog 2 array format not available');
         }
     }
