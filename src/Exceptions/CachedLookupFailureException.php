@@ -108,7 +108,7 @@ class CachedLookupFailureException extends \RuntimeException
     {
         $repository = $cachedData['repository'] ?? 'unknown';
         $lookupType = $cachedData['lookup_type'] ?? 'unknown';
-        $identifiers = $cachedData['identifiers'] ?? [];
+        $identifiers = array_map('strval', $cachedData['identifiers'] ?? []);
         $exceptionClass = $cachedData['exception_class'] ?? 'unknown';
         $exceptionMessage = $cachedData['exception_message'] ?? 'unknown';
         $cachedAt = $cachedData['cached_at'] ?? 'unknown';

@@ -637,7 +637,7 @@ Always catch `RemoteServiceException` and handle based on HTTP status:
 try {
     $data = $repository->findById($id);
 } catch (RemoteServiceException $e) {
-    if ($e->getCode() === 404) {
+    if ($e->getStatusCode() === 404) {
         return null; // Not found is often acceptable
     }
     throw $e; // Re-throw other errors

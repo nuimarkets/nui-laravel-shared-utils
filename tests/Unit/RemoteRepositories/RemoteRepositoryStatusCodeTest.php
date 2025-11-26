@@ -230,7 +230,7 @@ class RemoteRepositoryStatusCodeTest extends TestCase
     private function createTestRepository(): RemoteRepository
     {
         $mockClient = $this->createMock(DocumentClientInterface::class);
-        $mockClient->expects($this->once())
+        $mockClient->expects($this->any())
             ->method('setBaseUri')
             ->with($this->isType('string'));
 

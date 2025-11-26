@@ -524,14 +524,31 @@ abstract class RemoteRepository
      */
     private function handleApiErrors(DocumentInterface $response, string $url): void
     {
+        $this->throwRemoteServiceError($response, $url);
+    }
+
+    /**
+     * Shared error handling for remote service errors.
+     *
+     * Extracts error details from the response, logs them with structured context,
+     * and throws a RemoteServiceException with the original HTTP status code.
+     *
+     * @param  DocumentInterface  $response  The response containing errors
+     * @param  string|null  $endpoint  Optional endpoint URL for logging context
+     *
+     * @throws RemoteServiceException Always throws after logging
+     */
+    private function throwRemoteServiceError(DocumentInterface $response, ?string $endpoint = null): void
+    {
         $httpResponse = $response->getResponse();
 
         // Handle edge case where response is null
         if ($httpResponse === null) {
-            Log::error('Remote service error: No HTTP response available', [
-                'api.service' => static::class,
-                'api.endpoint' => $url,
-            ]);
+            $context = ['api.service' => static::class];
+            if ($endpoint !== null) {
+                $context['api.endpoint'] = $endpoint;
+            }
+            Log::error('Remote service error: No HTTP response available', $context);
             throw new RemoteServiceException('Error calling service: No response available', 502);
         }
 
@@ -544,13 +561,17 @@ abstract class RemoteRepository
             $errorDetails[] = $error->getDetail();
         }
 
-        Log::error('Remote service error', [
+        $context = [
             'api.service' => static::class,
-            'api.endpoint' => $url,
             'api.status' => $statusCode,
             'api.error' => implode('; ', $errorDetails),
             'response_body' => $body,
-        ]);
+        ];
+        if ($endpoint !== null) {
+            $context['api.endpoint'] = $endpoint;
+        }
+
+        Log::error('Remote service error', $context);
 
         throw new RemoteServiceException(
             'Error calling service. Returned: '.$body,
@@ -653,36 +674,7 @@ abstract class RemoteRepository
     public function handleResponse(DocumentInterface $response)
     {
         if ($response->hasErrors()) {
-            $httpResponse = $response->getResponse();
-
-            // Handle edge case where response is null
-            if ($httpResponse === null) {
-                Log::error('Remote service error: No HTTP response available', [
-                    'api.service' => static::class,
-                ]);
-                throw new RemoteServiceException('Error calling service: No response available', 502);
-            }
-
-            $statusCode = self::extractValidHttpStatusCode($httpResponse->getStatusCode());
-            $body = (string) $httpResponse->getBody();
-
-            // Collect error details for structured logging
-            $errorDetails = [];
-            foreach ($response->getErrors() as $error) {
-                $errorDetails[] = $error->getDetail();
-            }
-
-            Log::error('Remote service error', [
-                'api.service' => static::class,
-                'api.status' => $statusCode,
-                'api.error' => implode('; ', $errorDetails),
-                'response_body' => $body,
-            ]);
-
-            throw new RemoteServiceException(
-                'Error calling service. Returned: '.$body,
-                $statusCode
-            );
+            $this->throwRemoteServiceError($response);
         }
 
         return $response->getData();
