@@ -96,7 +96,6 @@ trait CachesFailedLookups
      *
      * @param  string  $lookupType  Type of lookup (e.g., 'relationship', 'organisation')
      * @param  string  ...$identifiers  Variable number of identifiers for the lookup
-     * @return void
      *
      * @throws CachedLookupFailureException if a cached failure exists
      */
@@ -138,7 +137,6 @@ trait CachesFailedLookups
      * @param  string  $lookupType  Type of lookup (e.g., 'relationship', 'organisation')
      * @param  \Throwable  $exception  The exception that caused the failure
      * @param  string  ...$identifiers  Variable number of identifiers for the lookup
-     * @return void
      */
     protected function cacheLookupFailure(string $lookupType, \Throwable $exception, string ...$identifiers): void
     {
@@ -188,7 +186,6 @@ trait CachesFailedLookups
      *
      * @param  string  $lookupType  Type of lookup (e.g., 'relationship', 'organisation')
      * @param  string  ...$identifiers  Variable number of identifiers for the lookup
-     * @return void
      */
     protected function clearCachedLookupFailure(string $lookupType, string ...$identifiers): void
     {
