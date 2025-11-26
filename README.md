@@ -52,7 +52,7 @@ Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cac
 
 ### **Service Communication**
 
-Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, intelligent caching, automatic JWT authentication, and proper HTTP status propagation.
+Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, automatic JWT authentication, and proper HTTP status propagation.
 
 ### **Failure Caching**
 
