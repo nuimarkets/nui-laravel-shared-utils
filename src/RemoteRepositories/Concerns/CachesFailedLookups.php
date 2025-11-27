@@ -218,6 +218,98 @@ trait CachesFailedLookups
     }
 
     /**
+     * Check if a lookup has a cached failure (non-throwing version).
+     *
+     * Used for graceful fallback patterns where we want to skip lookups
+     * without throwing an exception. This is a convenience wrapper around
+     * getCachedFailureData() for boolean checks.
+     *
+     * Note: This method does not log cache hits/misses to avoid log noise
+     * in high-frequency check scenarios. Use throwIfCachedLookupFailed()
+     * if you need cache hit logging.
+     *
+     * @param  string  $lookupType  Type of lookup (e.g., 'relationship', 'organisation')
+     * @param  string  ...$identifiers  One or more identifiers for the lookup (at least one required)
+     * @return bool True if a cached failure exists
+     *
+     * @throws \InvalidArgumentException If no identifiers are provided
+     *
+     * @example
+     * ```php
+     * if ($this->hasCachedLookupFailure('user', $userId)) {
+     *     return null; // Skip lookup, return default
+     * }
+     * ```
+     */
+    protected function hasCachedLookupFailure(string $lookupType, string ...$identifiers): bool
+    {
+        $this->validateIdentifiers($identifiers);
+
+        return $this->getCachedFailureData($lookupType, ...$identifiers) !== null;
+    }
+
+    /**
+     * Manually cache a lookup failure without an exception.
+     *
+     * Used when a lookup returns empty/not-found without throwing an exception,
+     * such as when an API returns null data or an empty collection. This allows
+     * caching "not found" results to prevent repeated lookups for resources
+     * that don't exist.
+     *
+     * The httpStatus parameter is used both to classify the failure category
+     * (which determines TTL) and stored as metadata for debugging.
+     *
+     * @param  string  $lookupType  Type of lookup (e.g., 'user', 'address', 'sku')
+     * @param  string  $message  Failure message (e.g., 'not_found')
+     * @param  int  $httpStatus  HTTP status code used for failure classification and metadata (e.g., 404)
+     * @param  string  ...$identifiers  One or more identifiers for the lookup (at least one required)
+     *
+     * @throws \InvalidArgumentException If no identifiers are provided
+     *
+     * @example
+     * ```php
+     * $result = $this->apiClient->findUser($userId);
+     * if ($result === null) {
+     *     $this->cacheLookupFailureManual('user', 'not_found', 404, $userId);
+     * }
+     * ```
+     */
+    protected function cacheLookupFailureManual(string $lookupType, string $message, int $httpStatus, string ...$identifiers): void
+    {
+        $this->validateIdentifiers($identifiers);
+
+        $cacheKey = $this->buildFailureCacheKey($lookupType, $identifiers);
+        $failureCategory = $this->classifyFailureByStatus($httpStatus);
+        $ttl = $this->getFailureCacheTtlForCategory($failureCategory);
+
+        $cachedData = [
+            'cached_at' => now()->toIso8601String(),
+            'exception_class' => 'ManualCache',
+            'exception_message' => $message,
+            'exception_code' => $httpStatus,
+            'http_status' => $httpStatus,
+            'failure_category' => $failureCategory,
+            'repository' => static::class,
+            'lookup_type' => $lookupType,
+            'identifiers' => $identifiers,
+        ];
+
+        Cache::put($cacheKey, $cachedData, $ttl);
+
+        Log::debug('Remote lookup manually cached as failure', [
+            LogFields::FEATURE => 'remote_repository',
+            LogFields::ACTION => 'lookup_failure.manual_cache',
+            LogFields::CACHE_KEY => $cacheKey,
+            LogFields::CACHE_TTL => $ttl,
+            LogFields::API_SERVICE => $this->getRepositoryShortName(),
+            LogFields::ENTITY_TYPE => $lookupType,
+            LogFields::ENTITY_ID => implode(',', $identifiers),
+            'http_status' => $httpStatus,
+            'failure_category' => $failureCategory,
+        ]);
+    }
+
+    /**
      * Extract HTTP status code from an exception.
      *
      * Traverses the exception chain to find Guzzle exceptions that contain
@@ -313,9 +405,23 @@ trait CachesFailedLookups
             return FailureCategory::UNKNOWN;
         }
 
-        // HTTP status-based classification
+        // Delegate to status-based classification
+        return $this->classifyFailureByStatus($httpStatus);
+    }
+
+    /**
+     * Classify a failure category based solely on HTTP status code.
+     *
+     * Used when you have an HTTP status but no exception (e.g., manual caching
+     * of not-found results). For exception-based classification, use classifyFailure().
+     *
+     * @param  int  $httpStatus  The HTTP status code
+     * @return string The failure category constant (one of FailureCategory::*)
+     */
+    protected function classifyFailureByStatus(int $httpStatus): string
+    {
         return match (true) {
-            $httpStatus === 404 => FailureCategory::NOT_FOUND,
+            $httpStatus === 404 || $httpStatus === 410 => FailureCategory::NOT_FOUND,
             $httpStatus === 401 || $httpStatus === 403 => FailureCategory::AUTH_ERROR,
             $httpStatus === 429 => FailureCategory::RATE_LIMITED,
             $httpStatus >= 500 && $httpStatus < 600 => FailureCategory::SERVER_ERROR,
@@ -384,5 +490,19 @@ trait CachesFailedLookups
     protected function getFailureCacheTtl(): int
     {
         return (int) (config('app.remote_repository.failure_cache_ttl') ?? 120);
+    }
+
+    /**
+     * Validate that at least one identifier is provided.
+     *
+     * @param  array<string>  $identifiers  The identifiers to validate
+     *
+     * @throws \InvalidArgumentException If no identifiers are provided
+     */
+    protected function validateIdentifiers(array $identifiers): void
+    {
+        if (empty($identifiers)) {
+            throw new \InvalidArgumentException('At least one identifier is required for cache key generation');
+        }
     }
 }
