@@ -147,9 +147,10 @@ class BaseErrorHandler extends ExceptionHandler
         }
 
         //
-        // 3) DEFAULT TITLE IF NONE SET
+        // 3) NORMALIZE STATUS CODE AND SET DEFAULT TITLE
         //
-        $title ??= Response::$statusTexts[$status];
+        $status = $this->normalizeStatusCode($status, $e);
+        $title ??= Response::$statusTexts[$status] ?? 'Internal Server Error';
 
         //
         // 4) IF NO “errors” YET (i.e. not ValidationException or BaseHttpRequestException),
@@ -271,5 +272,24 @@ class BaseErrorHandler extends ExceptionHandler
         $sqlState = $e->errorInfo[0] ?? null;
 
         return $sqlState === '22P02';
+    }
+
+    /**
+     * Validate and normalize HTTP status code.
+     * Invalid codes (outside 100-599 range) are normalized to 500.
+     */
+    protected function normalizeStatusCode(int $status, Throwable $exception): int
+    {
+        if ($status >= 100 && $status < 600) {
+            return $status;
+        }
+
+        Log::warning('Invalid HTTP status code normalized to 500', [
+            'original_status' => $status,
+            'exception_class' => get_class($exception),
+            'exception_message' => $exception->getMessage(),
+        ]);
+
+        return Response::HTTP_INTERNAL_SERVER_ERROR;
     }
 }

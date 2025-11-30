@@ -4,11 +4,13 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class BaseErrorHandlerTest extends TestCase
 {
@@ -366,5 +368,106 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertEquals('Bad Request', $data['meta']['message']);
         $this->assertEquals(400, $data['meta']['status']);
         $this->assertEquals('Invalid UUID format.', $data['errors'][0]['detail']);
+    }
+
+    /**
+     * @dataProvider invalidStatusCodeProvider
+     */
+    public function test_invalid_status_codes_normalize_to_500(int $invalidCode): void
+    {
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Invalid HTTP status code normalized to 500', \Mockery::on(function ($context) use ($invalidCode) {
+                return $context['original_status'] === $invalidCode
+                    && $context['exception_class'] === HttpException::class;
+            }));
+
+        // Suppress other log calls from render() method
+        Log::shouldReceive('info')->zeroOrMoreTimes();
+
+        $request = Request::create('/test', 'GET');
+
+        // HttpException with invalid status code - this is the actual bug scenario
+        $exception = new HttpException($invalidCode, 'Test error');
+
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertInstanceOf(JsonResponse::class, $response);
+        $this->assertEquals(500, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertEquals(500, $data['meta']['status']);
+        $this->assertEquals('Internal Server Error', $data['meta']['message']);
+    }
+
+    public static function invalidStatusCodeProvider(): array
+    {
+        return [
+            'zero' => [0],
+            'negative' => [-1],
+            'below_100' => [99],
+            'above_599' => [600],
+            'large_number' => [999],
+        ];
+    }
+
+    public function test_http_exception_with_status_zero_normalizes_to_500(): void
+    {
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Invalid HTTP status code normalized to 500', \Mockery::on(function ($context) {
+                return $context['original_status'] === 0
+                    && $context['exception_class'] === HttpException::class
+                    && $context['exception_message'] === 'Bad status';
+            }));
+        Log::shouldReceive('info')->zeroOrMoreTimes();
+
+        $request = Request::create('/test', 'GET');
+
+        // HttpException can technically be created with any int status
+        // This simulates the bug scenario where status becomes 0
+        $exception = new HttpException(0, 'Bad status');
+
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(500, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertEquals(500, $data['meta']['status']);
+        $this->assertEquals('Internal Server Error', $data['meta']['message']);
+    }
+
+    /**
+     * @dataProvider validStatusCodeProvider
+     */
+    public function test_valid_status_codes_pass_through_unchanged(int $validCode, string $expectedTitle): void
+    {
+        // Valid codes should NOT trigger warning log
+        Log::shouldReceive('warning')->never();
+        Log::shouldReceive('info')->zeroOrMoreTimes();
+        Log::shouldReceive('error')->zeroOrMoreTimes();
+
+        $request = Request::create('/test', 'GET');
+
+        $exception = new HttpException($validCode, 'Test');
+
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals($validCode, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertEquals($validCode, $data['meta']['status']);
+        $this->assertEquals($expectedTitle, $data['meta']['message']);
+    }
+
+    public static function validStatusCodeProvider(): array
+    {
+        return [
+            'ok' => [200, 'OK'],
+            'bad_request' => [400, 'Bad Request'],
+            'not_found' => [404, 'Not Found'],
+            'internal_error' => [500, 'Internal Server Error'],
+            'bad_gateway' => [502, 'Bad Gateway'],
+        ];
     }
 }
