@@ -96,6 +96,31 @@ class DBSetupExtension implements BeforeFirstTestHook
         }
     }
 
+    public function runTestingMigrations(): void
+    {
+        $testingMigrationsPath = database_path('migrations/testing');
+
+        if (!is_dir($testingMigrationsPath)) {
+            Log::info('No testing migrations directory found, skipping testing migrations');
+            return;
+        }
+
+        try {
+            Log::info('Running testing migrate');
+            Artisan::call('migrate', [
+                '--path' => str_replace(base_path() . '/', '', $testingMigrationsPath),
+            ]);
+        } catch (Exception $exception) {
+            Log::error("Running testing 'migrate' failed", [
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+            throw $exception;
+        }
+    }
+
     protected function runSeeder(): void
     {
         try {
@@ -109,6 +134,26 @@ class DBSetupExtension implements BeforeFirstTestHook
                 'trace' => $exception->getTraceAsString(),
             ]);
             throw $exception;
+        }
+    }
+
+    public function runTestingSeeder(?string $seederClass = null): void
+    {
+        if (!$seederClass) {
+            Log::info('No testing seeder, skipping testing seeder run');
+            return;
+        }
+
+        try {
+            Log::info("Attempting to run testing Seeder: {$seederClass}");
+            Artisan::call('db:seed', [
+                '--class' => $seederClass,
+            ]);
+        } catch (Exception $exception) {
+            // Log the error but don't throw - it's optional if the seeder doesn't exist
+            Log::warning("{$seederClass} not found or failed to run", [
+                'message' => $exception->getMessage(),
+            ]);
         }
     }
 
