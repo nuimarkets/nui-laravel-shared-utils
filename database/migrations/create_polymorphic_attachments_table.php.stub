@@ -1,0 +1,28 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Polymorphic attachment table - adds morphable columns to base attachments table.
+ *
+ * USAGE: Use this when attachments can belong to multiple entity types
+ * (e.g., User avatars, Product images, Order documents).
+ */
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('attachments', function (Blueprint $table) {
+            $table->nullableMorphs('attachable');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('attachments', function (Blueprint $table) {
+            $table->dropMorphs('attachable');
+        });
+    }
+};
