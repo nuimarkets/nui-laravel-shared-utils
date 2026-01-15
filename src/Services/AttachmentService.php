@@ -63,6 +63,9 @@ class AttachmentService
             $files = [$files];
         }
 
+        // Resolve effective user ID once
+        $effectiveUserId = $userId ?? auth()->id() ?? 0;
+
         // Step 1: Upload all files to S3 first (outside transaction)
         $uploadedData = [];
         $uploadedPaths = []; // Track for cleanup on failure
@@ -73,7 +76,7 @@ class AttachmentService
                     $file,
                     $parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null,
                     $type,
-                    $userId ?? auth()->id() ?? 0
+                    $effectiveUserId
                 );
                 $uploadedData[] = $data;
                 $uploadedPaths[] = $data['bucket_path'];
@@ -98,7 +101,7 @@ class AttachmentService
                 if ($this->pivotTable) {
                     // Standard pivot table
                     $parentEntity->attachments()->attach($attachment->id, [
-                        'added_by' => $userId ?? auth()->id() ?? 0,
+                        'added_by' => $effectiveUserId,
                     ]);
                 } else {
                     // Polymorphic relationship

@@ -118,8 +118,11 @@ class ManagesAttachmentsTest extends TestCase
         $this->assertEquals(400, $response->getStatusCode());
         $data = json_decode($response->getContent(), true);
 
-        $this->assertEquals('Test error message', $data['meta']['message']);
-        $this->assertEquals(400, $data['meta']['code']);
+        // JSON:API error format
+        $this->assertArrayHasKey('errors', $data);
+        $this->assertCount(1, $data['errors']);
+        $this->assertEquals('Test error message', $data['errors'][0]['detail']);
+        $this->assertEquals('400', $data['errors'][0]['status']);
     }
 
     // Helper methods
