@@ -69,6 +69,7 @@ class ManagesAttachmentsTest extends TestCase
 
     public function test_authorize_attachment_access_validates_tenant_isolation()
     {
+        // Uses auth guard fallback (requires Authenticatable for actingAs)
         $user = new TestAuthUser(['tenant_uuid' => 'tenant-123']);
         $this->actingAs($user);
 
@@ -79,6 +80,57 @@ class ManagesAttachmentsTest extends TestCase
         $this->expectExceptionMessage('Unauthorized access to attachment');
 
         $this->authorizeAttachmentAccess($entity, $attachment);
+    }
+
+    // JWT approach tests: pass user directly (stdClass sufficient, no auth guard)
+
+    public function test_authorize_with_user_parameter_validates_tenant()
+    {
+        // JWT approach: pass user directly, don't use auth guard
+        $user = (object) ['tenant_uuid' => 'tenant-123'];
+        $entity = $this->createTestEntityWithTenant('tenant-123');
+        $attachment = (object) ['id' => 1];
+
+        // Should not throw - tenants match
+        $this->authorizeAttachmentAccess($entity, $attachment, $user);
+        $this->assertTrue(true); // Reached here = success
+    }
+
+    public function test_authorize_with_user_parameter_rejects_tenant_mismatch()
+    {
+        // JWT approach: pass user directly with different tenant
+        $user = (object) ['tenant_uuid' => 'tenant-123'];
+        $entity = $this->createTestEntityWithTenant('tenant-456');
+        $attachment = (object) ['id' => 1];
+
+        $this->expectException(AuthorizationException::class);
+        $this->expectExceptionMessage('Unauthorized access to attachment');
+
+        $this->authorizeAttachmentAccess($entity, $attachment, $user);
+    }
+
+    public function test_authorize_without_user_or_auth_allows_access()
+    {
+        // No user passed and no auth guard = skip tenant check
+        $entity = $this->createTestEntityWithTenant('tenant-456');
+        $attachment = (object) ['id' => 1];
+
+        // Should not throw - no user context means no tenant check
+        $this->authorizeAttachmentAccess($entity, $attachment, null);
+        $this->assertTrue(true); // Reached here = success
+    }
+
+    public function test_authorize_untenanted_user_can_access_tenanted_entity()
+    {
+        // Design decision: untenanted users (e.g., super-admin) can access any tenant
+        // This is intentional - only fails when BOTH have tenants AND they mismatch
+        $user = (object) ['name' => 'Super Admin']; // No tenant_uuid or tenant_id
+        $entity = $this->createTestEntityWithTenant('tenant-456');
+        $attachment = (object) ['id' => 1];
+
+        // Should not throw - untenanted user has implicit global access
+        $this->authorizeAttachmentAccess($entity, $attachment, $user);
+        $this->assertTrue(true);
     }
 
     public function test_upload_success_response_structure()

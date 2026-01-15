@@ -39,7 +39,7 @@ trait ManagesAttachments
 
         // Verify tenant isolation (if tenant context exists)
         if ($user) {
-            $userTenantId = $user->tenant_uuid ?? $user->tenant_id ?? null;
+            $userTenantId = data_get($user, 'tenant_uuid') ?? data_get($user, 'tenant_id');
             $entityTenantId = data_get($entity, 'tenant_uuid') ?? data_get($entity, 'tenant_id');
 
             if ($userTenantId && $entityTenantId && $userTenantId !== $entityTenantId) {
