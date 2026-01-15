@@ -23,22 +23,28 @@ class AttachmentService
 
     protected ?string $foreignKey;
 
+    /** @var callable|null */
+    protected $pathBuilder;
+
     /**
      * @param  string  $diskName  - S3 disk name from filesystems.php
      * @param  string  $attachmentModel  - Fully qualified attachment model class
      * @param  string|null  $pivotTable  - Pivot table name (null for polymorphic)
      * @param  string|null  $foreignKey  - Foreign key name (null for polymorphic)
+     * @param  callable|null  $pathBuilder  - Custom path builder: fn(?string $tenantId): string
      */
     public function __construct(
         string $diskName,
         string $attachmentModel,
         ?string $pivotTable = null,
-        ?string $foreignKey = null
+        ?string $foreignKey = null,
+        ?callable $pathBuilder = null
     ) {
         $this->diskName = $diskName;
         $this->attachmentModel = $attachmentModel;
         $this->pivotTable = $pivotTable;
         $this->foreignKey = $foreignKey;
+        $this->pathBuilder = $pathBuilder;
     }
 
     /**
@@ -47,7 +53,7 @@ class AttachmentService
      * @param  mixed  $parentEntity  - Entity to attach files to (Product, Order, User, etc)
      * @param  array|UploadedFile  $files
      * @param  string|null  $type  - Attachment type (image, document, etc)
-     * @param  int|null  $userId  - User ID performing upload
+     * @param  int|string|null  $userId  - User ID performing upload (string for JWT-based services)
      * @return array Array of created attachment models
      *
      * @throws \Exception
@@ -56,7 +62,7 @@ class AttachmentService
         $parentEntity,
         $files,
         ?string $type = null,
-        ?int $userId = null
+        int|string|null $userId = null
     ): array {
         // Normalize to array
         if (! is_array($files)) {
@@ -136,7 +142,7 @@ class AttachmentService
         UploadedFile $file,
         ?string $tenantIdentifier,
         ?string $type,
-        int $userId
+        int|string $userId
     ): array {
         // Generate unique filename
         $originalFilename = $file->getClientOriginalName();
@@ -144,10 +150,10 @@ class AttachmentService
         $baseFilename = pathinfo($originalFilename, PATHINFO_FILENAME);
         $uniqueFilename = $this->generateUniqueFilename($baseFilename, $extension);
 
-        // Tenant-scoped path
-        $bucketPath = $tenantIdentifier
-            ? "{$tenantIdentifier}/attachments/"
-            : 'attachments/';
+        // Build bucket path - use custom pathBuilder if provided, otherwise default
+        $bucketPath = $this->pathBuilder
+            ? ($this->pathBuilder)($tenantIdentifier)
+            : ($tenantIdentifier ? "{$tenantIdentifier}/attachments/" : 'attachments/');
         $fullFilePath = $bucketPath.$uniqueFilename;
 
         Log::info('S3: Starting upload', [
@@ -269,10 +275,19 @@ class AttachmentService
     }
 
     /**
-     * Delete attachment from S3 and database.
+     * Delete attachment - detach from parent and optionally delete from S3.
+     *
+     * @param  mixed  $attachment  The attachment to delete
+     * @param  mixed  $parentEntity  Parent entity to detach from
+     * @param  bool  $deleteFromStorage  Whether to delete from S3 (default: true)
+     * @param  bool  $deleteRecord  Whether to delete the DB record (default: true)
      */
-    public function deleteAttachment($attachment, $parentEntity): void
-    {
+    public function deleteAttachment(
+        $attachment,
+        $parentEntity,
+        bool $deleteFromStorage = true,
+        bool $deleteRecord = true
+    ): void {
         DB::beginTransaction();
 
         try {
@@ -284,16 +299,18 @@ class AttachmentService
                 // (parent relationship will be null after delete)
             }
 
-            // Delete from S3 (fail fast if S3 delete fails)
-            if ($attachment->bucket_path) {
+            // Delete from S3 if requested
+            if ($deleteFromStorage && $attachment->bucket_path) {
                 $deleted = Storage::disk($this->diskName)->delete($attachment->bucket_path);
                 if (! $deleted) {
                     throw new \Exception("Failed to delete S3 object: {$attachment->bucket_path}");
                 }
             }
 
-            // Delete attachment record (soft or hard delete depending on model configuration)
-            $attachment->delete();
+            // Delete attachment record if requested
+            if ($deleteRecord) {
+                $attachment->delete();
+            }
 
             DB::commit();
 
