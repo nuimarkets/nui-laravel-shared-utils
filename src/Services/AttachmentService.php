@@ -252,6 +252,11 @@ class AttachmentService
     {
         $mime = $file->getMimeType();
 
+        // Guard against null MIME type (can occur with unrecognized files)
+        if ($mime === null || $mime === '') {
+            return 'other';
+        }
+
         if (str_starts_with($mime, 'image/')) {
             return 'image';
         }
