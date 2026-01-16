@@ -214,10 +214,16 @@ class AttachmentService
     {
         foreach ($paths as $path) {
             try {
-                Storage::disk($this->diskName)->delete($path);
-                Log::info('S3: Cleaned up orphaned file after transaction failure', [
-                    'path' => $path,
-                ]);
+                $deleted = Storage::disk($this->diskName)->delete($path);
+                if ($deleted) {
+                    Log::info('S3: Cleaned up orphaned file after transaction failure', [
+                        'path' => $path,
+                    ]);
+                } else {
+                    Log::error('S3: Failed to cleanup orphaned file (delete returned false)', [
+                        'path' => $path,
+                    ]);
+                }
             } catch (\Exception $e) {
                 Log::error('S3: Failed to cleanup orphaned file', [
                     'path' => $path,
@@ -288,6 +294,9 @@ class AttachmentService
         bool $deleteFromStorage = true,
         bool $deleteRecord = true
     ): void {
+        // Capture path before potential deletion
+        $bucketPath = $attachment->bucket_path;
+
         DB::beginTransaction();
 
         try {
@@ -295,15 +304,12 @@ class AttachmentService
             if ($this->pivotTable) {
                 $parentEntity->attachments()->detach($attachment->id);
             } else {
-                // Polymorphic - just delete the attachment
-                // (parent relationship will be null after delete)
-            }
-
-            // Delete from S3 if requested
-            if ($deleteFromStorage && $attachment->bucket_path) {
-                $deleted = Storage::disk($this->diskName)->delete($attachment->bucket_path);
-                if (! $deleted) {
-                    throw new \Exception("Failed to delete S3 object: {$attachment->bucket_path}");
+                // Polymorphic - clear relationship fields
+                if (! $deleteRecord) {
+                    // When not deleting record, explicitly clear the relationship
+                    $attachment->attachable_type = null;
+                    $attachment->attachable_id = null;
+                    $attachment->save();
                 }
             }
 
@@ -317,6 +323,19 @@ class AttachmentService
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;
+        }
+
+        // Delete from S3 AFTER successful DB commit to prevent orphaned references
+        if ($deleteFromStorage && $bucketPath) {
+            $deleted = Storage::disk($this->diskName)->delete($bucketPath);
+            if (! $deleted) {
+                // Log error but don't throw - DB is already committed
+                // This prevents orphaned DB records pointing to non-existent files
+                Log::error('S3: Failed to delete file after DB commit', [
+                    'path' => $bucketPath,
+                    'attachment_id' => $attachment->id ?? null,
+                ]);
+            }
         }
     }
 }
