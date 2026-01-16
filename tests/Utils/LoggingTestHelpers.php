@@ -2,8 +2,6 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Utils;
 
-use Monolog\Logger;
-
 /**
  * Shared test helpers for Monolog logging tests.
  *
