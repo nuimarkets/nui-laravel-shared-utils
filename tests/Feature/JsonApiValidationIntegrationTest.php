@@ -91,13 +91,11 @@ class JsonApiValidationIntegrationTest extends TestCase
 
         // Check email validation error
         $emailError = array_values($emailErrors)[0];
-        $this->assertStringContainsString('email:', $emailError['detail']);
-        $this->assertStringContainsString('valid email', $emailError['detail']);
+        $this->assertEquals('The email field must be a valid email address.', $emailError['detail']);
 
         // Check name validation error
         $nameError = array_values($nameErrors)[0];
-        $this->assertStringContainsString('name:', $nameError['detail']);
-        $this->assertStringContainsString('required', $nameError['detail']);
+        $this->assertEquals('The name field is required.', $nameError['detail']);
     }
 
     public function test_multiple_validation_rules_per_field()

@@ -86,7 +86,7 @@ All validation failures will return this standardized format:
     {
       "status": "422",
       "title": "Validation Error",
-      "detail": "email: The email field is required.",
+      "detail": "The email field is required.",
       "source": {
         "pointer": "/data/attributes/email"
       }
@@ -94,7 +94,7 @@ All validation failures will return this standardized format:
     {
       "status": "422",
       "title": "Validation Error",
-      "detail": "name: The name field must be at least 2 characters.",
+      "detail": "The name field must be at least 2 characters.",
       "source": {
         "pointer": "/data/attributes/name"
       }
@@ -127,7 +127,7 @@ public function rules()
     {
       "status": "422",
       "title": "Validation Error",
-      "detail": "user.profile.age: The user.profile.age field is required.",
+      "detail": "The user.profile.age field is required.",
       "source": {
         "pointer": "/data/attributes/user.profile.age"
       }
@@ -135,6 +135,14 @@ public function rules()
   ]
 }
 ```
+
+> **Tip**: For human-readable field names in nested fields, use Laravel's custom attributes in your FormRequest:
+> ```php
+> public function attributes(): array
+> {
+>     return ['user.profile.age' => 'user profile age'];
+> }
+> ```
 
 > **Note on Pointer Format**: The library uses Laravel's dot-notation in source pointers (e.g., `/data/attributes/user.profile.age`) instead of strict JSON Pointer format (`/data/attributes/user/profile/age`). This design choice maintains consistency with Laravel's validation field naming and makes the errors more intuitive for Laravel developers.
 
@@ -158,7 +166,7 @@ public function rules()
     {
       "status": "422",
       "title": "Validation Error",
-      "detail": "password: The password field must be at least 8 characters.",
+      "detail": "The password field must be at least 8 characters.",
       "source": {
         "pointer": "/data/attributes/password"
       }
@@ -166,7 +174,7 @@ public function rules()
     {
       "status": "422",
       "title": "Validation Error",
-      "detail": "password: The password field confirmation does not match.",
+      "detail": "The password field confirmation does not match.",
       "source": {
         "pointer": "/data/attributes/password"
       }
