@@ -210,7 +210,7 @@ class CreateOrderRequest extends FormRequest {
     "errors": [{
         "status": "422",
         "title": "Validation Error",
-        "detail": "email: The email field is required.",
+        "detail": "The email field is required.",
         "source": {"pointer": "/data/attributes/email"}
     }]
 }

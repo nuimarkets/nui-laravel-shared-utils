@@ -89,14 +89,14 @@ class JsonApiValidationIntegrationTest extends TestCase
         $this->assertNotEmpty($emailErrors);
         $this->assertNotEmpty($nameErrors);
 
-        // Check email validation error
+        // Check email validation error - message format varies between Laravel versions
         $emailError = array_values($emailErrors)[0];
-        $this->assertStringContainsString('email:', $emailError['detail']);
-        $this->assertStringContainsString('valid email', $emailError['detail']);
+        $this->assertStringContainsString('email', $emailError['detail']);
+        $this->assertStringContainsString('must be a valid email', $emailError['detail']);
 
-        // Check name validation error
+        // Check name validation error - message format varies between Laravel versions
         $nameError = array_values($nameErrors)[0];
-        $this->assertStringContainsString('name:', $nameError['detail']);
+        $this->assertStringContainsString('name', $nameError['detail']);
         $this->assertStringContainsString('required', $nameError['detail']);
     }
 

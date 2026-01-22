@@ -82,7 +82,7 @@ class BaseErrorHandler extends ExceptionHandler
             //   {
             //     'status': '422',
             //     'title': 'Validation Error',
-            //     'detail': 'field1: The field1 is required.',
+            //     'detail': 'The field1 field is required.',
             //     'source': { 'pointer': '/data/attributes/field1' }
             //   },
             //   …
@@ -104,7 +104,7 @@ class BaseErrorHandler extends ExceptionHandler
                     $errors[] = [
                         'status' => (string) $status,
                         'title' => 'Validation Error',
-                        'detail' => "$field: $msg",
+                        'detail' => $msg,
                         'source' => ['pointer' => $this->pointerForField($field)],
                     ];
                 }
