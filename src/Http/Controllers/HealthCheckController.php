@@ -363,6 +363,17 @@ class HealthCheckController extends Controller
 
     protected function checkRabbitMQ(): array
     {
+        // Skip if RabbitMQ not configured
+        if (empty(config('rabbit.host'))) {
+            return [
+                'status' => 'skipped',
+                'message' => 'RabbitMQ not configured',
+                'connection' => [
+                    'host' => '',
+                    'state' => 'not_configured',
+                ],
+            ];
+        }
 
         $connection = null;
         $channel = null;
