@@ -138,7 +138,9 @@ class BaseErrorHandlerTest extends TestCase
         $error = $data['errors'][0];
         $this->assertEquals('422', $error['status']);
         $this->assertEquals('Validation Error', $error['title']);
-        $this->assertEquals('The email field must be a valid email address.', $error['detail']);
+        // Message format varies between Laravel versions (8/9 vs 10+)
+        $this->assertStringContainsString('email', $error['detail']);
+        $this->assertStringContainsString('must be a valid email', $error['detail']);
         $this->assertEquals('/data/attributes/email', $error['source']['pointer']);
     }
 
@@ -201,13 +203,21 @@ class BaseErrorHandlerTest extends TestCase
         $passwordErrors = array_filter($data['errors'], fn ($e) => $e['source']['pointer'] === '/data/attributes/password');
         $this->assertGreaterThanOrEqual(2, count($passwordErrors)); // min and confirmed rules failed
 
-        // Each error should have consistent structure
-        $expectedMessages = [
-            'The password field must be at least 8 characters.',
-            'The password field confirmation does not match.',
-        ];
+        // Each error should have consistent structure and expected content
+        // Message format varies between Laravel versions (8/9 vs 10+)
         $actualMessages = array_column(array_values($passwordErrors), 'detail');
-        $this->assertEquals($expectedMessages, $actualMessages);
+        $expectedFragments = ['at least 8 characters', 'confirmation'];
+
+        foreach ($expectedFragments as $fragment) {
+            $found = false;
+            foreach ($actualMessages as $message) {
+                if (str_contains($message, $fragment)) {
+                    $found = true;
+                    break;
+                }
+            }
+            $this->assertTrue($found, "Expected to find message containing '$fragment'");
+        }
 
         foreach ($passwordErrors as $error) {
             $this->assertEquals('422', $error['status']);
@@ -241,9 +251,11 @@ class BaseErrorHandlerTest extends TestCase
             $error = $data['errors'][0];
 
             // Nested field names use custom attributes for human-readable messages
+            // Message format varies between Laravel versions (8/9 vs 10+)
             $this->assertEquals('422', $error['status']);
             $this->assertEquals('Validation Error', $error['title']);
-            $this->assertEquals('The user profile age field is required.', $error['detail']);
+            $this->assertStringContainsString('user profile age', $error['detail']);
+            $this->assertStringContainsString('required', $error['detail']);
             $this->assertEquals('/data/attributes/user.profile.age', $error['source']['pointer']);
 
             return;
