@@ -5,9 +5,3 @@ composer.lock
 *.log
 *temp*
 
-# Ignore all .md files in the root
-/*.md
-
-# But do not ignore README.md
-!README.md
-

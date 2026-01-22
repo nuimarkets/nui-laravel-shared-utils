@@ -100,15 +100,16 @@ class DBSetupExtension implements BeforeFirstTestHook
     {
         $testingMigrationsPath = database_path('migrations/testing');
 
-        if (!is_dir($testingMigrationsPath)) {
+        if (! is_dir($testingMigrationsPath)) {
             Log::info('No testing migrations directory found, skipping testing migrations');
+
             return;
         }
 
         try {
             Log::info('Running testing migrate');
             Artisan::call('migrate', [
-                '--path' => str_replace(base_path() . '/', '', $testingMigrationsPath),
+                '--path' => str_replace(base_path().'/', '', $testingMigrationsPath),
             ]);
         } catch (Exception $exception) {
             Log::error("Running testing 'migrate' failed", [
@@ -139,8 +140,9 @@ class DBSetupExtension implements BeforeFirstTestHook
 
     public function runTestingSeeder(?string $seederClass = null): void
     {
-        if (!$seederClass) {
+        if (! $seederClass) {
             Log::info('No testing seeder, skipping testing seeder run');
+
             return;
         }
 
