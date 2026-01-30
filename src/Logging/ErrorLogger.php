@@ -213,15 +213,14 @@ class ErrorLogger
     }
 
     /**
-     * Determine if stack traces should be included.
+     * Determine if stack traces should be included in error logs.
+     *
+     * Note: This only affects exception/error level logs, not info/debug.
+     * Configurable via logging-utils.error_logging.include_stack_trace.
      */
     protected static function shouldIncludeStackTrace(): bool
     {
-        $env = config('app.env', 'production');
-        $debugMode = config('app.debug', false);
-
-        // Include stack traces in non-production or when debug is enabled
-        return ! in_array($env, ['production', 'prod']) || $debugMode;
+        return (bool) config('logging-utils.error_logging.include_stack_trace', config('app.debug', false));
     }
 
     /**
