@@ -39,7 +39,7 @@ class ErrorLoggerTest extends TestCase
 
     public function test_log_exception_includes_stack_trace_in_development()
     {
-        $this->app['config']->set('app.env', 'local');
+        $this->app['config']->set('app.debug', true);
 
         $exception = new \RuntimeException('Runtime error');
 
