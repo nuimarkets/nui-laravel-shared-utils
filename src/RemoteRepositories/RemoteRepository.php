@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\RemoteRepositories;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use NuiMarkets\LaravelSharedUtils\Contracts\HeaderResolverInterface;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
@@ -103,6 +104,34 @@ abstract class RemoteRepository
         $traceId = $this->getCurrentTraceId();
         if ($traceId) {
             $this->headers['X-Correlation-ID'] = $traceId;
+        }
+
+        // Passthrough headers - forward if present in incoming request
+        $passthroughHeaders = config('app.remote_repository.passthrough_headers', []);
+        foreach ($passthroughHeaders as $header) {
+            $value = request()?->headers->get($header);
+            if ($value !== null) {
+                $this->headers[$header] = $value;
+            }
+        }
+
+        // Contextual headers - passthrough OR resolve via resolver class
+        $contextualHeaders = config('app.remote_repository.contextual_headers', []);
+        foreach ($contextualHeaders as $header => $resolverClass) {
+            // First try passthrough
+            $value = request()?->headers->get($header);
+
+            // If not present, use resolver
+            if ($value === null && $resolverClass && class_exists($resolverClass)) {
+                $resolver = app($resolverClass);
+                if ($resolver instanceof HeaderResolverInterface) {
+                    $value = $resolver->resolve();
+                }
+            }
+
+            if ($value !== null) {
+                $this->headers[$header] = $value;
+            }
         }
     }
 
