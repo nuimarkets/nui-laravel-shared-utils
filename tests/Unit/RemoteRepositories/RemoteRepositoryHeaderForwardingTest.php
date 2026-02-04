@@ -28,6 +28,7 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
     {
         $reflection = new \ReflectionClass(RemoteRepository::class);
         $headersProperty = $reflection->getProperty('headers');
+        $headersProperty->setAccessible(true);
 
         return $headersProperty->getValue($repository);
     }

@@ -263,7 +263,7 @@ If the resolver returns `null`, the header is not added to outgoing requests.
 
 For contextual headers, **incoming request headers take priority** over resolver values. This allows upstream services to override values when needed:
 
-```
+```text
 Client Request                    Service A                         Service B
      │                               │                                  │
      │  X-User-Context: user-123     │                                  │
