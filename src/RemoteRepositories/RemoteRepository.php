@@ -107,7 +107,7 @@ abstract class RemoteRepository
         }
 
         // Passthrough headers - forward if present in incoming request
-        $passthroughHeaders = config('app.remote_repository.passthrough_headers', []);
+        $passthroughHeaders = config('app.remote_repository.passthrough_headers') ?? [];
         foreach ($passthroughHeaders as $header) {
             $value = request()?->headers->get($header);
             if ($value !== null) {
@@ -116,7 +116,7 @@ abstract class RemoteRepository
         }
 
         // Contextual headers - passthrough OR resolve via resolver class
-        $contextualHeaders = config('app.remote_repository.contextual_headers', []);
+        $contextualHeaders = config('app.remote_repository.contextual_headers') ?? [];
         foreach ($contextualHeaders as $header => $resolverClass) {
             // First try passthrough
             $value = request()?->headers->get($header);
