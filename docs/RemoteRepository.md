@@ -10,6 +10,7 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 - [Installation](#installation)
 - [Basic Usage](#basic-usage)
 - [Configuration](#configuration)
+- [Header Forwarding](#header-forwarding)
 - [Error Handling](#error-handling)
 - [HTTP Status Code Preservation](#http-status-code-preservation)
 - [Failure Caching](#failure-caching)
@@ -26,6 +27,7 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 - **JSON API Client Integration** - Built on `swisnl/json-api-client` for standardized API communication
 - **Lazy Token Loading** - Authentication tokens loaded on-demand to improve instantiation performance
 - **JWT Authentication** - Automatic machine token injection for service-to-service communication
+- **Header Forwarding** - Configurable passthrough and contextual headers for inter-service communication
 - **Retry Logic** - Configurable retry attempts with exponential backoff
 - **URL Length Validation** - Prevents HTTP 414 errors by validating request URL lengths
 
@@ -191,6 +193,134 @@ PXC_MAX_URL_LENGTH=2048
 PXC_API_LOG_REQUESTS=false
 PXC_USER_RETRIEVE_LIMIT=100
 ```
+
+## Header Forwarding
+
+The RemoteRepository supports configurable header forwarding for inter-service communication. This allows headers to propagate through service chains, maintaining context across microservice boundaries.
+
+### Header Types
+
+**Passthrough Headers**: Simply forwarded from the incoming request if present. Use for headers that should propagate through the service chain without modification.
+
+**Contextual Headers**: Forwarded from the incoming request if present, OR resolved via a resolver class if not. Use when headers need to be derived from application context (e.g., current user, tenant, session data).
+
+### Configuration
+
+```php
+// config/app.php
+'remote_repository' => [
+    'base_uri' => env('REMOTE_BASE_URI', 'https://api.example.com'),
+
+    // Headers to forward from incoming request (simple passthrough)
+    'passthrough_headers' => [
+        'X-Feature-Flag',
+        'X-Debug-Mode',
+    ],
+
+    // Headers to forward from request OR resolve via class if not present
+    'contextual_headers' => [
+        'X-User-Context' => \App\Support\HeaderResolvers\UserContextResolver::class,
+        'X-Tenant-ID' => \App\Support\HeaderResolvers\TenantResolver::class,
+    ],
+],
+```
+
+### Creating a Header Resolver
+
+Implement the `HeaderResolverInterface` to create a contextual header resolver:
+
+```php
+<?php
+
+namespace App\Support\HeaderResolvers;
+
+use NuiMarkets\LaravelSharedUtils\Contracts\HeaderResolverInterface;
+
+class UserContextResolver implements HeaderResolverInterface
+{
+    public function resolve(): ?string
+    {
+        // Return the header value, or null if it cannot be resolved
+        $user = auth()->user();
+
+        return $user?->id;
+    }
+}
+```
+
+### Resolver Behavior
+
+The resolver is only called when:
+
+1. The header is configured in `contextual_headers`
+2. The header is **not** present in the incoming request
+3. The resolver class exists
+4. The resolver implements `HeaderResolverInterface`
+
+If the resolver returns `null`, the header is not added to outgoing requests.
+
+### Request Priority
+
+For contextual headers, **incoming request headers take priority** over resolver values. This allows upstream services to override values when needed:
+
+```
+Client Request                    Service A                         Service B
+     │                               │                                  │
+     │  X-User-Context: user-123     │                                  │
+     ├──────────────────────────────>│                                  │
+     │                               │  X-User-Context: user-123        │
+     │                               │  (from request, not resolver)    │
+     │                               ├─────────────────────────────────>│
+     │                               │                                  │
+```
+
+If you need the resolver to always be used (ignoring incoming headers), configure the header as passthrough-only and handle resolution separately.
+
+### Use Cases
+
+**Passthrough headers** are ideal for:
+- Feature flags that should apply across all services
+- Debug/trace modes
+- Client version information
+- Any header that should flow unchanged through the service chain
+
+**Contextual headers** are ideal for:
+- User identity propagation (derive from JWT if not explicitly set)
+- Tenant/organization context
+- Request-scoped configuration that can be derived from application state
+
+### Example: Multi-Tenant Setup
+
+```php
+// config/app.php
+'remote_repository' => [
+    'contextual_headers' => [
+        'X-Tenant-ID' => \App\Support\TenantResolver::class,
+    ],
+],
+```
+
+```php
+// app/Support/TenantResolver.php
+<?php
+
+namespace App\Support;
+
+use NuiMarkets\LaravelSharedUtils\Contracts\HeaderResolverInterface;
+
+class TenantResolver implements HeaderResolverInterface
+{
+    public function resolve(): ?string
+    {
+        // Derive tenant from authenticated user or session
+        $user = auth()->user();
+
+        return $user?->tenant_id;
+    }
+}
+```
+
+Now all inter-service calls via RemoteRepository will include `X-Tenant-ID`, either from the incoming request or derived from the authenticated user.
 
 ## Error Handling
 
