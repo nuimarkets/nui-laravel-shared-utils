@@ -26,25 +26,31 @@ class AttachmentService
     /** @var callable|null */
     protected $pathBuilder;
 
+    /** @var callable|null */
+    protected $scopeResolver;
+
     /**
      * @param  string  $diskName  - S3 disk name from filesystems.php
      * @param  string  $attachmentModel  - Fully qualified attachment model class
      * @param  string|null  $pivotTable  - Pivot table name (null for polymorphic)
      * @param  string|null  $foreignKey  - Foreign key name (null for polymorphic)
-     * @param  callable|null  $pathBuilder  - Custom path builder: fn(?string $tenantId): string
+     * @param  callable|null  $pathBuilder  - Custom path builder: fn(?string $scope): string
+     * @param  callable|null  $scopeResolver  - Extract scope identifier from parent entity: fn($entity): ?string
      */
     public function __construct(
         string $diskName,
         string $attachmentModel,
         ?string $pivotTable = null,
         ?string $foreignKey = null,
-        ?callable $pathBuilder = null
+        ?callable $pathBuilder = null,
+        ?callable $scopeResolver = null
     ) {
         $this->diskName = $diskName;
         $this->attachmentModel = $attachmentModel;
         $this->pivotTable = $pivotTable;
         $this->foreignKey = $foreignKey;
         $this->pathBuilder = $pathBuilder;
+        $this->scopeResolver = $scopeResolver;
     }
 
     /**
@@ -78,9 +84,13 @@ class AttachmentService
 
         try {
             foreach ($files as $file) {
+                $scope = $this->scopeResolver
+                    ? ($this->scopeResolver)($parentEntity)
+                    : ($parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null);
+
                 $data = $this->uploadFileToS3(
                     $file,
-                    $parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null,
+                    $scope,
                     $type,
                     $effectiveUserId
                 );
