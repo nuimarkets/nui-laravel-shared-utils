@@ -178,7 +178,11 @@ class AttachmentService
             $uploaded = Storage::disk($this->diskName)->putFileAs(
                 $bucketPath,
                 $file,
-                $uniqueFilename
+                $uniqueFilename,
+                [
+                    'ContentDisposition' => $this->buildContentDisposition($originalFilename),
+                    'ContentType' => $file->getMimeType() ?: 'application/octet-stream',
+                ]
             );
 
             if (! $uploaded) {
@@ -253,6 +257,18 @@ class AttachmentService
         $sanitized = Str::slug($baseFilename);
 
         return "{$sanitized}_{$timestamp}_{$random}.{$extension}";
+    }
+
+    /**
+     * Build RFC 6266/5987 Content-Disposition header with sanitized filename.
+     */
+    protected function buildContentDisposition(string $filename): string
+    {
+        $clean = preg_replace('/[\x00-\x1F\x7F]/', '', $filename);
+        $quoted = addcslashes($clean, '"\\/');
+        $encoded = rawurlencode($clean);
+
+        return "attachment; filename=\"{$quoted}\"; filename*=UTF-8''{$encoded}";
     }
 
     /**
