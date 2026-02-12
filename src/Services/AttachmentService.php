@@ -178,7 +178,11 @@ class AttachmentService
             $uploaded = Storage::disk($this->diskName)->putFileAs(
                 $bucketPath,
                 $file,
-                $uniqueFilename
+                $uniqueFilename,
+                [
+                    'ContentDisposition' => 'attachment; filename="'.$originalFilename.'"',
+                    'ContentType' => $file->getMimeType(),
+                ]
             );
 
             if (! $uploaded) {
