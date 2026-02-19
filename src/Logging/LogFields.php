@@ -148,6 +148,8 @@ abstract class LogFields
 
     const API_ERROR = 'api.error';
 
+    const API_ERRORS = 'api.errors';
+
     const API_RETRY_COUNT = 'api.retry_count';
 
     // Database fields
@@ -305,6 +307,7 @@ abstract class LogFields
                 'API_SUCCESS' => self::API_SUCCESS,
                 'API_REQUEST_ID' => self::API_REQUEST_ID,
                 'API_ERROR' => self::API_ERROR,
+                'API_ERRORS' => self::API_ERRORS,
                 'API_RETRY_COUNT' => self::API_RETRY_COUNT,
             ],
             'entity' => [

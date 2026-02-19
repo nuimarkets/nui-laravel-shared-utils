@@ -69,7 +69,8 @@ class RemoteServiceException extends BaseHttpRequestException
         int $statusCode,
         array $errorDetails = []
     ): self {
-        $detail = implode('; ', array_filter($errorDetails));
+        $filtered = array_values(array_filter($errorDetails));
+        $detail = implode('; ', $filtered);
         $message = $detail !== ''
             ? "Remote service error ({$statusCode}): {$detail}"
             : "Remote service error ({$statusCode})";
@@ -80,13 +81,13 @@ class RemoteServiceException extends BaseHttpRequestException
                 LogFields::API_SERVICE => $service,
                 LogFields::API_ENDPOINT => $endpoint,
                 LogFields::API_STATUS => $statusCode,
-                'api.errors' => $errorDetails,
+                LogFields::API_ERRORS => $filtered,
             ]
         );
         $instance->remoteService = $service;
         $instance->remoteEndpoint = $endpoint;
         $instance->remoteStatusCode = $statusCode;
-        $instance->remoteErrors = $errorDetails;
+        $instance->remoteErrors = $filtered;
 
         return $instance;
     }

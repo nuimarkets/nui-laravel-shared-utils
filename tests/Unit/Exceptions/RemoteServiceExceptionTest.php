@@ -174,6 +174,8 @@ class RemoteServiceExceptionTest extends TestCase
         );
 
         $this->assertEquals('Remote service error (400): Actual error', $exception->getMessage());
+        $this->assertEquals(['Actual error'], $exception->getRemoteErrors());
+        $this->assertEquals(['Actual error'], $exception->getExtra()[LogFields::API_ERRORS]);
     }
 
     public function test_from_remote_response_populates_getters()
@@ -217,7 +219,7 @@ class RemoteServiceExceptionTest extends TestCase
         $this->assertEquals('AddressRepository', $extra[LogFields::API_SERVICE]);
         $this->assertEquals('/v4/addresses/123', $extra[LogFields::API_ENDPOINT]);
         $this->assertEquals(400, $extra[LogFields::API_STATUS]);
-        $this->assertEquals(['No address found'], $extra['api.errors']);
+        $this->assertEquals(['No address found'], $extra[LogFields::API_ERRORS]);
     }
 
     public function test_from_remote_response_is_instance_of_base_classes()

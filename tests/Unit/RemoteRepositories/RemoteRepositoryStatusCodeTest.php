@@ -259,7 +259,7 @@ class RemoteRepositoryStatusCodeTest extends TestCase
         }
     }
 
-    public function test_get_preserves_5xx_status_after_retry_exhaustion(): void
+    public function test_get_returns_502_for_null_response(): void
     {
         $mockClient = $this->createMockClient();
         $mockClient->expects($this->once())
@@ -275,6 +275,24 @@ class RemoteRepositoryStatusCodeTest extends TestCase
             // Null response gets 502 from throwRemoteServiceError, propagated directly
             $this->assertEquals(502, $e->getStatusCode());
             $this->assertEquals('/test/null-response', $e->getExtra()['api.endpoint']);
+        }
+    }
+
+    public function test_get_preserves_real_5xx_after_retry_exhaustion(): void
+    {
+        $mockClient = $this->createMockClient();
+        $mockClient->expects($this->once())
+            ->method('get')
+            ->willReturn($this->createErrorResponse(500, '{"errors": [{"detail": "Internal server error"}]}'));
+
+        $repository = $this->createTestRepository($mockClient);
+
+        try {
+            $repository->get('/test/server-error');
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            $this->assertEquals(500, $e->getStatusCode());
+            $this->assertEquals('/test/server-error', $e->getExtra()['api.endpoint']);
         }
     }
 
