@@ -3,6 +3,7 @@
 namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use Illuminate\Support\Facades\Log;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 
 /**
  * Centralized error logging with consistent formatting across services.
@@ -18,6 +19,14 @@ class ErrorLogger
     /**
      * Log an exception with standard context.
      *
+     * When the exception is a BaseHttpRequestException (e.g. RemoteServiceException),
+     * any structured `extra` data (api.service, api.status, etc.) is automatically
+     * merged into the log context. This means callers can do:
+     *
+     *     ErrorLogger::logException($e, ['address_id' => $id]);
+     *
+     * and get a single log entry with both API context and business context.
+     *
      * @param  \Throwable  $e  The exception to log
      * @param  array  $context  Additional context to include
      */
@@ -30,6 +39,12 @@ class ErrorLogger
             LogFields::ERROR_FILE => $e->getFile(),
             LogFields::ERROR_LINE => $e->getLine(),
         ];
+
+        // Extract structured context from BaseHttpRequestException (e.g. RemoteServiceException)
+        // This pulls in api.service, api.endpoint, api.status, api.errors etc.
+        if ($e instanceof BaseHttpRequestException && ! empty($e->getExtra())) {
+            $errorContext = array_merge($errorContext, $e->getExtra());
+        }
 
         // Add stack trace for non-production environments
         if (static::shouldIncludeStackTrace()) {
@@ -45,7 +60,7 @@ class ErrorLogger
             ];
         }
 
-        // Merge with provided context
+        // Merge with provided context (caller context wins over exception context)
         $fullContext = array_merge($errorContext, $context);
 
         // Use appropriate log level based on exception type

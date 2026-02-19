@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Exceptions;
 
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
+use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -118,5 +119,127 @@ class RemoteServiceExceptionTest extends TestCase
 
         $this->assertTrue($caughtAsException, 'Should still be catchable as generic Exception');
         $this->assertTrue($caughtAsHttpException, 'Should be catchable as HttpException');
+    }
+
+    // ========================================================================
+    // fromRemoteResponse() Factory Method Tests
+    // ========================================================================
+
+    public function test_from_remote_response_creates_clean_message_with_errors()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'AddressRepository',
+            '/v4/addresses/123',
+            400,
+            ['No address found']
+        );
+
+        $this->assertEquals('Remote service error (400): No address found', $exception->getMessage());
+        $this->assertEquals(400, $exception->getStatusCode());
+    }
+
+    public function test_from_remote_response_joins_multiple_errors()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'OrderRepository',
+            '/v4/orders',
+            422,
+            ['Field required', 'Invalid quantity']
+        );
+
+        $this->assertEquals('Remote service error (422): Field required; Invalid quantity', $exception->getMessage());
+        $this->assertEquals(422, $exception->getStatusCode());
+    }
+
+    public function test_from_remote_response_handles_empty_error_details()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'ProductRepository',
+            '/v4/products',
+            500,
+            []
+        );
+
+        $this->assertEquals('Remote service error (500)', $exception->getMessage());
+        $this->assertEquals(500, $exception->getStatusCode());
+    }
+
+    public function test_from_remote_response_filters_null_error_details()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'TestRepository',
+            '/v4/test',
+            400,
+            [null, 'Actual error', '', null]
+        );
+
+        $this->assertEquals('Remote service error (400): Actual error', $exception->getMessage());
+        $this->assertEquals(['Actual error'], $exception->getRemoteErrors());
+        $this->assertEquals(['Actual error'], $exception->getExtra()[LogFields::API_ERRORS]);
+    }
+
+    public function test_from_remote_response_populates_getters()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'AddressRepository',
+            '/v4/addresses/123',
+            404,
+            ['Not found']
+        );
+
+        $this->assertEquals('AddressRepository', $exception->getRemoteService());
+        $this->assertEquals('/v4/addresses/123', $exception->getRemoteEndpoint());
+        $this->assertEquals(404, $exception->getRemoteStatusCode());
+        $this->assertEquals(['Not found'], $exception->getRemoteErrors());
+    }
+
+    public function test_from_remote_response_populates_tags()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'AddressRepository',
+            '/v4/addresses/123',
+            400,
+            ['No address found']
+        );
+
+        $tags = $exception->getTags();
+        $this->assertEquals('AddressRepository', $tags['remote_service']);
+    }
+
+    public function test_from_remote_response_populates_extra_with_log_fields()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'AddressRepository',
+            '/v4/addresses/123',
+            400,
+            ['No address found']
+        );
+
+        $extra = $exception->getExtra();
+        $this->assertEquals('AddressRepository', $extra[LogFields::API_SERVICE]);
+        $this->assertEquals('/v4/addresses/123', $extra[LogFields::API_ENDPOINT]);
+        $this->assertEquals(400, $extra[LogFields::API_STATUS]);
+        $this->assertEquals(['No address found'], $extra[LogFields::API_ERRORS]);
+    }
+
+    public function test_from_remote_response_is_instance_of_base_classes()
+    {
+        $exception = RemoteServiceException::fromRemoteResponse(
+            'TestRepo', '/test', 502, ['Error']
+        );
+
+        $this->assertInstanceOf(RemoteServiceException::class, $exception);
+        $this->assertInstanceOf(BaseHttpRequestException::class, $exception);
+        $this->assertInstanceOf(HttpException::class, $exception);
+    }
+
+    public function test_constructor_getters_return_null_for_non_factory_instances()
+    {
+        $exception = new RemoteServiceException('Manual error', 502);
+
+        $this->assertNull($exception->getRemoteService());
+        $this->assertNull($exception->getRemoteEndpoint());
+        $this->assertNull($exception->getRemoteStatusCode());
+        $this->assertEquals([], $exception->getRemoteErrors());
     }
 }

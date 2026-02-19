@@ -2,6 +2,8 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Exceptions;
 
+use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
+
 /**
  * Exception thrown when remote service calls fail
  *
@@ -15,9 +17,21 @@ namespace NuiMarkets\LaravelSharedUtils\Exceptions;
  *
  * // Service Unavailable - remote service is down/timeout
  * throw new RemoteServiceException('Service timeout', 503);
+ *
+ * // Using factory method for structured context
+ * throw RemoteServiceException::fromRemoteResponse('AddressRepository', '/v4/addresses/123', 400, ['No address found']);
  */
 class RemoteServiceException extends BaseHttpRequestException
 {
+    private ?string $remoteService = null;
+
+    private ?string $remoteEndpoint = null;
+
+    private ?int $remoteStatusCode = null;
+
+    /** @var array<string> */
+    private array $remoteErrors = [];
+
     /**
      * Create a new RemoteServiceException instance
      *
@@ -35,5 +49,67 @@ class RemoteServiceException extends BaseHttpRequestException
         array $extra = []
     ) {
         parent::__construct($message, $statusCode, $previous, $tags, $extra);
+    }
+
+    /**
+     * Create a RemoteServiceException with structured context from a remote API response.
+     *
+     * Produces a clean, human-readable message and populates tags/extra so that
+     * ErrorLogger::logException() or BaseErrorHandler::report() can emit a single
+     * rich log entry without callers needing to manually build context arrays.
+     *
+     * @param  string  $service  Short service/repository name (e.g. 'AddressRepository')
+     * @param  string  $endpoint  The API endpoint that was called
+     * @param  int  $statusCode  HTTP status code from the remote service
+     * @param  array<string>  $errorDetails  Error detail strings from the response
+     */
+    public static function fromRemoteResponse(
+        string $service,
+        string $endpoint,
+        int $statusCode,
+        array $errorDetails = []
+    ): self {
+        $filtered = array_values(array_filter($errorDetails));
+        $detail = implode('; ', $filtered);
+        $message = $detail !== ''
+            ? "Remote service error ({$statusCode}): {$detail}"
+            : "Remote service error ({$statusCode})";
+
+        $instance = new self($message, $statusCode, null,
+            tags: ['remote_service' => $service],
+            extra: [
+                LogFields::API_SERVICE => $service,
+                LogFields::API_ENDPOINT => $endpoint,
+                LogFields::API_STATUS => $statusCode,
+                LogFields::API_ERRORS => $filtered,
+            ]
+        );
+        $instance->remoteService = $service;
+        $instance->remoteEndpoint = $endpoint;
+        $instance->remoteStatusCode = $statusCode;
+        $instance->remoteErrors = $filtered;
+
+        return $instance;
+    }
+
+    public function getRemoteService(): ?string
+    {
+        return $this->remoteService;
+    }
+
+    public function getRemoteEndpoint(): ?string
+    {
+        return $this->remoteEndpoint;
+    }
+
+    public function getRemoteStatusCode(): ?int
+    {
+        return $this->remoteStatusCode;
+    }
+
+    /** @return array<string> */
+    public function getRemoteErrors(): array
+    {
+        return $this->remoteErrors;
     }
 }

@@ -376,7 +376,25 @@ abstract class RemoteRepository
             } catch (ValidationException $e) {
                 $this->handleValidationException($e, $url);
 
+            } catch (RemoteServiceException $e) {
+                // 4xx = definitive response from remote (validation, not found, etc.) — don't retry
+                if ($e->getStatusCode() >= 400 && $e->getStatusCode() < 500) {
+                    $this->profileEnd(__METHOD__, $startTime);
+                    throw $e;
+                }
+
+                // 5xx = remote server error — may be transient, retry
+                $retry--;
+                if ($retry > 0) {
+                    sleep(1);
+                } else {
+                    \Sentry\captureException($e);
+                    $this->profileEnd(__METHOD__, $startTime);
+                    throw $e;
+                }
+
             } catch (\Exception $exception) {
+                // Network errors, timeouts, etc. — retry then wrap as 503
                 $retry--;
                 if ($retry > 0) {
                     sleep(1);
@@ -475,19 +493,10 @@ abstract class RemoteRepository
                         $res->getErrors()->toArray()
                     );
 
-                    Log::error('Remote service error', [
-                        'api.service' => static::class,
-                        'api.endpoint' => $url,
-                        'api.status' => $statusCode,
-                        'api.error' => implode('; ', $errorDetails),
-                    ]);
-
-                    foreach ($res->getErrors() as $error) {
-                        \Sentry\captureMessage($error->getDetail() ?? '');
-                    }
-
-                    $errorMessage = 'Error calling service. Returned: '.implode('; ', $errorDetails);
-                    throw new RemoteServiceException($errorMessage, $statusCode);
+                    // No logging here — exception carries structured context,
+                    // caller or error handler logs once with ErrorLogger::logException()
+                    $serviceName = class_basename(static::class);
+                    throw RemoteServiceException::fromRemoteResponse($serviceName, $url, $statusCode, $errorDetails);
                 }
 
                 $this->profileEnd(__METHOD__, $startTime);
@@ -497,14 +506,36 @@ abstract class RemoteRepository
             } catch (ValidationException $e) {
                 $this->handleValidationException($e, $url);
 
+            } catch (RemoteServiceException $e) {
+                // 4xx = definitive response from remote — don't retry
+                if ($e->getStatusCode() >= 400 && $e->getStatusCode() < 500) {
+                    $this->profileEnd(__METHOD__, $startTime);
+                    throw $e;
+                }
+
+                // 5xx = remote server error — may be transient, retry
+                $retry--;
+                if ($retry > 0) {
+                    sleep(1);
+                } else {
+                    \Sentry\captureException($e);
+                    $this->profileEnd(__METHOD__, $startTime);
+                    throw $e;
+                }
+
             } catch (\Exception $exception) {
+                // Network errors, timeouts, etc. — retry then wrap as 503
                 $retry--;
                 if ($retry > 0) {
                     sleep(1);
                 } else {
                     \Sentry\captureException($exception);
                     $this->profileEnd(__METHOD__, $startTime);
-                    throw new RemoteServiceException('Error getting response from remote server', 503);
+                    throw new RemoteServiceException(
+                        'Error getting response from remote server: '.$exception->getMessage(),
+                        503,
+                        $exception
+                    );
                 }
             }
         }
@@ -570,41 +601,32 @@ abstract class RemoteRepository
     private function throwRemoteServiceError(DocumentInterface $response, ?string $endpoint = null): void
     {
         $httpResponse = $response->getResponse();
+        $serviceName = class_basename(static::class);
 
         // Handle edge case where response is null
         if ($httpResponse === null) {
-            $context = ['api.service' => static::class];
-            if ($endpoint !== null) {
-                $context['api.endpoint'] = $endpoint;
-            }
-            Log::error('Remote service error: No HTTP response available', $context);
-            throw new RemoteServiceException('Error calling service: No response available', 502);
+            throw RemoteServiceException::fromRemoteResponse(
+                $serviceName,
+                $endpoint ?? 'unknown',
+                502,
+                ['No response available']
+            );
         }
 
         $statusCode = self::extractValidHttpStatusCode($httpResponse->getStatusCode());
-        $body = (string) $httpResponse->getBody();
 
-        // Collect error details for structured logging
+        // Collect error details for structured context
         $errorDetails = [];
         foreach ($response->getErrors() as $error) {
             $errorDetails[] = $error->getDetail();
         }
 
-        $context = [
-            'api.service' => static::class,
-            'api.status' => $statusCode,
-            'api.error' => implode('; ', $errorDetails),
-            'response_body' => $body,
-        ];
-        if ($endpoint !== null) {
-            $context['api.endpoint'] = $endpoint;
-        }
-
-        Log::error('Remote service error', $context);
-
-        throw new RemoteServiceException(
-            'Error calling service. Returned: '.$body,
-            $statusCode
+        // No logging here — caller or error handler logs once with full context
+        throw RemoteServiceException::fromRemoteResponse(
+            $serviceName,
+            $endpoint ?? 'unknown',
+            $statusCode,
+            $errorDetails
         );
     }
 
