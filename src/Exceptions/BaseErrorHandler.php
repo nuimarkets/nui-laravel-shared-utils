@@ -210,13 +210,18 @@ class BaseErrorHandler extends ExceptionHandler
 
         $errorData = $this->getFormattedError($e);
 
-        Log::error(
-            class_basename($e),
-            [
-                'errors' => $errorData['errors'],
-                'exception' => $e,
-            ],
-        );
+        $logContext = [
+            'errors' => $errorData['errors'],
+            'exception' => $e,
+        ];
+
+        // Include structured context from BaseHttpRequestException (e.g. RemoteServiceException)
+        // so uncaught exceptions still produce rich log entries with api.service, api.status, etc.
+        if ($e instanceof BaseHttpRequestException && ! empty($e->getExtra())) {
+            $logContext = array_merge($e->getExtra(), $logContext);
+        }
+
+        Log::error(class_basename($e), $logContext);
 
         parent::report($e);
     }

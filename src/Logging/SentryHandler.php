@@ -5,7 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Logger;
 use Monolog\LogRecord;
-use NuiMarkets\LaravelSharedUtils\Exceptions\BadHttpRequestException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use Sentry\Severity;
 use Sentry\State\Scope;
 
@@ -37,9 +37,9 @@ class SentryHandler extends AbstractProcessingHandler
                     $scope->setTags($context['tags']);
                 }
 
-                // If the error has tags (from BadHttpRequestException)
+                // If the error has tags (from BaseHttpRequestException)
                 if (isset($context['exception'])
-                    && $context['exception'] instanceof BadHttpRequestException
+                    && $context['exception'] instanceof BaseHttpRequestException
                 ) {
                     if (! empty($context['exception']->getTags())) {
                         $scope->setTags($context['exception']->getTags());
@@ -54,8 +54,8 @@ class SentryHandler extends AbstractProcessingHandler
 
             // If there's an exception in the context, capture it
             if (isset($context['exception']) && $context['exception'] instanceof \Throwable) {
-                // Report on the previous otherwise everything in sentry will show as BadHttpRequestException
-                if ($context['exception'] instanceof BadHttpRequestException && ! empty($context['exception']->getPrevious())) {
+                // Report on the previous otherwise everything in sentry will show as BaseHttpRequestException
+                if ($context['exception'] instanceof BaseHttpRequestException && ! empty($context['exception']->getPrevious())) {
                     captureException($context['exception']->getPrevious());
                 } else {
                     captureException($context['exception']);

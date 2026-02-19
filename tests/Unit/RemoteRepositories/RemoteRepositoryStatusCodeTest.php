@@ -16,6 +16,10 @@ use Swis\JsonApi\Client\Interfaces\DocumentInterface;
  *
  * These tests verify that RemoteRepository preserves the original HTTP status
  * codes from remote services instead of wrapping all errors as 502.
+ *
+ * Note: throwRemoteServiceError() no longer logs directly — it creates a
+ * RemoteServiceException with structured context via fromRemoteResponse().
+ * Logging responsibility is with the caller or error handler.
  */
 class RemoteRepositoryStatusCodeTest extends TestCase
 {
@@ -33,10 +37,8 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_404_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
-        $response = $this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}');
+        $response = $this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}', $this->createErrorCollection('Not found'));
 
         try {
             $repository->handleResponse($response);
@@ -49,8 +51,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_500_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(500, '{"errors": [{"detail": "Internal server error"}]}');
 
@@ -64,8 +64,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_503_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(503, '{"errors": [{"detail": "Service unavailable"}]}');
 
@@ -79,8 +77,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_400_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(400, '{"errors": [{"detail": "Bad request"}]}');
 
@@ -94,8 +90,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_401_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(401, '{"errors": [{"detail": "Unauthorized"}]}');
 
@@ -109,8 +103,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_403_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(403, '{"errors": [{"detail": "Forbidden"}]}');
 
@@ -124,8 +116,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_preserves_429_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(429, '{"errors": [{"detail": "Too many requests"}]}');
 
@@ -143,8 +133,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_uses_502_for_null_http_response(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
         $response = $this->createNullHttpResponse();
 
@@ -160,7 +148,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
     public function test_handle_response_uses_502_for_2xx_status_with_errors(): void
     {
         Log::shouldReceive('warning')->once();
-        Log::shouldReceive('error')->once();
 
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(200, '{"errors": [{"detail": "Weird error"}]}');
@@ -176,8 +163,6 @@ class RemoteRepositoryStatusCodeTest extends TestCase
 
     public function test_handle_response_uses_502_for_invalid_status_code(): void
     {
-        Log::shouldReceive('error')->once();
-
         $repository = $this->createTestRepository();
 
         // Create response with invalid status code (999)
@@ -198,60 +183,45 @@ class RemoteRepositoryStatusCodeTest extends TestCase
         }
     }
 
-    public function test_handle_response_logs_status_code(): void
-    {
-        Log::shouldReceive('error')
-            ->once()
-            ->withArgs(function ($message, $context) {
-                return $message === 'Remote service error'
-                    && isset($context['api.status'])
-                    && $context['api.status'] === 404;
-            });
+    // ========================================================================
+    // Exception Context Tests (replaces Log::error assertions)
+    // ========================================================================
 
+    public function test_handle_response_exception_carries_status_code_in_extra(): void
+    {
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}');
 
         try {
             $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
         } catch (RemoteServiceException $e) {
-            // Expected
+            $extra = $e->getExtra();
+            $this->assertEquals(404, $extra['api.status']);
         }
     }
 
-    public function test_handle_response_does_not_include_endpoint_in_log(): void
+    public function test_handle_response_exception_does_not_include_endpoint_when_called_directly(): void
     {
-        Log::shouldReceive('error')
-            ->once()
-            ->withArgs(function ($message, $context) {
-                // handleResponse() should NOT include api.endpoint since it doesn't know the URL
-                return $message === 'Remote service error'
-                    && ! isset($context['api.endpoint']);
-            });
-
         $repository = $this->createTestRepository();
         $response = $this->createErrorResponse(404, '{"errors": [{"detail": "Not found"}]}');
 
         try {
             $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
         } catch (RemoteServiceException $e) {
-            // Expected
+            // handleResponse() passes null endpoint, which becomes 'unknown'
+            $extra = $e->getExtra();
+            $this->assertEquals('unknown', $extra['api.endpoint']);
         }
     }
 
     // ========================================================================
-    // handleApiErrors() / get() Endpoint Logging Tests
+    // get() Endpoint Context Tests
     // ========================================================================
 
-    public function test_get_includes_endpoint_in_error_log(): void
+    public function test_get_propagates_4xx_directly_without_wrapping(): void
     {
-        Log::shouldReceive('error')
-            ->once()
-            ->withArgs(function ($message, $context) {
-                return $message === 'Remote service error'
-                    && isset($context['api.endpoint'])
-                    && $context['api.endpoint'] === '/test/endpoint';
-            });
-
         $mockClient = $this->createMockClient();
         $mockClient->expects($this->once())
             ->method('get')
@@ -264,21 +234,33 @@ class RemoteRepositoryStatusCodeTest extends TestCase
             $repository->get('/test/endpoint');
             $this->fail('Expected RemoteServiceException');
         } catch (RemoteServiceException $e) {
-            // get() wraps all exceptions with 503 after retry exhaustion
-            $this->assertEquals(503, $e->getStatusCode());
+            // 4xx propagates directly — not wrapped as 503
+            $this->assertEquals(404, $e->getStatusCode());
+            $this->assertNull($e->getPrevious());
+            $this->assertEquals('/test/endpoint', $e->getExtra()['api.endpoint']);
         }
     }
 
-    public function test_get_includes_endpoint_in_null_response_error_log(): void
+    public function test_get_does_not_retry_4xx_errors(): void
     {
-        Log::shouldReceive('error')
-            ->once()
-            ->withArgs(function ($message, $context) {
-                return $message === 'Remote service error: No HTTP response available'
-                    && isset($context['api.endpoint'])
-                    && $context['api.endpoint'] === '/test/null-response';
-            });
+        $mockClient = $this->createMockClient();
+        // Should only be called once — 422 should not be retried
+        $mockClient->expects($this->once())
+            ->method('get')
+            ->willReturn($this->createErrorResponse(422, '{"errors": [{"detail": "Validation failed"}]}'));
 
+        $repository = $this->createTestRepository($mockClient);
+
+        try {
+            $repository->get('/test/validation');
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            $this->assertEquals(422, $e->getStatusCode());
+        }
+    }
+
+    public function test_get_preserves_5xx_status_after_retry_exhaustion(): void
+    {
         $mockClient = $this->createMockClient();
         $mockClient->expects($this->once())
             ->method('get')
@@ -290,20 +272,14 @@ class RemoteRepositoryStatusCodeTest extends TestCase
             $repository->get('/test/null-response');
             $this->fail('Expected RemoteServiceException');
         } catch (RemoteServiceException $e) {
-            // get() wraps all exceptions with 503 after retry exhaustion
-            $this->assertEquals(503, $e->getStatusCode());
+            // Null response gets 502 from throwRemoteServiceError, propagated directly
+            $this->assertEquals(502, $e->getStatusCode());
+            $this->assertEquals('/test/null-response', $e->getExtra()['api.endpoint']);
         }
     }
 
-    public function test_handle_response_null_response_does_not_include_endpoint(): void
+    public function test_handle_response_null_response_uses_unknown_endpoint(): void
     {
-        Log::shouldReceive('error')
-            ->once()
-            ->withArgs(function ($message, $context) {
-                return $message === 'Remote service error: No HTTP response available'
-                    && ! isset($context['api.endpoint']);
-            });
-
         $repository = $this->createTestRepository();
         $response = $this->createNullHttpResponse();
 
@@ -312,6 +288,57 @@ class RemoteRepositoryStatusCodeTest extends TestCase
             $this->fail('Expected RemoteServiceException');
         } catch (RemoteServiceException $e) {
             $this->assertEquals(502, $e->getStatusCode());
+            $this->assertEquals('unknown', $e->getExtra()['api.endpoint']);
+        }
+    }
+
+    // ========================================================================
+    // Factory Method Integration Tests
+    // ========================================================================
+
+    public function test_exception_from_handle_response_has_service_name(): void
+    {
+        $repository = $this->createTestRepository();
+        $response = $this->createErrorResponse(400, '{"errors": [{"detail": "Bad request"}]}');
+
+        try {
+            $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            // The anonymous test class name is used as service name
+            $this->assertNotEmpty($e->getRemoteService());
+            $this->assertNotEmpty($e->getExtra()['api.service']);
+        }
+    }
+
+    public function test_exception_from_handle_response_has_error_details(): void
+    {
+        $repository = $this->createTestRepository();
+        $response = $this->createErrorResponse(400, '{"errors": [{"detail": "Bad request"}]}');
+
+        try {
+            $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            $this->assertNotEmpty($e->getRemoteErrors());
+            $this->assertStringContainsString('Remote service error (400)', $e->getMessage());
+        }
+    }
+
+    public function test_exception_message_is_clean_not_raw_json(): void
+    {
+        $repository = $this->createTestRepository();
+        $response = $this->createErrorResponse(400, '{"meta":{"message":"There was a problem"},"errors":[{"detail":"No address found"}]}');
+
+        try {
+            $repository->handleResponse($response);
+            $this->fail('Expected RemoteServiceException');
+        } catch (RemoteServiceException $e) {
+            // Message should NOT contain raw JSON
+            $this->assertStringNotContainsString('{"meta":', $e->getMessage());
+            $this->assertStringNotContainsString('Returned:', $e->getMessage());
+            // Should be a clean, structured message
+            $this->assertStringContainsString('Remote service error (400)', $e->getMessage());
         }
     }
 }
