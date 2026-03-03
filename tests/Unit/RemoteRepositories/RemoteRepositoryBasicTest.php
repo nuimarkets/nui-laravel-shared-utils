@@ -310,16 +310,12 @@ class RemoteRepositoryBasicTest extends TestCase
         $this->assertFalse($repository->isRecoverableError('Some other error'));
     }
 
-    public function test_get_configured_base_uri_throws_exception_with_detailed_message()
+    public function test_get_configured_base_uri_throws_exception_when_not_configured()
     {
-        // Clear all possible config values
         config(['app.remote_repository.base_uri' => null]);
-        config(['jsonapi.base_uri' => null]);
-        config(['pxc.base_api_uri' => null]);
-        config(['remote.base_uri' => null]);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('No remote service base URI configured. Checked the following config keys: app.remote_repository.base_uri, jsonapi.base_uri, pxc.base_api_uri, remote.base_uri. Please set one of these configuration values.');
+        $this->expectExceptionMessage('No remote service base URI configured. Set config key: app.remote_repository.base_uri');
 
         new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
@@ -399,36 +395,20 @@ class RemoteRepositoryBasicTest extends TestCase
         $this->assertStringContainsString('Duplicate active delivery address codes found', $result->getErrors()->first()->getDetail());
     }
 
-    public function test_get_configured_base_uri_uses_legacy_fallback_when_new_config_missing()
+    public function test_get_configured_base_uri_throws_when_legacy_keys_set_but_new_key_missing()
     {
-        $mockClient = $this->createMock(DocumentClientInterface::class);
-
-        // Clear new config but set legacy configs
         config(['app.remote_repository.base_uri' => null]);
-        config(['jsonapi.base_uri' => 'https://jsonapi.example.com']);
-        config(['pxc.base_api_uri' => 'https://pxc.example.com']);
-        config(['remote.base_uri' => 'https://remote.example.com']);
 
-        // Test that constructor uses the first legacy fallback
-        $mockClient->expects($this->once())
-            ->method('setBaseUri')
-            ->with('https://jsonapi.example.com');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('No remote service base URI configured');
 
-        $repository = new class($mockClient, $this->createMockTokenService()) extends RemoteRepository
+        new class($this->createMockClient(), $this->createMockTokenService()) extends RemoteRepository
         {
             protected function filter(array $data)
             {
                 return $data;
             }
-
-            public function getConfiguredBaseUri(): string
-            {
-                return parent::getConfiguredBaseUri();
-            }
         };
-
-        // Should use the first legacy fallback (jsonapi.base_uri)
-        $this->assertEquals('https://jsonapi.example.com', $repository->getConfiguredBaseUri());
     }
 
     public function test_constructor_validates_machine_token_service()

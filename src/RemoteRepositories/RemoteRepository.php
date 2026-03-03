@@ -191,29 +191,8 @@ abstract class RemoteRepository
             return $baseUri;
         }
 
-        // Legacy fallback configuration keys for backward compatibility
-        // TODO: Remove these fallbacks after Connect projects have been migrated
-        $legacyConfigKeys = [
-            'jsonapi.base_uri',
-            'pxc.base_api_uri',
-            'remote.base_uri',
-        ];
-
-        $missingKeys = ['app.remote_repository.base_uri'];
-
-        foreach ($legacyConfigKeys as $key) {
-            $value = config($key);
-            if ($value !== null) {
-                Log::warning("Using deprecated config key '{$key}'. Please migrate to 'app.remote_repository.base_uri'");
-
-                return $value;
-            }
-            $missingKeys[] = $key;
-        }
-
         throw new \RuntimeException(
-            'No remote service base URI configured. Checked the following config keys: '.
-            implode(', ', $missingKeys).'. Please set one of these configuration values.'
+            'No remote service base URI configured. Set config key: app.remote_repository.base_uri'
         );
     }
 
@@ -236,7 +215,7 @@ abstract class RemoteRepository
         }
 
         // Then check the length constraint
-        $maxLength = config('app.remote_repository.max_url_length', config('pxc.max_url_length', 2048));
+        $maxLength = config('app.remote_repository.max_url_length', 2048);
 
         return strlen($urlPath) < ($maxLength - $this->getBaseUrlLength());
     }
@@ -331,9 +310,23 @@ abstract class RemoteRepository
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
 
+        // API Gateway has an 8KB (8192 char) URL limit
+        $urlLength = strlen($url);
+        if ($urlLength >= 8192) {
+            Log::error('GET URL exceeds API Gateway 8KB limit', [
+                'url_length' => $urlLength,
+                'url_prefix' => substr($url, 0, 200),
+            ]);
+        } elseif ($urlLength >= 6554) {
+            Log::warning('GET URL approaching API Gateway 8KB limit (80%)', [
+                'url_length' => $urlLength,
+                'url_prefix' => substr($url, 0, 200),
+            ]);
+        }
+
         while (true) {
             try {
-                if (config('app.remote_repository.log_requests', config('pxc.api_log_requests', false))) {
+                if (config('app.remote_repository.log_requests', false)) {
                     Log::debug('API GET', ['url' => $url]);
                 }
 
@@ -471,7 +464,7 @@ abstract class RemoteRepository
 
         while (true) {
             try {
-                if (config('app.remote_repository.log_requests', config('pxc.api_log_requests', false))) {
+                if (config('app.remote_repository.log_requests', false)) {
                     Log::info('Request Debug', [
                         'url' => $url,
                         'body' => $this->client->encode($data),
