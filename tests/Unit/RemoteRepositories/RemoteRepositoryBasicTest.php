@@ -395,7 +395,7 @@ class RemoteRepositoryBasicTest extends TestCase
         $this->assertStringContainsString('Duplicate active delivery address codes found', $result->getErrors()->first()->getDetail());
     }
 
-    public function test_get_configured_base_uri_throws_when_legacy_keys_set_but_new_key_missing()
+    public function test_get_configured_base_uri_throws_when_missing()
     {
         config(['app.remote_repository.base_uri' => null]);
 
