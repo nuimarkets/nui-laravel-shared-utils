@@ -165,47 +165,5 @@ class HealthCheckControllerTest extends TestCase
         // Optional checks - may or may not be present
         // Redis check is only added if Redis is configured and available
         // Queue check is only added if queue driver is not 'sync'
-        // RabbitMQ check is only added if the class exists
-        if (class_exists('PhpAmqpLib\Connection\AMQPStreamConnection')) {
-            $this->assertArrayHasKey('rabbitmq', $data['checks']);
-        }
-    }
-
-    public function test_rabbitmq_check_skipped_when_host_empty()
-    {
-        // RabbitMQ library must be available for this test
-        if (! class_exists('PhpAmqpLib\Connection\AMQPStreamConnection')) {
-            $this->markTestSkipped('PhpAmqpLib not installed');
-        }
-
-        config(['rabbit.host' => '']);
-
-        $response = $this->get('/healthcheck');
-
-        $data = $response->json();
-        $rabbitmqCheck = $data['checks']['rabbitmq'] ?? null;
-
-        $this->assertNotNull($rabbitmqCheck, 'RabbitMQ check should be present');
-        $this->assertEquals('skipped', $rabbitmqCheck['status']);
-        $this->assertEquals('RabbitMQ not configured', $rabbitmqCheck['message']);
-        $this->assertEquals('not_configured', $rabbitmqCheck['connection']['state']);
-    }
-
-    public function test_rabbitmq_check_skipped_when_host_null()
-    {
-        // RabbitMQ library must be available for this test
-        if (! class_exists('PhpAmqpLib\Connection\AMQPStreamConnection')) {
-            $this->markTestSkipped('PhpAmqpLib not installed');
-        }
-
-        config(['rabbit.host' => null]);
-
-        $response = $this->get('/healthcheck');
-
-        $data = $response->json();
-        $rabbitmqCheck = $data['checks']['rabbitmq'] ?? null;
-
-        $this->assertNotNull($rabbitmqCheck, 'RabbitMQ check should be present');
-        $this->assertEquals('skipped', $rabbitmqCheck['status']);
     }
 }

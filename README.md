@@ -48,7 +48,7 @@ Production-ready logging with automatic Elasticsearch routing, configurable sens
 
 ### **Health Monitoring**
 
-Comprehensive health checks for MySQL, PostgreSQL, Redis, RabbitMQ, storage, cache, and PHP environment. Get detailed diagnostics with a single endpoint.
+Comprehensive health checks for MySQL, PostgreSQL, Redis, storage, cache, and PHP environment. Get detailed diagnostics with a single endpoint.
 
 ### **Service Communication**
 
