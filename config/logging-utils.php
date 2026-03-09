@@ -61,6 +61,10 @@ return [
     |
     */
     'error_logging' => [
+        // Expand Throwable objects in pretty log context into class, message, file, and app trace.
+        // When false (default), exceptions display as Object(ClassName).
+        'expand_exceptions' => false,
+
         // Include stack traces in non-production environments
         'include_stack_trace' => env('APP_DEBUG', false),
 

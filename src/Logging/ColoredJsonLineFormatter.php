@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 use JsonSerializable;
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Logger;
+use Throwable;
 
 /**
  * Formats log records as colored JSON lines with improved readability.
@@ -153,6 +154,15 @@ class ColoredJsonLineFormatter implements FormatterInterface
             return $this->formatValue($data);
         }
 
+        // Expand Throwable values in the array when configured
+        if ($this->shouldExpandExceptions()) {
+            foreach ($data as $key => $value) {
+                if ($value instanceof Throwable) {
+                    $data[$key] = $this->expandException($value);
+                }
+            }
+        }
+
         $result = '';
         $prefix = $this->getIndentation($indent);
 
@@ -171,6 +181,49 @@ class ColoredJsonLineFormatter implements FormatterInterface
         }
 
         return $result;
+    }
+
+    protected function shouldExpandExceptions(): bool
+    {
+        return (bool) config('logging-utils.error_logging.expand_exceptions', false);
+    }
+
+    private function expandException(Throwable $e): array
+    {
+        $expanded = [
+            'class' => get_class($e),
+            'message' => $e->getMessage(),
+            'file' => $e->getFile().':'.$e->getLine(),
+            'trace' => $this->formatExceptionTrace($e),
+        ];
+
+        if ($e->getPrevious()) {
+            $expanded['previous'] = $this->expandException($e->getPrevious());
+        }
+
+        return $expanded;
+    }
+
+    private function formatExceptionTrace(Throwable $e): array
+    {
+        $frames = [];
+
+        foreach (array_slice($e->getTrace(), 0, 10) as $frame) {
+            $file = $frame['file'] ?? null;
+            if ($file === null || ! str_contains($file, '/app/')) {
+                continue;
+            }
+
+            $line = $frame['line'] ?? '?';
+            $call = ($frame['class'] ?? '').($frame['type'] ?? '').($frame['function'] ?? '');
+            $frames[] = basename($file).':'.$line.' '.$call;
+
+            if (count($frames) >= 5) {
+                break;
+            }
+        }
+
+        return $frames;
     }
 
     private function getIndentation(int $level): string
