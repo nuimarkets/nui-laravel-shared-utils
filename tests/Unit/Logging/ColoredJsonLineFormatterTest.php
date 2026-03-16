@@ -170,6 +170,61 @@ class ColoredJsonLineFormatterTest extends TestCase
     }
 
     /** @test */
+    public function test_exception_shows_object_name_by_default()
+    {
+        $exception = new \RuntimeException('Something broke');
+
+        $record = $this->createLogRecord(
+            context: ['exception' => $exception],
+            level: self::LOG_LEVEL_ERROR,
+        );
+
+        $output = $this->formatter->format($record);
+
+        $this->assertStringContainsString('Object(RuntimeException)', $output);
+        $this->assertStringNotContainsString('Something broke', $output);
+    }
+
+    /** @test */
+    public function test_exception_expanded_when_config_enabled()
+    {
+        config()->set('logging-utils.error_logging.expand_exceptions', true);
+
+        $exception = new \RuntimeException('Something broke');
+
+        $record = $this->createLogRecord(
+            context: ['exception' => $exception],
+            level: self::LOG_LEVEL_ERROR,
+        );
+
+        $output = $this->formatter->format($record);
+
+        $this->assertStringContainsString('RuntimeException', $output);
+        $this->assertStringContainsString('Something broke', $output);
+        $this->assertStringNotContainsString('Object(', $output);
+    }
+
+    /** @test */
+    public function test_expanded_exception_includes_previous()
+    {
+        config()->set('logging-utils.error_logging.expand_exceptions', true);
+
+        $previous = new \InvalidArgumentException('Root cause');
+        $exception = new \RuntimeException('Something broke', 0, $previous);
+
+        $record = $this->createLogRecord(
+            context: ['exception' => $exception],
+            level: self::LOG_LEVEL_ERROR,
+        );
+
+        $output = $this->formatter->format($record);
+
+        $this->assertStringContainsString('Something broke', $output);
+        $this->assertStringContainsString('Root cause', $output);
+        $this->assertStringContainsString('InvalidArgumentException', $output);
+    }
+
+    /** @test */
     public function test_output_contains_newline_termination()
     {
         $record = [
