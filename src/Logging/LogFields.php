@@ -69,6 +69,8 @@ abstract class LogFields
 
     const TRACE_ID_HEADER = 'request.amz_trace_id';
 
+    const SENTRY_REPLAY_ID = 'request.sentry_replay_id';
+
     // User and organization fields
     const USER_ID = 'user_id'; // PII: Personal identifier
 
