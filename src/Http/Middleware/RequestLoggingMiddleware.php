@@ -162,6 +162,7 @@ abstract class RequestLoggingMiddleware
             LogFields::REQUEST_PATH => $request->path(),
             LogFields::REQUEST_IP => $request->ip(),
             LogFields::REQUEST_USER_AGENT => $request->userAgent(),
+            LogFields::SENTRY_REPLAY_ID => $request->headers->get('X-Sentry-Replay-Id'),
         ];
     }
 
