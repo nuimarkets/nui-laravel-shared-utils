@@ -141,6 +141,16 @@ class JsonApiCollectionTest extends TestCase
         $this->assertSame('/items?page=2', $links['self']);
     }
 
+    public function test_prefix_strip_does_not_corrupt_similar_path_segments()
+    {
+        $paginator = $this->makePaginator($this->makeItems(3), 10, 3, 2, '/apiary/items');
+        $collection = new StubItemCollection($paginator);
+        $result = $collection->with(request());
+
+        $links = $result['links'];
+        $this->assertSame('/apiary/items?page=2', $links['self']);
+    }
+
     public function test_pagination_information_returns_empty_to_suppress_laravel_defaults()
     {
         $collection = new StubItemCollection(collect([]));

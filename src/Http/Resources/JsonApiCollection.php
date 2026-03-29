@@ -86,7 +86,7 @@ class JsonApiCollection extends ResourceCollection
         $path = $parsed['path'] ?? '';
         $query = $parsed['query'] ?? '';
 
-        $path = preg_replace('#^/api#', '', $path);
+        $path = preg_replace('#^/api(/|$)#', '$1', $path);
 
         return $path . ($query ? '?' . $query : '');
     }
