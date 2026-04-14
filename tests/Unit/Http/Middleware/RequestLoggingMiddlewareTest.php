@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use NuiMarkets\LaravelSharedUtils\Auth\JWTUser;
 use NuiMarkets\LaravelSharedUtils\Http\Middleware\RequestLoggingMiddleware;
+use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class RequestLoggingMiddlewareTest extends TestCase
@@ -414,6 +415,28 @@ class RequestLoggingMiddlewareTest extends TestCase
         // Verify that logs WERE written for non-excluded path
         Log::shouldHaveReceived('info')->with('Request start', \Mockery::type('array'));
         Log::shouldHaveReceived('info')->with('Request complete', \Mockery::type('array'));
+    }
+
+    public function test_response_status_logged_as_flat_top_level_field()
+    {
+        $request = Request::create('/api/orders', 'GET');
+        $response = new Response('Not Found', 404);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // response.status must be a top-level flat key (dot-notation) so the
+        // ingestion Lambda can promote it into an indexed ES field. A nested
+        // ['response' => ['status' => 404]] structure gets buried in `data.*`
+        // and cannot be searched with `response.status:4xx` range queries.
+        Log::shouldHaveReceived('info')->with(
+            'Request complete',
+            \Mockery::on(function ($context) {
+                return ($context[LogFields::RESPONSE_STATUS] ?? null) === 404
+                    && ! isset($context['response']['status']);
+            })
+        );
     }
 }
 
