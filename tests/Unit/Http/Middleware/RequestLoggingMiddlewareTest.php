@@ -415,6 +415,28 @@ class RequestLoggingMiddlewareTest extends TestCase
         Log::shouldHaveReceived('info')->with('Request start', \Mockery::type('array'));
         Log::shouldHaveReceived('info')->with('Request complete', \Mockery::type('array'));
     }
+
+    public function test_response_status_logged_as_flat_top_level_field()
+    {
+        $request = Request::create('/api/orders', 'GET');
+        $response = new Response('Not Found', 404);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        // response.status must be a top-level flat key (dot-notation) so the
+        // ingestion Lambda can promote it into an indexed ES field. A nested
+        // ['response' => ['status' => 404]] structure gets buried in `data.*`
+        // and cannot be searched with `response.status:4xx` range queries.
+        Log::shouldHaveReceived('info')->with(
+            'Request complete',
+            \Mockery::on(function ($context) {
+                return ($context['response.status'] ?? null) === 404
+                    && ! isset($context['response']['status']);
+            })
+        );
+    }
 }
 
 /**

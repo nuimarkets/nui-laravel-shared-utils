@@ -95,6 +95,8 @@ abstract class LogFields
 
     const STATUS = 'status';
 
+    const RESPONSE_STATUS = 'response.status';
+
     const RESULT = 'result';
 
     // Error and exception fields
@@ -249,6 +251,7 @@ abstract class LogFields
                 'REQUEST_ID' => self::REQUEST_ID,
                 'REQUEST_METHOD' => self::REQUEST_METHOD,
                 'REQUEST_PATH' => self::REQUEST_PATH,
+                'RESPONSE_STATUS' => self::RESPONSE_STATUS,
                 // Basic request properties
                 'REQUEST_IP' => self::REQUEST_IP,
                 'REQUEST_USER_AGENT' => self::REQUEST_USER_AGENT,

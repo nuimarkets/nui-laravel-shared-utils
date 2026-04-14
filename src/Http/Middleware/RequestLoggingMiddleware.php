@@ -291,13 +291,13 @@ abstract class RequestLoggingMiddleware
             LogFields::TARGET => $this->getServiceName(),
             LogFields::FEATURE => 'requests',
             LogFields::ACTION => 'request.complete',
+            LogFields::RESPONSE_STATUS => $statusCode,
             'request' => [
                 'method' => $request->method(),
                 'path' => $request->path(),
                 'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
             ],
             'response' => [
-                LogFields::STATUS => $statusCode,
                 LogFields::RESPONSE_SIZE_BYTES => $responseSize,
             ],
             'performance' => $metrics,
