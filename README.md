@@ -62,6 +62,10 @@ Intelligent caching of remote service failures to prevent cascading timeouts dur
 
 Complete Intercom integration for user analytics and event tracking with queue-based processing and multi-tenant support.
 
+### **IAM RDS Authentication**
+
+Opt-in connector that swaps static `DB_PASSWORD` for short-lived Amazon RDS IAM auth tokens. Ships the AWS RDS truststore, wires TLS for MySQL and Postgres, and caches tokens per-connection. Enable with a single env flag; no `config/database.php` edits required.
+
 ### **JSON API Validation**
 
 Standardized JSON:API error handling with consistent validation responses. Provides unified error formatting across all services without configuration.
@@ -106,6 +110,7 @@ php artisan vendor:publish --tag=intercom-config
 | **JSON API Validation** | Standardized error handling with unified formatting | [Guide](docs/json-api-validation.md) |
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
+| **IAM RDS Connector** | Short-lived IAM tokens for RDS / RDS Proxy | [Guide](docs/iam-rds-connector.md) |
 
 ### Quick Examples
 
