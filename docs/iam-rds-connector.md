@@ -61,6 +61,34 @@ Tokens are generated per connection, not per query. Once a connection is open, R
 
 Long-lived processes (Horizon workers, daemonized queue workers) still refresh correctly: if the underlying connection drops and Laravel reconnects, the reconnection goes through `DB::extend` again and a fresh token is minted.
 
+## Worker and scheduler notes
+
+Worker fleets (Horizon, `queue:work`, scheduled artisan commands) are the primary motivator for IAM auth, so a closer look at their behaviour:
+
+- **Auth is checked once per connection, not per query.** A `queue:work` process can hold the same MySQL connection for hours after the minting token expired at t+15 minutes. RDS only validates the token during the TLS handshake; the session stays authenticated for the life of the connection.
+- **Reconnects re-mint.** When MySQL's `wait_timeout` drops an idle worker connection (or the network blips, or RDS fails over), Laravel's `DatabaseManager::reconnect()` re-enters `makeConnection()` which re-invokes the `DB::extend` resolver. The connector's in-process cache either returns a still-valid token or mints a fresh one.
+- **Schedulers run in fresh processes.** Each `schedule:run` invocation is a new PHP process: empty token cache, mint, open PDO, exit. No long-lived state.
+- **AWS credentials rotate transparently.** The default token generator uses `CredentialProvider::defaultProvider()`, so ECS task-role rotations (every ~6h) flow through automatically; the next `createToken()` call picks up refreshed credentials.
+
+### Use RDS Proxy for worker fleets
+
+RDS limits IAM auth attempts to roughly 200/second per instance. Per-process token caching keeps a single worker well under that, but a large worker fleet that cycles connections aggressively (explicit `DB::disconnect()`, short-lived task containers, autoscaling cold starts) can still hit the ceiling.
+
+Front the database with RDS Proxy and point workers at the proxy endpoint. Proxy pools backend connections and only IAM-authenticates the client-to-proxy hop, which the proxy tier throttles sensibly. This is the recommended pattern for any workload that opens more than a handful of connections per second.
+
+### Unsupported connection configurations
+
+IAM tokens are SigV4-signed against a single endpoint, so configs that hand the `DB::extend` resolver an unresolved multi-host shape are rejected fast:
+
+- **Read/write split** (`'read' => [...], 'write' => [...]` in the connection config): rejected. Define separate connections per endpoint, or use an RDS Proxy reader/writer endpoint pair.
+- **Host arrays** (`'host' => ['host1', 'host2']`): rejected. Use RDS Proxy or split into per-host connections.
+
+Both throw `InvalidArgumentException` at the first connection attempt, with a message naming the connection and pointing at the supported alternatives.
+
+### Clock skew
+
+SigV4 signatures require the client clock to be within a few minutes of AWS. ECS and EC2 hosts are NTP-synced by default and this is not something you need to think about, but if a worker starts emitting `SignatureDoesNotMatch` errors, check host time first.
+
 ## Credentials
 
 The default token-generator uses `Aws\Credentials\CredentialProvider::defaultProvider()`, so the SDK's normal resolution chain applies: ECS task role, EC2 instance profile, `AWS_*` env vars, `~/.aws/credentials`, etc. No custom wiring is needed for the standard AWS deployment patterns.
