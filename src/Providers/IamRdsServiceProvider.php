@@ -60,7 +60,11 @@ class IamRdsServiceProvider extends ServiceProvider
             $iam = $app->make(IamRdsConnector::class);
 
             $config['password'] = $iam->tokenFor($config);
-            $config['options'] = ($config['options'] ?? []) + $iam->mysqlPdoOptions();
+            // IAM's TLS options take precedence over app-provided options so a
+            // stale/weakened PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=false cannot
+            // silently disable cert verification under IAM auth. Matches the
+            // pgsql path which forcibly sets sslmode=verify-full + sslrootcert.
+            $config['options'] = $iam->mysqlPdoOptions() + ($config['options'] ?? []);
 
             return (new ConnectionFactory($app))->make($config, $name);
         });

@@ -135,6 +135,41 @@ class IamRdsServiceProviderTest extends TestCase
         $this->assertTrue($cfg['options'][PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT]);
     }
 
+    public function test_mysql_iam_options_override_weakened_app_options(): void
+    {
+        self::$authMode = true;
+        self::$fakeGenerator = $this->makeFakeGenerator();
+        self::$extraConnection = ['rds_mysql' => [
+            'driver' => 'mysql',
+            'host' => 'proxy.example.rds.amazonaws.com',
+            'port' => 3306,
+            'database' => 'appdb',
+            'username' => 'app_user',
+            'password' => 'ignored',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'options' => [
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
+                PDO::MYSQL_ATTR_SSL_CA => '/tmp/app-weakened.pem',
+            ],
+        ]];
+        $this->refreshApplication();
+
+        $conn = DB::connection('rds_mysql');
+        $cfg = $conn->getConfig();
+
+        $this->assertTrue(
+            $cfg['options'][PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT],
+            'IAM mode must force cert verification even if app config tries to disable it.'
+        );
+        $this->assertSame(
+            '/tmp/test-bundle.pem',
+            $cfg['options'][PDO::MYSQL_ATTR_SSL_CA],
+            'IAM mode must enforce its own CA bundle over any app-provided path.'
+        );
+    }
+
     public function test_pgsql_connection_receives_iam_token_and_ssl_params(): void
     {
         self::$authMode = true;
