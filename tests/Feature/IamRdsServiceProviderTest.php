@@ -3,6 +3,7 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnector;
 use NuiMarkets\LaravelSharedUtils\Providers\IamRdsServiceProvider;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
@@ -206,6 +207,54 @@ class IamRdsServiceProviderTest extends TestCase
 
         $this->assertSame('us-west-2', config('iam-rds.region'));
         $this->assertSame('/tmp/test-bundle.pem', config('iam-rds.ca_bundle_path'));
+    }
+
+    public function test_read_write_split_config_is_rejected_fast(): void
+    {
+        self::$authMode = true;
+        self::$fakeGenerator = $this->makeFakeGenerator();
+        self::$extraConnection = ['rds_mysql' => [
+            'driver' => 'mysql',
+            'read' => ['host' => 'reader.rds.amazonaws.com'],
+            'write' => ['host' => 'writer.rds.amazonaws.com'],
+            'port' => 3306,
+            'database' => 'appdb',
+            'username' => 'app_user',
+            'password' => 'ignored',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+        ]];
+        $this->refreshApplication();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('read/write split');
+
+        DB::connection('rds_mysql')->getPdo();
+    }
+
+    public function test_host_array_config_is_rejected_fast(): void
+    {
+        self::$authMode = true;
+        self::$fakeGenerator = $this->makeFakeGenerator();
+        self::$extraConnection = ['rds_pgsql' => [
+            'driver' => 'pgsql',
+            'host' => ['primary.rds.amazonaws.com', 'replica.rds.amazonaws.com'],
+            'port' => 5432,
+            'database' => 'appdb',
+            'username' => 'app_user',
+            'password' => 'ignored',
+            'charset' => 'utf8',
+            'prefix' => '',
+            'schema' => 'public',
+            'sslmode' => 'prefer',
+        ]];
+        $this->refreshApplication();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('single host per connection');
+
+        DB::connection('rds_pgsql')->getPdo();
     }
 
     public function test_connector_resolves_default_ca_bundle_relative_to_package_after_publish(): void

@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Providers;
 use Illuminate\Database\Connectors\ConnectionFactory;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnector;
 
 /**
@@ -56,6 +57,8 @@ class IamRdsServiceProvider extends ServiceProvider
         $app = $this->app;
 
         $db->extend('mysql', static function (array $config, string $name) use ($app) {
+            self::assertSingleHostConfig($config, $name);
+
             /** @var IamRdsConnector $iam */
             $iam = $app->make(IamRdsConnector::class);
 
@@ -70,6 +73,8 @@ class IamRdsServiceProvider extends ServiceProvider
         });
 
         $db->extend('pgsql', static function (array $config, string $name) use ($app) {
+            self::assertSingleHostConfig($config, $name);
+
             /** @var IamRdsConnector $iam */
             $iam = $app->make(IamRdsConnector::class);
 
@@ -78,5 +83,33 @@ class IamRdsServiceProvider extends ServiceProvider
 
             return (new ConnectionFactory($app))->make($config, $name);
         });
+    }
+
+    /**
+     * IAM auth tokens are SigV4-signed against a specific endpoint, so the
+     * DB::extend resolver receives the raw unresolved config (read/write
+     * arrays or round-robin host arrays) must be rejected fast rather than
+     * silently minting a token against a stringified "Array" hostname.
+     * Consumers that need multi-host should either front the fleet with an
+     * RDS Proxy or register IAM per resolved endpoint in their own provider.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private static function assertSingleHostConfig(array $config, string $name): void
+    {
+        if (isset($config['read']) || isset($config['write'])) {
+            throw new InvalidArgumentException(
+                "IAM RDS auth does not support read/write split connections ({$name}). "
+                .'Define separate connections for reader and writer endpoints, '
+                .'or front the cluster with an RDS Proxy and use a single connection.'
+            );
+        }
+
+        if (is_array($config['host'] ?? null)) {
+            throw new InvalidArgumentException(
+                "IAM RDS auth requires a single host per connection; got an array of hosts ({$name}). "
+                .'Use an RDS Proxy endpoint or split into per-host connections.'
+            );
+        }
     }
 }
