@@ -139,7 +139,8 @@ class ErrorLogger
      * @param  string  $errorType  The type of error (e.g., 'database', 'file_system', 'permission')
      * @param  string  $message  The error message
      * @param  array  $context  Additional context to include
-     * @param  string  $level  The log level to use (default: 'error')
+     * @param  string  $level  The log level to use (default: 'error'). Prefer a dedicated
+     *                         method such as logWarning() for non-error severities.
      */
     public static function logError(string $errorType, string $message, array $context = [], string $level = 'error'): void
     {
@@ -151,6 +152,18 @@ class ErrorLogger
         $fullContext = array_merge($errorContext, $context);
 
         static::logWithLevel($level, $message, $fullContext);
+    }
+
+    /**
+     * Log a custom warning with consistent formatting.
+     *
+     * @param  string  $errorType  The type of warning
+     * @param  string  $message  The warning message
+     * @param  array  $context  Additional context to include
+     */
+    public static function logWarning(string $errorType, string $message, array $context = []): void
+    {
+        static::logError($errorType, $message, $context, 'warning');
     }
 
     /**

@@ -282,4 +282,21 @@ class ErrorLoggerTest extends TestCase
             })
         );
     }
+
+    public function test_log_warning_uses_warning_level()
+    {
+        ErrorLogger::logWarning('configuration', 'Configuration is incomplete', [
+            'feature' => 'machine_token',
+        ]);
+
+        Log::shouldHaveReceived('warning')->once()->with(
+            'Configuration is incomplete',
+            \Mockery::on(function ($context) {
+                return $context['error_type'] === 'configuration' &&
+                       $context['error_message'] === 'Configuration is incomplete' &&
+                       $context['feature'] === 'machine_token';
+            })
+        );
+        Log::shouldNotHaveReceived('error');
+    }
 }
