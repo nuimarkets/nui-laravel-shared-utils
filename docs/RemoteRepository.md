@@ -10,6 +10,7 @@ The `RemoteRepository` is an abstract base class that provides standardized func
 - [Installation](#installation)
 - [Basic Usage](#basic-usage)
 - [Configuration](#configuration)
+- [Machine Token](#machine-token)
 - [Header Forwarding](#header-forwarding)
 - [Error Handling](#error-handling)
 - [HTTP Status Code Preservation](#http-status-code-preservation)
@@ -193,6 +194,21 @@ PXC_MAX_URL_LENGTH=2048
 PXC_API_LOG_REQUESTS=false
 PXC_USER_RETRIEVE_LIMIT=100
 ```
+
+## Machine Token
+
+`RemoteRepository` depends on `MachineTokenServiceInterface` and loads tokens lazily on the first outbound API request. Applications can bind their own implementation or opt into the shared implementation:
+
+```php
+// config/app.php
+'providers' => [
+    NuiMarkets\LaravelSharedUtils\Providers\MachineTokenServiceProvider::class,
+],
+```
+
+The shared provider binds `MachineTokenServiceInterface` to `MachineTokenService` and reads `machine_token.*` configuration from `config/machine_token.php`.
+
+See [Machine Token](machine-token.md) for installation, environment variables, logging behavior, and test mocking guidance.
 
 ## Header Forwarding
 

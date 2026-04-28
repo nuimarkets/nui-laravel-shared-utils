@@ -111,6 +111,7 @@ php artisan vendor:publish --tag=intercom-config
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
 | **IAM RDS Connector** | Short-lived IAM tokens for RDS / RDS Proxy | [Guide](docs/iam-rds-connector.md) |
+| **Machine Token** | Client-credentials token retrieval and caching for service-to-service auth | [Guide](docs/machine-token.md) |
 
 ### Quick Examples
 
