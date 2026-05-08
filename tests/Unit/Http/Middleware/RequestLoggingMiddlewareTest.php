@@ -437,6 +437,252 @@ class RequestLoggingMiddlewareTest extends TestCase
             })
         );
     }
+
+    public function test_integration_features_extracted_via_get_features_method()
+    {
+        $user = new UserWithGetFeatures([
+            'integration-create-as-pending',
+            'integration-skip-validation',
+            'standard-feature',
+        ]);
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === [
+                    'integration-create-as-pending',
+                    'integration-skip-validation',
+                ];
+            })
+        );
+    }
+
+    public function test_integration_features_extracted_via_features_property()
+    {
+        $user = new \stdClass;
+        $user->id = 1;
+        $user->features = [
+            'integration-create-as-pending',
+            'standard-feature',
+            'integration-bypass-stock-check',
+        ];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === [
+                    'integration-create-as-pending',
+                    'integration-bypass-stock-check',
+                ];
+            })
+        );
+    }
+
+    public function test_integration_features_absent_when_features_empty()
+    {
+        $user = new \stdClass;
+        $user->id = 1;
+        $user->features = [];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ! array_key_exists('integration_features', $context);
+            })
+        );
+    }
+
+    public function test_integration_features_absent_when_only_non_integration_features()
+    {
+        $user = new \stdClass;
+        $user->id = 1;
+        $user->features = ['standard-feature', 'another-feature'];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ! array_key_exists('integration_features', $context);
+            })
+        );
+    }
+
+    public function test_integration_features_skips_objects_with_magic_call_and_no_real_get_features()
+    {
+        // Mimics an Eloquent model: __call would route a fictitious getFeatures() to a relation/scope lookup
+        // and throw. method_exists() returns false for magic methods, so we must fall through to property-based
+        // sourcing. Public dynamic property here drives the read.
+        $user = new UserWithMagicCall;
+        $user->features = ['integration-create-as-pending', 'standard-feature'];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === ['integration-create-as-pending'];
+            })
+        );
+    }
+
+    public function test_integration_features_skips_protected_get_features_method()
+    {
+        // method_exists is true, but is_callable is false from outside-class scope, so we fall through to
+        // property-based sourcing and avoid an \Error from invoking a non-public method.
+        $user = new UserWithProtectedGetFeatures;
+        $user->features = ['integration-bypass-stock-check'];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === ['integration-bypass-stock-check'];
+            })
+        );
+    }
+
+    public function test_integration_features_skips_protected_get_features_when_magic_call_exists()
+    {
+        // Combined edge case: a class with both __call and a non-public getFeatures(). is_callable() returns
+        // true here (because __call would handle the call), but the reflection-based visibility check rejects
+        // the protected method, so we fall through to the property fallback rather than invoking __call.
+        $user = new UserWithProtectedGetFeaturesAndMagicCall;
+        $user->features = ['integration-create-as-pending'];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === ['integration-create-as-pending'];
+            })
+        );
+    }
+
+    public function test_integration_features_filters_non_string_and_malformed_entries()
+    {
+        $user = new \stdClass;
+        $user->id = 1;
+        $user->features = [
+            'integration-create-as-pending',
+            123,
+            null,
+            ['nested'],
+            new \stdClass,
+            'integration-bypass-stock-check',
+            'unrelated',
+        ];
+
+        $request = Request::create('/api/test', 'GET');
+        $request->setUserResolver(fn () => $user);
+
+        $this->middleware->handle($request, fn () => new Response('OK', 200));
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['integration_features'] ?? null) === [
+                    'integration-create-as-pending',
+                    'integration-bypass-stock-check',
+                ];
+            })
+        );
+    }
+}
+
+/**
+ * Test fixture: simulates a user model exposing getFeatures() (e.g. connect-order's ConnectUser).
+ */
+class UserWithGetFeatures
+{
+    public $id = 42;
+
+    private array $features;
+
+    public function __construct(array $features)
+    {
+        $this->features = $features;
+    }
+
+    public function getFeatures(): array
+    {
+        return $this->features;
+    }
+}
+
+/**
+ * Test fixture: simulates an Eloquent-shaped user. __call would handle magic method lookups.
+ * method_exists() must return false for magic, otherwise we'd invoke __call and crash the request.
+ */
+class UserWithMagicCall
+{
+    public $id = 42;
+
+    public ?array $features = null;
+
+    public function __call(string $name, array $arguments)
+    {
+        throw new \BadMethodCallException("Magic call to {$name} would query the database");
+    }
+}
+
+/**
+ * Test fixture: a user model with a protected getFeatures(). method_exists is true but is_callable is false
+ * from outside-class scope. The middleware must skip the call and fall through to the property fallback.
+ */
+class UserWithProtectedGetFeatures
+{
+    public $id = 42;
+
+    public ?array $features = null;
+
+    protected function getFeatures(): array
+    {
+        return ['should-not-be-read'];
+    }
+}
+
+/**
+ * Test fixture: combines protected getFeatures() with __call. PHP's is_callable() returns true here because
+ * __call would handle the invocation, so a visibility check based on is_callable alone is insufficient.
+ * Reflection on the declared method is the only correct guard.
+ */
+class UserWithProtectedGetFeaturesAndMagicCall
+{
+    public $id = 42;
+
+    public ?array $features = null;
+
+    protected function getFeatures(): array
+    {
+        return ['should-not-be-read'];
+    }
+
+    public function __call(string $name, array $arguments)
+    {
+        throw new \BadMethodCallException("Magic call to {$name} would crash");
+    }
 }
 
 /**

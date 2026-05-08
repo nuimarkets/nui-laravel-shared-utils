@@ -132,6 +132,29 @@ protected $middlewareGroups = [
 ];
 ```
 
+#### Automatic `integration_features` extraction
+
+When the request is authenticated, the base middleware also emits an
+`integration_features` field listing the user/tenant features whose names start
+with `integration-` (e.g. `integration-create-as-pending`). The field is
+omitted when there are no integration features, so non-integration traffic
+stays uncluttered, and cardinality stays bounded because non-`integration-*`
+features (which can be numerous) are filtered out.
+
+The middleware sources the feature list via a duck-typed contract on the
+authenticated user object:
+
+1. If the user exposes a public `getFeatures(): array` method, it is called.
+2. Otherwise, if the user has a public `$features` property holding an array,
+   it is read.
+3. Otherwise the field is omitted.
+
+The property fallback uses `get_object_vars()` so it does not trigger Eloquent
+magic accessors (e.g. lazy-loading a `features` relation). The method check
+skips non-public methods. No middleware override is needed in consuming
+services; ensure the user resolved by `$request->user()` exposes one of the
+two shapes.
+
 ### 5. Use the Logging Traits in Controllers
 
 ```php

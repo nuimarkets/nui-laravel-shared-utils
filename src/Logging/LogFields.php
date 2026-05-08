@@ -84,6 +84,9 @@ abstract class LogFields
 
     const USER_NAME = 'user_name'; // PII: Personal name
 
+    // Tenant/org capability context (subset of features; integration-* only on request side to bound cardinality)
+    const INTEGRATION_FEATURES = 'integration_features';
+
     // Action and operation fields
     const FEATURE = 'feature';
 
@@ -273,6 +276,7 @@ abstract class LogFields
                 'USER_TYPE' => self::USER_TYPE,
                 'USER_EMAIL' => self::USER_EMAIL,
                 'USER_NAME' => self::USER_NAME,
+                'INTEGRATION_FEATURES' => self::INTEGRATION_FEATURES,
             ],
             'action' => [
                 'FEATURE' => self::FEATURE,

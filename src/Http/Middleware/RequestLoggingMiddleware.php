@@ -193,6 +193,32 @@ abstract class RequestLoggingMiddleware
                 if ($orgType = $this->getUserOrgType($user)) {
                     $context[LogFields::REQUEST_ORG_TYPE] = $orgType;
                 }
+
+                // Source features without triggering Eloquent magic. ReflectionMethod inspects the actual declared
+                // method so it correctly rejects a non-public getFeatures even when __call is defined (where
+                // is_callable would falsely return true and route the call through __call). get_object_vars() reads
+                // only declared public properties (avoids __isset lazy-loading a `features` relation).
+                $features = null;
+                if (method_exists($user, 'getFeatures')
+                    && (new \ReflectionMethod($user, 'getFeatures'))->isPublic()) {
+                    $features = $user->getFeatures();
+                } else {
+                    $publicProps = get_object_vars($user);
+                    if (isset($publicProps['features']) && is_array($publicProps['features'])) {
+                        $features = $publicProps['features'];
+                    }
+                }
+
+                if (is_array($features)) {
+                    $integrationFeatures = array_values(array_filter(
+                        $features,
+                        static fn ($feature): bool => is_string($feature) && str_starts_with($feature, 'integration-')
+                    ));
+
+                    if ($integrationFeatures !== []) {
+                        $context[LogFields::INTEGRATION_FEATURES] = $integrationFeatures;
+                    }
+                }
             }
         } catch (\Exception $e) {
             // Auth guard not configured or other auth issues - continue without user context
