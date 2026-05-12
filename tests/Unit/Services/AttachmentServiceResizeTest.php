@@ -164,6 +164,22 @@ class AttachmentServiceResizeTest extends TestCase
         $this->assertSame('image/jpeg', $resized->getMimeType());
     }
 
+    public function test_process_attachments_cleans_resized_tmp_files_after_upload(): void
+    {
+        $service = new CleanupTrackingAttachmentService;
+        $file = $this->makeJpegUpload(4000, 3000, 'big.jpg');
+        $parent = (object) [
+            'id' => 123,
+            'tenant_uuid' => 'tenant-1',
+        ];
+
+        $service->processAttachments($parent, $file, 'image', 456);
+
+        $this->assertNotNull($service->uploadedRealPath);
+        $this->assertTrue($service->sawTmpFileDuringUpload);
+        $this->assertFileDoesNotExist($service->uploadedRealPath);
+    }
+
     private function makeJpegUpload(int $width, int $height, string $name): UploadedFile
     {
         $path = $this->tmpDir.'/'.$name;
@@ -204,4 +220,57 @@ class NoResizeAttachmentService extends AttachmentService
     {
         parent::__construct('test-disk', \stdClass::class);
     }
+}
+
+class CleanupTrackingAttachmentService extends AttachmentService
+{
+    protected ?array $imageResizeConfig = [
+        'max_width' => 400,
+        'max_height' => 400,
+        'quality' => 80,
+        'background' => 'ffffff',
+    ];
+
+    public ?string $uploadedRealPath = null;
+
+    public bool $sawTmpFileDuringUpload = false;
+
+    public function __construct()
+    {
+        parent::__construct('test-disk', CleanupTrackingAttachment::class);
+    }
+
+    protected function uploadFileToS3(
+        UploadedFile $file,
+        ?string $tenantIdentifier,
+        ?string $type,
+        int|string $userId
+    ): array {
+        $this->uploadedRealPath = $file->getRealPath() ?: null;
+        $this->sawTmpFileDuringUpload = $this->uploadedRealPath !== null && is_file($this->uploadedRealPath);
+
+        return [
+            'uuid' => 'attachment-1',
+            'tenant_uuid' => $tenantIdentifier,
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'bucket_path' => 'tenant-1/attachments/'.$file->getClientOriginalName(),
+            'type' => $type ?? 'image',
+            'created_by' => $userId,
+        ];
+    }
+}
+
+class CleanupTrackingAttachment
+{
+    public ?string $attachable_type = null;
+
+    public int|string|null $attachable_id = null;
+
+    public static function create(array $data): self
+    {
+        return new self;
+    }
+
+    public function save(): void {}
 }

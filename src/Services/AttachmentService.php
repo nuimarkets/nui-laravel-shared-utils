@@ -126,86 +126,94 @@ class AttachmentService
         ?string $type = null,
         int|string|null $userId = null
     ): array {
-        // Normalize to array
-        if (! is_array($files)) {
-            $files = [$files];
-        }
-
-        // Resize images first when the subclass has opted in. Non-image uploads
-        // and resize-disabled subclasses fall through untouched.
-        if ($this->imageResizeConfig !== null) {
-            $resized = [];
-            foreach ($files as $file) {
-                $resized[] = $file instanceof UploadedFile && $this->isResizableImage($file)
-                    ? $this->resizeImage($file)
-                    : $file;
-            }
-            $files = $resized;
-        }
-
-        // Resolve effective user ID once
-        $effectiveUserId = $userId ?? auth()->id() ?? 0;
-
-        // Step 1: Upload all files to S3 first (outside transaction)
-        $uploadedData = [];
-        $uploadedPaths = []; // Track for cleanup on failure
+        $resizingEnabled = $this->imageResizeConfig !== null;
 
         try {
-            foreach ($files as $file) {
-                $scope = $this->scopeResolver
-                    ? ($this->scopeResolver)($parentEntity)
-                    : ($parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null);
-
-                $data = $this->uploadFileToS3(
-                    $file,
-                    $scope,
-                    $type,
-                    $effectiveUserId
-                );
-                $uploadedData[] = $data;
-                $uploadedPaths[] = $data['bucket_path'];
+            // Normalize to array
+            if (! is_array($files)) {
+                $files = [$files];
             }
-        } catch (\Exception $e) {
-            // Cleanup any uploaded files on upload failure
-            $this->cleanupS3Files($uploadedPaths);
-            throw $e;
-        }
 
-        // Step 2: Create database records in transaction
-        $attachments = [];
-        DB::beginTransaction();
+            // Resize images first when the subclass has opted in. Non-image uploads
+            // and resize-disabled subclasses fall through untouched.
+            if ($resizingEnabled) {
+                $resized = [];
+                foreach ($files as $file) {
+                    $resized[] = $file instanceof UploadedFile && $this->isResizableImage($file)
+                        ? $this->resizeImage($file)
+                        : $file;
+                }
+                $files = $resized;
+            }
 
-        try {
-            foreach ($uploadedData as $data) {
-                // Create attachment record
-                $attachmentModel = $this->attachmentModel;
-                $attachment = $attachmentModel::create($data);
+            // Resolve effective user ID once
+            $effectiveUserId = $userId ?? auth()->id() ?? 0;
 
-                // Attach to parent entity
-                if ($this->pivotTable) {
-                    // Standard pivot table
-                    $parentEntity->attachments()->attach($attachment->id, [
-                        'added_by' => $effectiveUserId,
-                    ]);
-                } else {
-                    // Polymorphic relationship
-                    $attachment->attachable_type = get_class($parentEntity);
-                    $attachment->attachable_id = $parentEntity->id;
-                    $attachment->save();
+            // Step 1: Upload all files to S3 first (outside transaction)
+            $uploadedData = [];
+            $uploadedPaths = []; // Track for cleanup on failure
+
+            try {
+                foreach ($files as $file) {
+                    $scope = $this->scopeResolver
+                        ? ($this->scopeResolver)($parentEntity)
+                        : ($parentEntity->tenant_uuid ?? $parentEntity->tenant_id ?? null);
+
+                    $data = $this->uploadFileToS3(
+                        $file,
+                        $scope,
+                        $type,
+                        $effectiveUserId
+                    );
+                    $uploadedData[] = $data;
+                    $uploadedPaths[] = $data['bucket_path'];
+                }
+            } catch (\Exception $e) {
+                // Cleanup any uploaded files on upload failure
+                $this->cleanupS3Files($uploadedPaths);
+                throw $e;
+            }
+
+            // Step 2: Create database records in transaction
+            $attachments = [];
+            DB::beginTransaction();
+
+            try {
+                foreach ($uploadedData as $data) {
+                    // Create attachment record
+                    $attachmentModel = $this->attachmentModel;
+                    $attachment = $attachmentModel::create($data);
+
+                    // Attach to parent entity
+                    if ($this->pivotTable) {
+                        // Standard pivot table
+                        $parentEntity->attachments()->attach($attachment->id, [
+                            'added_by' => $effectiveUserId,
+                        ]);
+                    } else {
+                        // Polymorphic relationship
+                        $attachment->attachable_type = get_class($parentEntity);
+                        $attachment->attachable_id = $parentEntity->id;
+                        $attachment->save();
+                    }
+
+                    $attachments[] = $attachment;
                 }
 
-                $attachments[] = $attachment;
+                DB::commit();
+
+                return $attachments;
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                // Cleanup S3 files on database failure
+                $this->cleanupS3Files($uploadedPaths);
+                throw $e;
             }
-
-            DB::commit();
-
-            return $attachments;
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            // Cleanup S3 files on database failure
-            $this->cleanupS3Files($uploadedPaths);
-            throw $e;
+        } finally {
+            if ($resizingEnabled) {
+                $this->cleanupTmpFiles();
+            }
         }
     }
 
