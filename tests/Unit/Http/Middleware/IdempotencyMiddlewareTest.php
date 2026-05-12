@@ -22,8 +22,35 @@ class IdempotencyMiddlewareTest extends TestCase
         parent::setUp();
 
         Carbon::setTestNow(Carbon::create(2026, 5, 12, 12, 0, 0));
-        config()->set('idempotency', require __DIR__.'/../../../../config/idempotency.php');
-        config()->set('idempotency.enabled', true);
+        config()->set('idempotency', [
+            'enabled' => true,
+            'redis_connection' => 'default',
+            'key_prefix' => 'idem:v1',
+            'ttl_header' => 600,
+            'ttl_body_hash' => 30,
+            'lock_ttl' => 60,
+            'header_name' => 'Idempotency-Key',
+            'header_max_length' => 255,
+            'retry_after_seconds' => 5,
+            'max_response_bytes' => 262144,
+            'replayable_status_codes' => [200, 201, 202, 204, 422],
+            'no_body_status_codes' => [204],
+            'replayable_content_types' => [
+                'application/json',
+                'application/vnd.api+json',
+                'text/plain',
+            ],
+            'replay_headers_allowlist' => [
+                'content-type',
+                'cache-control',
+                'etag',
+                'location',
+            ],
+            'body_hash_skip_content_types' => [
+                'multipart/form-data',
+                'application/octet-stream',
+            ],
+        ]);
 
         $this->bindRedis();
     }
@@ -485,7 +512,7 @@ class IdempotencyMiddlewareTest extends TestCase
         {
             public function __construct(private string $message) {}
 
-            public function connection(): void
+            public function connection(?string $name = null): void
             {
                 throw new \RuntimeException($this->message);
             }
