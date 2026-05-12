@@ -265,7 +265,7 @@ class IdempotencyMiddleware
             $parameters = $route->parameters();
             ksort($parameters);
 
-            return $this->join(['route', $route->getName(), $this->stableJson($parameters)]);
+            return $this->join(['route', $route->getName(), $this->stableJson($parameters), $this->normalizedQuery($request->query())]);
         }
 
         return $this->join(['path', '/'.ltrim($request->path(), '/'), $this->normalizedQuery($request->query())]);
@@ -354,6 +354,10 @@ class IdempotencyMiddleware
         }
 
         $content = $response->getContent();
+        if (($content === false || $content === '') && in_array($response->getStatusCode(), config('idempotency.no_body_status_codes', [204]), true)) {
+            return null;
+        }
+
         if ($content === false) {
             return 'streamed';
         }

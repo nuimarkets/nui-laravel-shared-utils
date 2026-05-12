@@ -12,6 +12,7 @@ return [
     'retry_after_seconds' => env('IDEMPOTENCY_RETRY_AFTER_SECONDS', 5),
     'max_response_bytes' => env('IDEMPOTENCY_MAX_RESPONSE_BYTES', 262144),
     'replayable_status_codes' => [200, 201, 202, 204, 422],
+    'no_body_status_codes' => [204],
     'replayable_content_types' => [
         'application/json',
         'application/vnd.api+json',

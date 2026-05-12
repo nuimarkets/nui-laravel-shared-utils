@@ -150,6 +150,26 @@ class IdempotencyMiddlewareTest extends TestCase
         $this->assertSame(['errors' => ['bad']], json_decode($response->getContent(), true));
     }
 
+    public function test_no_content_response_without_content_type_is_cached_and_replayed(): void
+    {
+        $this->handle($this->request(headers: ['Idempotency-Key' => 'no-content-key']), function () {
+            return new \Illuminate\Http\Response('', 204);
+        });
+        $this->app->terminate();
+
+        $called = false;
+        $response = $this->handle($this->request(headers: ['Idempotency-Key' => 'no-content-key']), function () use (&$called) {
+            $called = true;
+
+            return response('rerun', 200, ['Content-Type' => 'text/plain']);
+        });
+
+        $this->assertFalse($called);
+        $this->assertSame(204, $response->getStatusCode());
+        $this->assertSame('', $response->getContent());
+        $this->assertSame('1', $response->headers->get('X-Idempotency-Replay'));
+    }
+
     public function test_non_replayable_status_codes_delete_inflight_key(): void
     {
         foreach ([401, 403, 404, 500] as $status) {
@@ -302,6 +322,50 @@ class IdempotencyMiddlewareTest extends TestCase
             $called = true;
 
             return response()->json(['order' => 2]);
+        });
+
+        $this->assertTrue($called);
+        $this->assertCount(2, $this->redis->keys());
+    }
+
+    public function test_same_named_route_and_body_with_different_query_does_not_body_hash_replay(): void
+    {
+        $first = $this->request(path: '/orders/1?include=lines', headers: []);
+        $first->setRouteResolver(fn () => new class
+        {
+            public function getName(): string
+            {
+                return 'orders.show';
+            }
+
+            public function parameters(): array
+            {
+                return ['order' => '1'];
+            }
+        });
+
+        $this->handle($first, fn () => response()->json(['include' => 'lines']));
+        $this->app->terminate();
+
+        $second = $this->request(path: '/orders/1?include=charges', headers: []);
+        $second->setRouteResolver(fn () => new class
+        {
+            public function getName(): string
+            {
+                return 'orders.show';
+            }
+
+            public function parameters(): array
+            {
+                return ['order' => '1'];
+            }
+        });
+
+        $called = false;
+        $this->handle($second, function () use (&$called) {
+            $called = true;
+
+            return response()->json(['include' => 'charges']);
         });
 
         $this->assertTrue($called);
