@@ -8,6 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\ImageManager;
+use NuiMarkets\LaravelSharedUtils\Exceptions\ResizeFailedException;
+use Throwable;
 
 /**
  * Reusable attachment upload and management service.
@@ -15,6 +19,31 @@ use Illuminate\Support\Str;
  */
 class AttachmentService
 {
+    /**
+     * Mimes accepted by resizeImage(). Animated GIF/WebP are flattened to a
+     * static first frame because the driver is configured with
+     * decodeAnimation: false — intentional for avatars/logos where the
+     * bandwidth win outweighs losing animation.
+     */
+    private const RESIZABLE_MIMES = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+    ];
+
+    /**
+     * Pixel cap for resize input. GD truecolor decode allocates ~4 bytes/pixel,
+     * so 15 MP ≈ 60 MB peak — fits comfortably under a 128 MB PHP CLI
+     * memory_limit and covers typical phone-camera photos (iPhone 12 MP @
+     * 4032×3024 = 12.2 MP; CON-1412 worst case 4032×3313 = 13.3 MP). Inputs
+     * above the cap throw ResizeFailedException (HTTP 422). Raise only if
+     * upload sizes legitimately need to grow and memory_limit is raised in
+     * tandem.
+     */
+    private const PIXEL_CAP = 15_000_000;
+
     protected string $diskName;
 
     protected string $attachmentModel;
@@ -28,6 +57,28 @@ class AttachmentService
 
     /** @var callable|null */
     protected $scopeResolver;
+
+    /**
+     * Per-consumer resize config. Null disables resizing (default).
+     * Subclasses opt in by setting this property:
+     *
+     *   protected ?array $imageResizeConfig = [
+     *       'max_width' => 400, 'max_height' => 400,
+     *       'quality' => 80, 'background' => 'ffffff',
+     *   ];
+     *
+     * Keys (all optional, with defaults shown):
+     *   - max_width  (int, 400)        target longest-edge width
+     *   - max_height (int, 400)        target longest-edge height
+     *   - quality    (int, 80)         JPEG quality 0-100
+     *   - background (string, ffffff)  hex colour used to flatten transparency
+     */
+    protected ?array $imageResizeConfig = null;
+
+    private ?ImageManager $imageManager = null;
+
+    /** @var list<string> */
+    private array $tmpFiles = [];
 
     /**
      * @param  string  $diskName  - S3 disk name from filesystems.php
@@ -53,6 +104,11 @@ class AttachmentService
         $this->scopeResolver = $scopeResolver;
     }
 
+    public function __destruct()
+    {
+        $this->cleanupTmpFiles();
+    }
+
     /**
      * Process multiple file uploads.
      *
@@ -73,6 +129,18 @@ class AttachmentService
         // Normalize to array
         if (! is_array($files)) {
             $files = [$files];
+        }
+
+        // Resize images first when the subclass has opted in. Non-image uploads
+        // and resize-disabled subclasses fall through untouched.
+        if ($this->imageResizeConfig !== null) {
+            $resized = [];
+            foreach ($files as $file) {
+                $resized[] = $file instanceof UploadedFile && $this->isResizableImage($file)
+                    ? $this->resizeImage($file)
+                    : $file;
+            }
+            $files = $resized;
         }
 
         // Resolve effective user ID once
@@ -368,5 +436,156 @@ class AttachmentService
                 ]);
             }
         }
+    }
+
+    // ========================================================================
+    // Image resize pipeline — opt-in via $imageResizeConfig.
+    // ========================================================================
+
+    /**
+     * True when the uploaded file is a raster image we can decode and re-encode.
+     */
+    public function isResizableImage(UploadedFile $file): bool
+    {
+        $mime = strtolower((string) $file->getMimeType());
+
+        return in_array($mime, self::RESIZABLE_MIMES, true);
+    }
+
+    /**
+     * True when an existing image is already small enough to skip on backfill.
+     */
+    public function isOptimalImage(int $width, int $height, int $bytes, string $mime, int $minBytes = 51_200): bool
+    {
+        $cfg = $this->resolveResizeConfig();
+
+        return strtolower($mime) === 'image/jpeg'
+            && $width <= $cfg['max_width']
+            && $height <= $cfg['max_height']
+            && $bytes < $minBytes;
+    }
+
+    /**
+     * Resize an image to the configured target (JPEG, flattened on background).
+     * Returns a new UploadedFile pointing at a tmp file. Tmp file is cleaned up
+     * when this service is destroyed, or eagerly via cleanupTmpFiles().
+     *
+     * @throws ResizeFailedException
+     */
+    public function resizeImage(UploadedFile $file): UploadedFile
+    {
+        $cfg = $this->resolveResizeConfig();
+
+        $sourcePath = $file->getRealPath();
+        if ($sourcePath === false || ! is_file($sourcePath)) {
+            throw new ResizeFailedException('Source file not readable');
+        }
+
+        $info = @getimagesize($sourcePath);
+        if ($info === false) {
+            throw new ResizeFailedException('Could not read image dimensions');
+        }
+        [$srcWidth, $srcHeight] = $info;
+
+        if (($srcWidth * $srcHeight) > self::PIXEL_CAP) {
+            throw new ResizeFailedException(sprintf(
+                'Image exceeds pixel cap (%d > %d)',
+                $srcWidth * $srcHeight,
+                self::PIXEL_CAP
+            ));
+        }
+
+        try {
+            $image = $this->imageManager($cfg['background'])->decodePath($sourcePath);
+
+            // scaleDown fits within both bounds, preserves aspect ratio, never upscales.
+            // Prefer over cover()/coverDown() (which crop) and contain()/containDown()
+            // (which pad to a fixed canvas) — see https://image.intervention.io/v4/modifying-images/resizing
+            $image->scaleDown($cfg['max_width'], $cfg['max_height']);
+
+            $encoded = $image->encodeUsingFileExtension('jpg', quality: $cfg['quality']);
+        } catch (Throwable $e) {
+            throw new ResizeFailedException('Resize failed: '.$e->getMessage(), $e);
+        }
+
+        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $tmpBase = tempnam(sys_get_temp_dir(), 'resized_');
+        if ($tmpBase === false) {
+            throw new ResizeFailedException('Failed to allocate resized tmp file');
+        }
+        $tmpPath = $tmpBase.'.jpg';
+        if (! @rename($tmpBase, $tmpPath)) {
+            @unlink($tmpBase);
+            throw new ResizeFailedException('Failed to finalise resized tmp file path');
+        }
+        if (file_put_contents($tmpPath, (string) $encoded) === false) {
+            @unlink($tmpPath);
+            throw new ResizeFailedException('Failed to write resized tmp file');
+        }
+        $this->tmpFiles[] = $tmpPath;
+
+        return new UploadedFile(
+            $tmpPath,
+            $baseName.'.jpg',
+            'image/jpeg',
+            null,
+            true
+        );
+    }
+
+    /**
+     * Eagerly delete tmp files produced by resizeImage(). Long-running callers
+     * (e.g. backfill artisan commands) should invoke this between iterations
+     * so /tmp doesn't accumulate one resized blob per processed attachment.
+     */
+    public function cleanupTmpFiles(): void
+    {
+        foreach ($this->tmpFiles as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+        $this->tmpFiles = [];
+    }
+
+    /**
+     * Merge subclass $imageResizeConfig with defaults. Throws if resize is
+     * disabled — callers should gate on $imageResizeConfig !== null when that
+     * matters (e.g. inside processAttachments).
+     *
+     * @return array{max_width:int,max_height:int,quality:int,background:string}
+     */
+    private function resolveResizeConfig(): array
+    {
+        $cfg = $this->imageResizeConfig ?? [];
+
+        return [
+            'max_width' => $cfg['max_width'] ?? 400,
+            'max_height' => $cfg['max_height'] ?? 400,
+            'quality' => $cfg['quality'] ?? 80,
+            'background' => $cfg['background'] ?? 'ffffff',
+        ];
+    }
+
+    /**
+     * Lazily build (and cache) the ImageManager so multiple resize calls reuse it.
+     *
+     * Driver config: auto-orientation on decode, single-frame decode for animated
+     * images, configurable background colour used to flatten transparency on JPEG
+     * encode, and EXIF stripping.
+     */
+    private function imageManager(string $backgroundColor): ImageManager
+    {
+        if ($this->imageManager === null) {
+            $this->imageManager = new ImageManager(
+                new GdDriver,
+                autoOrientation: true,
+                decodeAnimation: false,
+                backgroundColor: $backgroundColor,
+                strip: true,
+            );
+        }
+
+        return $this->imageManager;
     }
 }

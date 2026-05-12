@@ -18,7 +18,8 @@
     "sentry/sentry-laravel": "^4.11",
     "guzzlehttp/guzzle": "^7.0",
     "swisnl/json-api-client": "^2.2",
-    "aws/aws-sdk-php": "^3.342"
+    "aws/aws-sdk-php": "^3.342",
+    "intervention/image": "^4.0"
   },
   "suggest": {},
   "scripts": {
