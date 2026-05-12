@@ -4,7 +4,6 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 use NuiMarkets\LaravelSharedUtils\Http\Resources\JsonApiCollection;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 

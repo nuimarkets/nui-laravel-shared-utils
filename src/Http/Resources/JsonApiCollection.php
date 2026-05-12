@@ -28,6 +28,7 @@ class JsonApiCollection extends ResourceCollection
 
         parent::__construct($resource);
     }
+
     public function toArray($request): array
     {
         return [
@@ -88,7 +89,7 @@ class JsonApiCollection extends ResourceCollection
 
         $path = preg_replace('#^/api(/|$)#', '$1', $path);
 
-        return $path . ($query ? '?' . $query : '');
+        return $path.($query ? '?'.$query : '');
     }
 
     /**
