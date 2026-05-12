@@ -22,7 +22,7 @@ This library provides comprehensive distributed tracing support for Laravel appl
 - **Request ID Propagation** - Continuous request ID tracking across service boundaries
 - **Automatic Header Extraction** - Seamless capture of trace IDs from incoming requests
 - **Service-to-Service Correlation** - Complete request correlation through RemoteRepository calls
-- **CloudWatch Compatibility** - Field naming aligned with connect-cloudwatch-kinesis-to-es processing
+- **CloudWatch Compatibility** - Field naming aligned with downstream log processing
 
 ### Enhanced Debugging
 - **Cross-Service Tracing** - Track requests from API Gateway through entire service chains
@@ -47,7 +47,7 @@ class ServiceRequestLoggingMiddleware extends RequestLoggingMiddleware
 {
     protected function addServiceContext(Request $request, array $context): array
     {
-        $context['service_name'] = 'connect-auth';
+        $context['service_name'] = 'auth-service';
         
         // Add route-specific context
         if ($route = $request->route()) {
@@ -103,12 +103,12 @@ class ProductRepository extends RemoteRepository
 ### Request Flow with Distributed Tracing
 
 ```
-User Request → API Gateway → Service A (connect-auth)
+User Request → API Gateway → Service A (auth-service)
     [X-Amzn-Trace-Id: Root=1-67a92466-..;Parent=...;Sampled=1]
                     ↓ RequestLoggingMiddleware captures trace context
              Logs: request.trace_id, request.amz_trace_id
                     ↓ Business logic processes request
-    Service A → API Gateway → Service B (connect-product)
+    Service A → API Gateway → Service B (product-service)
     [X-Amzn-Trace-Id: Root=1-67a92466-..;Parent=NEW;Sampled=1]
                     ↓ X-Ray automatically links as parent-child
              Complete trace chain maintained ✅
@@ -168,7 +168,7 @@ Log::info('Processing order', [
 ### Service-to-Service Calls
 
 ```php
-// In connect-auth service
+// In auth-service
 class OrderService
 {
     public function processOrder($orderData)
@@ -184,7 +184,7 @@ class OrderService
     }
 }
 
-// In connect-product service (different service, same trace)
+// In product-service (different service, same trace)
 class ProductController
 {
     public function getProducts(Request $request)
@@ -202,7 +202,7 @@ class ProductController
 ### Error Correlation Across Services
 
 ```php
-// When an error occurs in connect-product
+// When an error occurs in product-service
 try {
     $products = $this->productService->getProducts($ids);
 } catch (Exception $e) {
@@ -212,7 +212,7 @@ try {
     ]);
     
     // Error logs automatically include trace context
-    // Can be correlated with original request in connect-auth
+    // Can be correlated with original request in auth-service
     throw new RemoteServiceException('Product service unavailable');
 }
 ```
@@ -319,7 +319,7 @@ class ProductRepository extends RemoteRepository
 
 #### Step 4: Update Log Processing
 ```php
-// connect-cloudwatch-kinesis-to-es TOP_LEVEL_FIELDS
+// Log processor TOP_LEVEL_FIELDS config
 // Add new fields to promote to root level:
 "request.trace_id",
 "request.amz_trace_id"
@@ -356,7 +356,7 @@ Include trace context in error logs for easier debugging:
 
 ```php
 Log::error('Service unavailable', [
-    'service' => 'connect-product',
+    'service' => 'product-service',
     'endpoint' => '/v1/products',
     'error' => $exception->getMessage()
 ]);
