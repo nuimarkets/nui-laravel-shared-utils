@@ -211,7 +211,7 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
     {
         // Register a resolver that doesn't implement the interface
         $this->app->bind(InvalidResolver::class, function () {
-            return new InvalidResolver();
+            return new InvalidResolver;
         });
 
         config(['app.remote_repository.contextual_headers' => [
