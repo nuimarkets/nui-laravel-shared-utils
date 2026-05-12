@@ -54,6 +54,13 @@ Comprehensive health checks for MySQL, PostgreSQL, Redis, storage, cache, and PH
 
 Enhanced RemoteRepository with lazy token loading for optimal performance, retry logic, automatic JWT authentication, and proper HTTP status propagation.
 
+### **Idempotency Middleware**
+
+Opt-in write-request idempotency for retry-safe endpoints. Supports
+`Idempotency-Key` headers, a short-lived body-hash fallback, Redis-backed
+inflight locks, response replay, and conflict detection when a key is reused
+for different request content.
+
 ### **Failure Caching**
 
 Intelligent caching of remote service failures to prevent cascading timeouts during outages. HTTP status-aware TTLs cache 404s longer than transient errors like timeouts. Includes failure classification, configurable per-category TTLs, and convenience methods for handling cached failures gracefully.
@@ -106,6 +113,7 @@ php artisan vendor:publish --tag=intercom-config
 | **Distributed Tracing** | AWS X-Ray integration with request correlation | [Guide](docs/distributed-tracing.md) |
 | **Logging System** | Enhanced logging with Elasticsearch routing | [Guide](docs/logging-integration.md) |
 | **RemoteRepository** | Service-to-service communication framework | [Guide](docs/RemoteRepository.md) |
+| **Idempotency Middleware** | Retry-safe write endpoints with response replay | [Guide](docs/idempotency.md) |
 | **Failure Caching** | Cache remote failures to prevent cascading timeouts | [Guide](docs/failure-caching.md) |
 | **JSON API Validation** | Standardized error handling with unified formatting | [Guide](docs/json-api-validation.md) |
 | **Intercom Integration** | User analytics and event tracking | [Guide](docs/intercom-integration.md) |
