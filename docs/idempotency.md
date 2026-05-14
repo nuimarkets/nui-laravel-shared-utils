@@ -269,10 +269,28 @@ return [
         'multipart/form-data',
         'application/octet-stream',
     ],
+    'metrics_namespace' => env(
+        'IDEMPOTENCY_METRICS_NAMESPACE',
+        'LaravelSharedUtils/Idempotency'
+    ),
+    'metric_names' => [
+        'cache_hit' => env(
+            'IDEMPOTENCY_CACHE_HIT_METRIC_NAME',
+            'IdempotencyCacheHits'
+        ),
+        'conflict' => env(
+            'IDEMPOTENCY_CONFLICT_METRIC_NAME',
+            'IdempotencyConflicts'
+        ),
+        'fail_open' => env(
+            'IDEMPOTENCY_FAIL_OPEN_METRIC_NAME',
+            'IdempotencyFailOpenEvents'
+        ),
+    ],
 ];
 ```
 
-## Logging
+## Logging And Metrics
 
 The middleware logs these events:
 
@@ -293,6 +311,27 @@ Skip cache logs include `skip_reason`:
 
 Redis errors fail open. The request continues through the application and the
 middleware logs `idempotency.fail_open`.
+
+Replay, conflict, and fail-open logs also carry metric-ready fields:
+
+- `idempotency_metric_namespace`
+- `idempotency_metric_name`
+- `idempotency_metric_value`
+- `idempotency_metric_unit`
+
+Defaults:
+
+| Event | Metric key | Default metric name |
+| ------- | ------------ | --------------------- |
+| `idempotency.replay` | `cache_hit` | `IdempotencyCacheHits` |
+| `idempotency.conflict` | `conflict` | `IdempotencyConflicts` |
+| `idempotency.fail_open` | `fail_open` | `IdempotencyFailOpenEvents` |
+
+Set `IDEMPOTENCY_METRICS_NAMESPACE` in a consuming service to place these
+signals in the service's CloudWatch namespace. These fields are intentionally
+low-cardinality so CloudWatch Logs metric filters, Elasticsearch alerts, or
+log queries can count events per minute without using `cache_key` or
+`fingerprint` as dimensions.
 
 ## Testing
 

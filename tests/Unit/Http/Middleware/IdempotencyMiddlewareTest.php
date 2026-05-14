@@ -50,6 +50,12 @@ class IdempotencyMiddlewareTest extends TestCase
                 'multipart/form-data',
                 'application/octet-stream',
             ],
+            'metrics_namespace' => 'Test/Idempotency',
+            'metric_names' => [
+                'cache_hit' => 'IdempotencyCacheHits',
+                'conflict' => 'IdempotencyConflicts',
+                'fail_open' => 'IdempotencyFailOpenEvents',
+            ],
         ]);
 
         $this->bindRedis();
@@ -240,12 +246,36 @@ class IdempotencyMiddlewareTest extends TestCase
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
     }
 
+    public function test_replay_logs_cache_hit_metric_context(): void
+    {
+        $this->handle($this->request(headers: ['Idempotency-Key' => 'metric-replay-key']), function () {
+            return response()->json(['created' => true]);
+        });
+        $this->app->terminate();
+
+        Log::spy();
+
+        $response = $this->handle($this->request(headers: ['Idempotency-Key' => 'metric-replay-key']), function () {
+            return response()->json(['rerun' => true]);
+        });
+
+        $this->assertSame('1', $response->headers->get('X-Idempotency-Replay'));
+        Log::shouldHaveReceived('info')->with('idempotency.replay', Mockery::on(
+            fn (array $context): bool => ($context['idempotency_metric_namespace'] ?? null) === 'Test/Idempotency'
+                && ($context['idempotency_metric_name'] ?? null) === 'IdempotencyCacheHits'
+                && ($context['idempotency_metric_value'] ?? null) === 1
+                && ($context['idempotency_metric_unit'] ?? null) === 'Count'
+        ));
+    }
+
     public function test_same_header_with_different_body_returns_conflict_in_plain_and_jsonapi_shapes(): void
     {
         $this->handle($this->request(body: '{"a":1}', headers: ['Idempotency-Key' => 'conflict-key']), function () {
             return response()->json(['ok' => true]);
         });
         $this->app->terminate();
+
+        Log::spy();
 
         $plain = $this->handle($this->request(body: '{"a":2}', headers: ['Idempotency-Key' => 'conflict-key']), fn () => response()->json(['rerun' => true]));
         $jsonApi = $this->handle($this->request(body: '{"a":2}', headers: [
@@ -256,6 +286,12 @@ class IdempotencyMiddlewareTest extends TestCase
         $this->assertSame(422, $plain->getStatusCode());
         $this->assertSame('idempotency_key_conflict', json_decode($plain->getContent(), true)['error']);
         $this->assertSame('idempotency_key_conflict', json_decode($jsonApi->getContent(), true)['errors'][0]['code']);
+        Log::shouldHaveReceived('info')->with('idempotency.conflict', Mockery::on(
+            fn (array $context): bool => ($context['idempotency_metric_namespace'] ?? null) === 'Test/Idempotency'
+                && ($context['idempotency_metric_name'] ?? null) === 'IdempotencyConflicts'
+                && ($context['idempotency_metric_value'] ?? null) === 1
+                && ($context['idempotency_metric_unit'] ?? null) === 'Count'
+        ));
     }
 
     public function test_inflight_lock_returns_409_with_computed_retry_after(): void
@@ -486,7 +522,12 @@ class IdempotencyMiddlewareTest extends TestCase
 
         $this->assertTrue($called);
         $this->assertSame(200, $response->getStatusCode());
-        Log::shouldHaveReceived('warning')->with('idempotency.fail_open', Mockery::type('array'));
+        Log::shouldHaveReceived('warning')->with('idempotency.fail_open', Mockery::on(
+            fn (array $context): bool => ($context['idempotency_metric_namespace'] ?? null) === 'Test/Idempotency'
+                && ($context['idempotency_metric_name'] ?? null) === 'IdempotencyFailOpenEvents'
+                && ($context['idempotency_metric_value'] ?? null) === 1
+                && ($context['idempotency_metric_unit'] ?? null) === 'Count'
+        ));
     }
 
     private function bindRedis(?FakeRedisConnection $redis = null): FakeRedisConnection

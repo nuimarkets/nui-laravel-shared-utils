@@ -28,4 +28,10 @@ return [
         'multipart/form-data',
         'application/octet-stream',
     ],
+    'metrics_namespace' => env('IDEMPOTENCY_METRICS_NAMESPACE', 'LaravelSharedUtils/Idempotency'),
+    'metric_names' => [
+        'cache_hit' => env('IDEMPOTENCY_CACHE_HIT_METRIC_NAME', 'IdempotencyCacheHits'),
+        'conflict' => env('IDEMPOTENCY_CONFLICT_METRIC_NAME', 'IdempotencyConflicts'),
+        'fail_open' => env('IDEMPOTENCY_FAIL_OPEN_METRIC_NAME', 'IdempotencyFailOpenEvents'),
+    ],
 ];
