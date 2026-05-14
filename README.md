@@ -102,6 +102,7 @@ php artisan vendor:publish --provider="NuiMarkets\LaravelSharedUtils\Providers\L
 # Publish specific configs
 php artisan vendor:publish --tag=logging-utils-config
 php artisan vendor:publish --tag=intercom-config
+php artisan vendor:publish --tag=idempotency-config
 ```
 
 ## Documentation

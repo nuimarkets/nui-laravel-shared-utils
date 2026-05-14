@@ -17,6 +17,12 @@ class IdempotencyMiddleware
 {
     private const SEPARATOR = "\x1f";
 
+    private const METRIC_EVENTS = [
+        'idempotency.replay' => 'cache_hit',
+        'idempotency.conflict' => 'conflict',
+        'idempotency.fail_open' => 'fail_open',
+    ];
+
     public function handle(Request $request, Closure $next): Response
     {
         if (! config('idempotency.enabled', false)) {
@@ -498,6 +504,27 @@ class IdempotencyMiddleware
             'cache_key' => $cacheKey,
             'fingerprint' => $fingerprint,
             'request_id' => request()?->headers->get('X-Request-ID'),
-        ], $context));
+        ], $this->metricContext($event), $context));
+    }
+
+    private function metricContext(string $event): array
+    {
+        $metricKey = self::METRIC_EVENTS[$event] ?? null;
+
+        if ($metricKey === null) {
+            return [];
+        }
+
+        $metricName = config('idempotency.metric_names.'.$metricKey);
+        if (! is_string($metricName) || $metricName === '') {
+            return [];
+        }
+
+        return [
+            'idempotency_metric_namespace' => (string) config('idempotency.metrics_namespace', 'LaravelSharedUtils/Idempotency'),
+            'idempotency_metric_name' => $metricName,
+            'idempotency_metric_value' => 1,
+            'idempotency_metric_unit' => 'Count',
+        ];
     }
 }
