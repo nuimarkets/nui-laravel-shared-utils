@@ -7,7 +7,11 @@ use NuiMarkets\LaravelSharedUtils\Http\Controllers\ClearLadaAndResponseCacheCont
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 /**
- * Tests for ClearLadaAndResponseCacheController
+ * Tests for ClearLadaAndResponseCacheController.
+ *
+ * Auth contract is token-only via AuthorizesCacheOperations: every
+ * authorized request carries ?token=$VALID_TOKEN, every unauthorized
+ * request omits it (or sends a wrong value).
  *
  * NOTE: Full integration tests with actual Lada cache counting were performed manually
  * in connect-order (Laravel 8) and connect-product (Laravel 9) and verified to work correctly.
@@ -21,17 +25,14 @@ use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
  */
 class ClearLadaAndResponseCacheControllerTest extends TestCase
 {
+    private const VALID_TOKEN = 'secret_token_123';
+
     protected function getEnvironmentSetUp($app)
     {
         parent::getEnvironmentSetUp($app);
 
         // Set up route for testing
         $app['router']->get('/clear-cache', [ClearLadaAndResponseCacheController::class, 'clearCache']);
-
-        // Set environment to local to allow access without token
-        // Note: Controller uses env() not config(), so we need to set the env var
-        putenv('APP_ENV=local');
-        $app['config']->set('app.env', 'local');
 
         // Configure Redis with test prefix
         $app['config']->set('database.redis.client', 'phpredis');
@@ -50,11 +51,8 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     {
         parent::setUp();
 
-        // Set APP_ENV for controller authorization check
-        // Must be done in setUp() as env() reads at runtime
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
+        // Token-only auth: configure once, every authorized test passes ?token=.
+        config()->set('app.clear_cache_token', self::VALID_TOKEN);
 
         // Clear Redis test database before each test
         try {
@@ -81,7 +79,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     /** @test */
     public function it_returns_correct_response_structure()
     {
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $response->assertJsonStructure([
@@ -109,7 +107,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     public function it_returns_zeros_when_no_cache_libraries_installed()
     {
         // Without Lada/ResponseCache installed, should return 0s
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
 
@@ -124,7 +122,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     /** @test */
     public function it_returns_correct_redis_prefix_in_response()
     {
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $this->assertEquals('test_prefix_', $response->json('detail.prefix'));
@@ -133,7 +131,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     /** @test */
     public function it_includes_duration_in_response()
     {
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $this->assertIsNumeric($response->json('detail.duration_ms'));
@@ -143,7 +141,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     /** @test */
     public function it_includes_correct_message_when_cache_not_available()
     {
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $this->assertEquals(
@@ -153,13 +151,8 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     }
 
     /** @test */
-    public function it_restricts_access_in_production_without_token()
+    public function it_restricts_access_without_token()
     {
-        // Change environment to production
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
-
         $response = $this->get('/clear-cache');
 
         $response->assertStatus(401);
@@ -167,81 +160,31 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
             'status' => 'restricted',
             'message' => 'Not available',
         ]);
-
-        // Reset to local
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
-    }
-
-    /** @test */
-    public function it_allows_access_in_production_with_valid_token()
-    {
-        // Change environment to production
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
-
-        // Set a token
-        putenv('CLEAR_CACHE_TOKEN=secret_token_123');
-        $_ENV['CLEAR_CACHE_TOKEN'] = 'secret_token_123';
-
-        $response = $this->get('/clear-cache?token=secret_token_123');
-
-        $response->assertStatus(200);
-        $response->assertJsonStructure(['message', 'detail']);
-
-        // Clean up
-        putenv('CLEAR_CACHE_TOKEN');
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
-        unset($_ENV['CLEAR_CACHE_TOKEN']);
-    }
-
-    /** @test */
-    public function it_allows_access_in_development_environment()
-    {
-        putenv('APP_ENV=development');
-        $_ENV['APP_ENV'] = 'development';
-        $_SERVER['APP_ENV'] = 'development';
-
-        $response = $this->get('/clear-cache');
-
-        $response->assertStatus(200);
-
-        // Reset
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
     }
 
     /** @test */
     public function it_denies_access_with_invalid_token()
     {
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
-
-        putenv('CLEAR_CACHE_TOKEN=correct_token');
-        $_ENV['CLEAR_CACHE_TOKEN'] = 'correct_token';
-
         $response = $this->get('/clear-cache?token=wrong_token');
 
         $response->assertStatus(401);
+    }
 
-        // Clean up
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
-        putenv('CLEAR_CACHE_TOKEN');
-        unset($_ENV['CLEAR_CACHE_TOKEN']);
+    /** @test */
+    public function it_denies_access_when_clear_cache_token_unconfigured()
+    {
+        // Wipe the configured token: even a request carrying any token must fail.
+        config()->set('app.clear_cache_token', null);
+
+        $response = $this->get('/clear-cache?token=anything');
+
+        $response->assertStatus(401);
     }
 
     /** @test */
     public function it_returns_response_cache_status()
     {
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
 

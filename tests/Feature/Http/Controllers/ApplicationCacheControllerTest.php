@@ -13,21 +13,24 @@ use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
  * Tests for ApplicationCacheController + the ?include=app delegation
  * from ClearLadaAndResponseCacheController.
  *
+ * Auth contract is token-only via AuthorizesCacheOperations: every
+ * authorized request carries ?token=$VALID_TOKEN, every unauthorized
+ * request omits it.
+ *
  * Uses the array cache driver so tests don't depend on Redis being up.
  * The driver class name is verified in the response payload as a regression
  * guard against accidentally flushing a misconfigured store.
  */
 class ApplicationCacheControllerTest extends TestCase
 {
+    private const VALID_TOKEN = 'secret_token_xyz';
+
     protected function getEnvironmentSetUp($app)
     {
         parent::getEnvironmentSetUp($app);
 
         $app['router']->get('/forget', [ApplicationCacheController::class, 'forget']);
         $app['router']->get('/clear-cache', [ClearLadaAndResponseCacheController::class, 'clearCache']);
-
-        putenv('APP_ENV=local');
-        $app['config']->set('app.env', 'local');
 
         // Use array driver so the cache facade itself doesn't need Redis.
         // The /clear-cache delegation tests still touch
@@ -61,9 +64,8 @@ class ApplicationCacheControllerTest extends TestCase
     {
         parent::setUp();
 
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
+        // Token-only auth: configure once, every authorized test passes ?token=.
+        config()->set('app.clear_cache_token', self::VALID_TOKEN);
 
         // Spy logs so the controller's Log::info() calls don't try to write
         // to disk. Keeps tests portable to sandboxes / CI runners with a
@@ -86,7 +88,7 @@ class ApplicationCacheControllerTest extends TestCase
         Cache::put('lookup:countries:all', ['NZ', 'AU'], 600);
         $this->assertTrue(Cache::has('lookup:countries:all'));
 
-        $response = $this->get('/forget?key=lookup:countries:all');
+        $response = $this->get('/forget?key=lookup:countries:all&token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $response->assertJsonPath('detail.key', 'lookup:countries:all');
@@ -99,7 +101,7 @@ class ApplicationCacheControllerTest extends TestCase
     /** @test */
     public function forget_reports_existed_before_false_when_key_missing()
     {
-        $response = $this->get('/forget?key=cache:absent:all');
+        $response = $this->get('/forget?key=cache:absent:all&token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $response->assertJsonPath('detail.existed_before', false);
@@ -111,7 +113,7 @@ class ApplicationCacheControllerTest extends TestCase
     /** @test */
     public function forget_returns_422_when_key_missing()
     {
-        $response = $this->get('/forget');
+        $response = $this->get('/forget?token='.self::VALID_TOKEN);
 
         $response->assertStatus(422);
         $response->assertJson([
@@ -123,18 +125,14 @@ class ApplicationCacheControllerTest extends TestCase
     /** @test */
     public function forget_returns_422_when_key_blank()
     {
-        $response = $this->get('/forget?key=');
+        $response = $this->get('/forget?key=&token='.self::VALID_TOKEN);
 
         $response->assertStatus(422);
     }
 
     /** @test */
-    public function forget_returns_401_in_production_without_token()
+    public function forget_returns_401_without_token()
     {
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
-
         $response = $this->get('/forget?key=anything');
 
         $response->assertStatus(401);
@@ -142,34 +140,25 @@ class ApplicationCacheControllerTest extends TestCase
             'status' => 'restricted',
             'message' => 'Not available',
         ]);
-
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
     }
 
     /** @test */
-    public function forget_allows_access_in_production_with_valid_token()
+    public function forget_returns_401_with_wrong_token()
     {
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
+        $response = $this->get('/forget?key=anything&token=not-the-real-token');
 
-        putenv('CLEAR_CACHE_TOKEN=secret_token_xyz');
-        $_ENV['CLEAR_CACHE_TOKEN'] = 'secret_token_xyz';
+        $response->assertStatus(401);
+    }
 
-        Cache::put('something', 'value', 600);
+    /** @test */
+    public function forget_returns_401_when_clear_cache_token_unconfigured()
+    {
+        // Wipe the configured token: even a request carrying any token must fail.
+        config()->set('app.clear_cache_token', null);
 
-        $response = $this->get('/forget?key=something&token=secret_token_xyz');
+        $response = $this->get('/forget?key=anything&token=anything');
 
-        $response->assertStatus(200);
-        $response->assertJsonPath('detail.forgotten', true);
-
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
-        putenv('CLEAR_CACHE_TOKEN');
-        unset($_ENV['CLEAR_CACHE_TOKEN']);
+        $response->assertStatus(401);
     }
 
     /** @test */
@@ -181,7 +170,7 @@ class ApplicationCacheControllerTest extends TestCase
         Cache::put('lookup:currencies:all', ['NZD'], 600);
         $this->assertTrue(Cache::has('lookup:countries:all'));
 
-        $response = $this->get('/clear-cache?include=app');
+        $response = $this->get('/clear-cache?include=app&token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $response->assertJsonPath('detail.app_cache.flushed', true);
@@ -197,7 +186,7 @@ class ApplicationCacheControllerTest extends TestCase
 
         Cache::put('lookup:countries:all', ['NZ'], 600);
 
-        $response = $this->get('/clear-cache');
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
 
         $response->assertStatus(200);
         $this->assertArrayNotHasKey(
@@ -212,15 +201,11 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     /** @test */
-    public function clear_cache_with_include_app_returns_401_when_unauthorized()
+    public function clear_cache_with_include_app_returns_401_without_token()
     {
         // No skipIfNoRedis() here: the auth gate returns 401 before
         // clearCache() ever touches Redis::connection('default'), so this
         // test must run even when Redis is unavailable.
-        putenv('APP_ENV=production');
-        $_ENV['APP_ENV'] = 'production';
-        $_SERVER['APP_ENV'] = 'production';
-
         Cache::put('lookup:countries:all', ['NZ'], 600);
 
         $response = $this->get('/clear-cache?include=app');
@@ -230,9 +215,5 @@ class ApplicationCacheControllerTest extends TestCase
             Cache::has('lookup:countries:all'),
             'Application cache must not be touched on a 401 response.'
         );
-
-        putenv('APP_ENV=local');
-        $_ENV['APP_ENV'] = 'local';
-        $_SERVER['APP_ENV'] = 'local';
     }
 }
