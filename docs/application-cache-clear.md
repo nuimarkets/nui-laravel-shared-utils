@@ -46,12 +46,27 @@ The `?include=app` flag is read from the query string by
 
 ## Authorization
 
-Both endpoints share `AuthorizesCacheOperations::isAuthorizedForDetailedInfo()`:
+Both endpoints share `AuthorizesCacheOperations::isAuthorizedForDetailedInfo()`,
+which is **token-only**: the request must carry `?token=` matching
+`config('app.clear_cache_token')`. Comparison is constant-time via
+`hash_equals()`.
 
-- `APP_ENV` is `local` or `development`, OR
-- The request carries `?token=` matching the `CLEAR_CACHE_TOKEN` env var.
+Wire-up per consumer:
 
-Unauthorized requests get `401 { "status": "restricted", "message": "Not available" }`.
+1. Add to your `config/app.php`:
+
+   ```php
+   'clear_cache_token' => env('CLEAR_CACHE_TOKEN'),
+   ```
+
+2. Set `CLEAR_CACHE_TOKEN` in every environment the endpoint is reachable from
+   (production, staging, dev) and in your local `.env`.
+
+The config indirection means the value survives `php artisan config:cache`.
+
+If `config('app.clear_cache_token')` is unset or empty, every request returns
+401 (fail-closed). Unauthorized requests get
+`401 { "status": "restricted", "message": "Not available" }`.
 
 ## Surgical: `?action=forget&key=X`
 
