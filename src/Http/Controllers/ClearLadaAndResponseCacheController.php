@@ -3,29 +3,26 @@
 namespace NuiMarkets\LaravelSharedUtils\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits\AuthorizesCacheOperations;
 
 /**
  * Clear Lada and Response Cache
  */
 class ClearLadaAndResponseCacheController extends Controller
 {
-    protected function isAuthorizedForDetailedInfo(): bool
-    {
-        $allowedEnvs = ['local', 'development'];
-        $hasValidToken = request()->has('token') &&
-            request()->get('token') === env('CLEAR_CACHE_TOKEN');
-
-        return in_array(env('APP_ENV'), $allowedEnvs) || $hasValidToken;
-    }
+    use AuthorizesCacheOperations;
 
     /**
-     * clears lada-cache
+     * clears lada-cache and response-cache. With ?include=app, also flushes
+     * the Laravel application cache store (Cache::flush()) and appends an
+     * `app_cache` block to the detail payload.
      */
-    public function clearCache(): JsonResponse
+    public function clearCache(Request $request): JsonResponse
     {
 
         if (! $this->isAuthorizedForDetailedInfo()) {
@@ -138,6 +135,11 @@ class ClearLadaAndResponseCacheController extends Controller
                 ],
             ],
         ];
+
+        if ($request->query('include') === 'app') {
+            $detail['app_cache'] = app(ApplicationCacheController::class)
+                ->flushAppCache();
+        }
 
         Log::info($msg, $detail);
 
