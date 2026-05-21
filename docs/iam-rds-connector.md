@@ -20,7 +20,7 @@ The provider is a no-op unless `config('iam-rds.auth_mode')` equals `'iam'`. Wit
 2. Register the service provider (this package ships no auto-discovered provider by design):
 
    ```php
-   // config/app.php (Laravel 8-10) or bootstrap/providers.php (Laravel 11+)
+   // config/app.php (Laravel 10) or bootstrap/providers.php (Laravel 11+)
    'providers' => [
        // ...
        NuiMarkets\LaravelSharedUtils\Providers\IamRdsServiceProvider::class,

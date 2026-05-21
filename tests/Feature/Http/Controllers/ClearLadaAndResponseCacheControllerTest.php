@@ -58,7 +58,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         try {
             Redis::connection('default')->select(1);
             Redis::connection('default')->flushdb();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->markTestSkipped('Redis not available: '.$e->getMessage());
         }
     }
@@ -69,7 +69,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         try {
             Redis::connection('default')->select(1);
             Redis::connection('default')->flushdb();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // Ignore cleanup errors
         }
 

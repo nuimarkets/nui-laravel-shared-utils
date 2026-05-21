@@ -28,66 +28,16 @@ use Illuminate\Support\Facades\Log;
 class ScheduleRunCommand extends BaseScheduleRunCommand
 {
     /**
-     * The PHP binary used by the command.
-     * Declared here to avoid PHP 8.2 dynamic property deprecation warnings.
-     *
-     * @var string
-     */
-    protected $phpBinary;
-
-    /**
-     * The cache store implementation.
-     * Declared for Laravel 8 compatibility where it might not exist in parent.
-     *
-     * @var \Illuminate\Contracts\Cache\Repository|null
-     */
-    protected $cache;
-
-    /**
-     * The 24 hour timestamp this scheduler command started running.
-     * Re-declared for safety across Laravel versions.
-     *
-     * @var \Illuminate\Support\Carbon
-     */
-    protected $startedAt;
-
-    /**
-     * Create a new command instance.
-     */
-    public function __construct()
-    {
-        parent::__construct();
-
-        // Initialize startedAt if parent didn't (for Laravel 8 compatibility)
-        if (! isset($this->startedAt)) {
-            $this->startedAt = now();
-        }
-    }
-
-    /**
      * Run the scheduled tasks.
      *
      * This class ensures that Log is used for all stdout.
-     *
-     * Supports both Laravel 8/9 (3 params) and Laravel 10+ (4 params) signatures.
      */
-    public function handle(Schedule $schedule, Dispatcher $dispatcher, $cacheOrHandler = null, ?ExceptionHandler $handler = null): void
+    public function handle(Schedule $schedule, Dispatcher $dispatcher, Cache $cache, ExceptionHandler $handler): void
     {
-        // Handle Laravel version differences:
-        // Laravel 8/9: handle(Schedule, Dispatcher, ExceptionHandler)
-        // Laravel 10+: handle(Schedule, Dispatcher, Cache, ExceptionHandler)
-        if ($cacheOrHandler instanceof ExceptionHandler) {
-            // Laravel 8/9 signature (3 params)
-            $this->handler = $cacheOrHandler;
-            $this->cache = null;
-        } else {
-            // Laravel 10+ signature (4 params)
-            $this->cache = $cacheOrHandler;
-            $this->handler = $handler;
-        }
-
         $this->schedule = $schedule;
         $this->dispatcher = $dispatcher;
+        $this->cache = $cache;
+        $this->handler = $handler;
         $this->phpBinary = Application::phpBinary();
 
         $events = $this->schedule->dueEvents($this->laravel);

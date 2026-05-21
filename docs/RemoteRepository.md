@@ -66,8 +66,9 @@ composer require nuimarkets/laravel-shared-utils
 
 Required dependencies are automatically installed:
 
+- `php: ^8.3`
 - `swisnl/json-api-client: ^2.2`
-- `laravel/framework: ^8.0|^9.0|^10.0`
+- `laravel/framework: ^10.15|^11.0`
 
 ## Basic Usage
 

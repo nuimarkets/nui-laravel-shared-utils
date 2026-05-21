@@ -108,11 +108,18 @@ class WorkCommand extends BaseWorkCommand
 
     }
 
-    protected function writeOutput($job, $status)
+    protected function writeOutput(\Illuminate\Contracts\Queue\Job $job, $status, ?\Throwable $exception = null)
     {
-        Log::info('Queue job status update', [
+        $context = [
             'job_class' => $job->resolveName(),
             'status' => $status,
-        ]);
+        ];
+
+        if ($exception !== null) {
+            $context['exception_class'] = get_class($exception);
+            $context['exception_message'] = $exception->getMessage();
+        }
+
+        Log::info('Queue job status update', $context);
     }
 }

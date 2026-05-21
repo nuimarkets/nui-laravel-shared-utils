@@ -11,9 +11,9 @@ use Monolog\LogRecord;
  * Background: This implementation fixed an issue where 42.2M logs were incorrectly
  * routed to log-connect-default-* instead of service-specific indexes.
  *
- * Note: Does not implement ProcessorInterface directly due to incompatible
- * method signatures between Monolog 2.x and 3.x. Monolog accepts any callable
- * as a processor, so this works without implementing the interface.
+ * Operates on Monolog 3 `LogRecord` instances; implemented as a plain
+ * `__invoke()` callable rather than a `ProcessorInterface` to keep the public
+ * signature loose.
  */
 class AddTargetProcessor
 {
@@ -41,35 +41,8 @@ class AddTargetProcessor
 
     /**
      * Add target field for Elasticsearch routing.
-     *
-     * @param  array|LogRecord  $record  The log record
-     * @return array|LogRecord The processed log record
-     *
-     * @throws \InvalidArgumentException When record is not array or LogRecord
      */
-    public function __invoke($record)
-    {
-        // Handle both Monolog 2 (array) and Monolog 3 (LogRecord) formats
-        if ($record instanceof LogRecord) {
-            return $this->processLogRecord($record);
-        }
-
-        if (is_array($record)) {
-            return $this->processArray($record);
-        }
-
-        throw new \InvalidArgumentException(
-            sprintf(
-                'AddTargetProcessor expects array or LogRecord, %s given',
-                is_object($record) ? get_class($record) : gettype($record)
-            )
-        );
-    }
-
-    /**
-     * Process Monolog 3 LogRecord format.
-     */
-    protected function processLogRecord(LogRecord $record): LogRecord
+    public function __invoke(LogRecord $record): LogRecord
     {
         $context = $record->context;
 
@@ -79,19 +52,6 @@ class AddTargetProcessor
         }
 
         return $record->with(context: $context);
-    }
-
-    /**
-     * Process Monolog 2 array format.
-     */
-    protected function processArray(array $record): array
-    {
-        // Only add target if not already present or if override is enabled
-        if (! isset($record['context']['target']) || $this->overrideExisting) {
-            $record['context']['target'] = $this->target;
-        }
-
-        return $record;
     }
 
     /**

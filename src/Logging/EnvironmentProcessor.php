@@ -10,7 +10,7 @@ use Monolog\Processor\ProcessorInterface;
  */
 class EnvironmentProcessor implements ProcessorInterface
 {
-    public function __invoke(LogRecord|array $record): LogRecord|array
+    public function __invoke(LogRecord $record): LogRecord
     {
         $extraInfo = [
             'environment' => env('APP_ENV', 'testing'),
@@ -54,15 +54,6 @@ class EnvironmentProcessor implements ProcessorInterface
             }
         }
 
-        // Handle both Monolog 2 (array) and Monolog 3 (LogRecord) formats
-        if ($record instanceof LogRecord) {
-            // Monolog 3: LogRecord format
-            return $record->with(extra: array_merge($record->extra, $extraInfo));
-        } else {
-            // Monolog 2: Array format
-            $record['extra'] = array_merge($record['extra'] ?? [], $extraInfo);
-
-            return $record;
-        }
+        return $record->with(extra: array_merge($record->extra, $extraInfo));
     }
 }

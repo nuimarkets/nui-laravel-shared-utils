@@ -268,6 +268,11 @@ class TestAuthUser implements \Illuminate\Contracts\Auth\Authenticatable
         return '';
     }
 
+    public function getAuthPasswordName()
+    {
+        return 'password';
+    }
+
     public function getRememberToken()
     {
         return '';
