@@ -46,6 +46,44 @@ class RequestLoggingMiddlewareTest extends TestCase
         );
     }
 
+    public function test_logs_x_forwarded_for_header_when_present()
+    {
+        // The raw X-Forwarded-For chain is logged for partner-IP forensics.
+        $request = Request::create('/api/orders', 'GET');
+        $request->headers->set('X-Forwarded-For', '203.0.113.42, 198.51.100.7');
+
+        $response = new Response('OK', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return ($context['request.x_forwarded_for'] ?? null) === '203.0.113.42, 198.51.100.7';
+            })
+        );
+    }
+
+    public function test_logs_null_x_forwarded_for_when_header_absent()
+    {
+        // Missing header normalizes to null (Laravel skips null values in log context).
+        $request = Request::create('/api/orders', 'GET');
+
+        $response = new Response('OK', 200);
+
+        $this->middleware->handle($request, function ($req) use ($response) {
+            return $response;
+        });
+
+        Log::shouldHaveReceived('withContext')->once()->with(
+            \Mockery::on(function ($context) {
+                return array_key_exists('request.x_forwarded_for', $context)
+                    && $context['request.x_forwarded_for'] === null;
+            })
+        );
+    }
+
     public function test_generates_request_id_if_not_provided()
     {
         // Mock Str::uuid to return a predictable value

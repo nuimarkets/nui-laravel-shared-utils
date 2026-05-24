@@ -161,6 +161,10 @@ abstract class RequestLoggingMiddleware
             LogFields::REQUEST_METHOD => $request->method(),
             LogFields::REQUEST_PATH => $request->path(),
             LogFields::REQUEST_IP => $request->ip(),
+            // Raw X-Forwarded-For header. $request->ip() returns the resolved
+            // client IP after TrustProxies; this preserves the full chain for
+            // partner-IP forensics.
+            LogFields::REQUEST_X_FORWARDED_FOR => $request->headers->get('X-Forwarded-For'),
             LogFields::REQUEST_USER_AGENT => $request->userAgent(),
             LogFields::SENTRY_REPLAY_ID => $request->headers->get('X-Sentry-Replay-Id'),
         ];
@@ -253,6 +257,7 @@ abstract class RequestLoggingMiddleware
             LogFields::REQUEST_METHOD => $request->method(),
             LogFields::REQUEST_PATH => $request->path(),
             LogFields::REQUEST_IP => $request->ip(),
+            LogFields::REQUEST_X_FORWARDED_FOR => $request->headers->get('X-Forwarded-For'),
             LogFields::REQUEST_USER_AGENT => $request->userAgent(),
             'route_name' => $request->route() ? $request->route()->getName() : 'unknown',
         ];
