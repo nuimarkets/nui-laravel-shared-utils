@@ -52,6 +52,7 @@ class SensitiveDataProcessor
         'remote_ip',
         'request.ip',   // LogFields constant
         '.ip',          // Catches request.ip, user.ip, etc.
+        'x_forwarded_for', // Raw XFF chain may carry one-or-more IP addresses
 
         // Personal Identifiers (commonly used)
         'user_id',      // User identifiers are PII

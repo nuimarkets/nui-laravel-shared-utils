@@ -130,6 +130,25 @@ class SensitiveDataProcessorTest extends TestCase
         $this->assertEquals('[REDACTED]', $processed['context']['request']['user']['credentials']['api_token']);
     }
 
+    public function test_redacts_x_forwarded_for_chain()
+    {
+        // The raw X-Forwarded-For chain carries one-or-more IPs and is flagged
+        // PII by LogFields::REQUEST_X_FORWARDED_FOR. Matched via substring on
+        // 'x_forwarded_for' so the LogFields-style 'request.x_forwarded_for'
+        // and any future variant both get redacted.
+        $record = $this->createLogRecord([
+            'request.x_forwarded_for' => '203.0.113.42, 198.51.100.7',
+            'metadata' => [
+                'x_forwarded_for' => '198.51.100.99',
+            ],
+        ]);
+
+        $processed = $this->processor->__invoke($record);
+
+        $this->assertEquals('[REDACTED]', $processed['context']['request.x_forwarded_for']);
+        $this->assertEquals('[REDACTED]', $processed['context']['metadata']['x_forwarded_for']);
+    }
+
     public function test_preserves_non_sensitive_data()
     {
         $record = $this->createLogRecord([

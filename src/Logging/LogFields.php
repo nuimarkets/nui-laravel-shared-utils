@@ -42,6 +42,11 @@ abstract class LogFields
 
     const REQUEST_IP = 'request.ip'; // PII: Contains IP address
 
+    // Raw X-Forwarded-For chain (keyword, comma-separated) for partner-IP
+    // forensics and credential-abuse correlation. Distinct from REQUEST_IP
+    // which is post-TrustProxies and a single resolved client IP.
+    const REQUEST_X_FORWARDED_FOR = 'request.x_forwarded_for'; // PII: May contain IP addresses
+
     const REQUEST_USER_AGENT = 'request.user_agent';
 
     const REQUEST_HEADERS = 'request.headers';
@@ -257,6 +262,7 @@ abstract class LogFields
                 'RESPONSE_STATUS' => self::RESPONSE_STATUS,
                 // Basic request properties
                 'REQUEST_IP' => self::REQUEST_IP,
+                'REQUEST_X_FORWARDED_FOR' => self::REQUEST_X_FORWARDED_FOR,
                 'REQUEST_USER_AGENT' => self::REQUEST_USER_AGENT,
                 // User context from JWT/session
                 'REQUEST_USER_ID' => self::REQUEST_USER_ID,
@@ -377,6 +383,7 @@ abstract class LogFields
     {
         return [
             'REQUEST_IP' => self::REQUEST_IP,
+            'REQUEST_X_FORWARDED_FOR' => self::REQUEST_X_FORWARDED_FOR,
             'REQUEST_USER_ID' => self::REQUEST_USER_ID,
             'REQUEST_USER_EMAIL' => self::REQUEST_USER_EMAIL,
             'USER_ID' => self::USER_ID,
