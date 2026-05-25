@@ -13,14 +13,49 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Log;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
-use PHPUnit\Runner\BeforeFirstTestHook;
+use PHPUnit\Event\TestRunner\Started;
+use PHPUnit\Event\TestRunner\StartedSubscriber;
+use PHPUnit\Runner\Extension\Extension;
+use PHPUnit\Runner\Extension\Facade as PHPUnitExtensionFacade;
+use PHPUnit\Runner\Extension\ParameterCollection;
+use PHPUnit\TextUI\Configuration\Configuration;
 
 /**
- * DB Setup Extension for phpUnit to drop/create testing database with migrations run
+ * DB Setup Extension for PHPUnit to drop/create testing database with migrations run.
+ *
+ * Register in phpunit.xml:
+ *   <extensions>
+ *     <bootstrap class="NuiMarkets\LaravelSharedUtils\Testing\DBSetupExtension"/>
+ *   </extensions>
  */
-class DBSetupExtension implements BeforeFirstTestHook
+class DBSetupExtension implements Extension
 {
     use CreatesApplication;
+
+    public function bootstrap(Configuration $configuration, PHPUnitExtensionFacade $facade, ParameterCollection $parameters): void
+    {
+        $facade->registerSubscriber($this->createTestRunnerStartedSubscriber());
+    }
+
+    /**
+     * Build the subscriber that runs `executeBeforeFirstTest()` when PHPUnit
+     * fires its `TestRunner\Started` event. Exposed for unit testing because
+     * `PHPUnit\Runner\Extension\Facade` is final and cannot be mocked.
+     *
+     * @internal
+     */
+    public function createTestRunnerStartedSubscriber(): StartedSubscriber
+    {
+        return new class($this) implements StartedSubscriber
+        {
+            public function __construct(private DBSetupExtension $extension) {}
+
+            public function notify(Started $event): void
+            {
+                $this->extension->executeBeforeFirstTest();
+            }
+        };
+    }
 
     /**
      * @throws Exception

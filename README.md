@@ -2,7 +2,7 @@
 
 [![Latest Version](https://img.shields.io/packagist/v/nuimarkets/laravel-shared-utils.svg?style=flat-square)](https://packagist.org/packages/nuimarkets/laravel-shared-utils)
 [![PHP Version](https://img.shields.io/packagist/php-v/nuimarkets/laravel-shared-utils.svg?style=flat-square)](https://packagist.org/packages/nuimarkets/laravel-shared-utils)
-[![Laravel Version](https://img.shields.io/badge/laravel-8.x%20|%209.x%20|%2010.x-brightgreen.svg?style=flat-square)](https://laravel.com)
+[![Laravel Version](https://img.shields.io/badge/laravel-10.x%20|%2011.x-brightgreen.svg?style=flat-square)](https://laravel.com)
 [![Tests](https://img.shields.io/github/actions/workflow/status/nuimarkets/nui-laravel-shared-utils/tests.yml?branch=master&label=tests&style=flat-square)](https://github.com/nuimarkets/nui-laravel-shared-utils/actions)
 [![License](https://img.shields.io/packagist/l/nuimarkets/laravel-shared-utils.svg?style=flat-square)](https://packagist.org/packages/nuimarkets/laravel-shared-utils)
 
@@ -83,8 +83,8 @@ Automated test database management, specialized test jobs for queue testing, JSO
 
 ## Requirements
 
-- PHP 8.0 or higher
-- Laravel 8.x, 9.x, or 10.x
+- PHP 8.3 or higher
+- Laravel 10.15+ or 11.x
 - Composer 2.x
 
 ## Installation
@@ -309,13 +309,76 @@ This package follows a **trait-based architecture** allowing you to:
 
 The package intentionally doesn't auto-register a service provider, giving you full control over which components to use.
 
+### Picking a release line
+
+This package ships two parallel lines, selected via your `composer.json` constraint:
+
+| Constraint | Laravel | PHP    | PHPUnit | Status                                |
+|------------|---------|--------|---------|---------------------------------------|
+| `^0.6.x`   | 10.15+ / 11.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
+| `^0.5.x`   | 8.x / 9.x     | 8.0+ | 9.x   | Maintenance pin for legacy consumers. No new features. |
+
+Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades — `composer update` will not pull `0.6.x` over a `^0.5.x` pin. To move to the new line, change the constraint explicitly:
+
+```bash
+composer require nuimarkets/laravel-shared-utils:^0.6
+```
+
+If you do this on a host that's still running Laravel 9 or PHPUnit 9, Composer will refuse the install (the `0.6.x` line declares `conflict` against PHPUnit `<10.5`, and Laravel 9 transitively requires Monolog 2 which conflicts with our `monolog: ^3.0` requirement). Upgrade Laravel + PHPUnit in the same PR as the bump — see *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
+
 ### Cross-Version Compatibility
 
 | Laravel | PHP | Monolog | Orchestra Testbench |
 |---------|-----|---------|---------------------|
-| 8.x | 8.0+ | 2.x | 7.x |
-| 9.x | 8.0+ | 2.x | 7.x |
-| 10.x | 8.1+ | 3.x | 8.x |
+| 10.15+ | 8.3+ | 3.x | 8.x |
+| 11.x   | 8.3+ | 3.x | 9.x |
+
+> `laravel/framework` floor is `^10.15` because `Illuminate\Console\Scheduling\ScheduleRunCommand::handle()` gained its `Cache $cache` parameter in 10.15.0. Earlier 10.x releases would fatal at class-load because our override declares the 4-arg signature.
+
+#### Laravel 11 exception handler wiring
+
+Laravel 11 moved exception configuration out of `App\Exceptions\Handler` and into `bootstrap/app.php`. You can keep using `BaseErrorHandler` either by extending it from your own `App\Exceptions\Handler` (the L10 style still works if you bind it explicitly), or by routing reports/renders directly from `bootstrap/app.php`:
+
+```php
+// bootstrap/app.php
+use Illuminate\Foundation\Configuration\Exceptions;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withExceptions(function (Exceptions $exceptions) {
+        $exceptions->report(fn (\Throwable $e) => app(BaseErrorHandler::class)->report($e));
+        $exceptions->render(fn (\Throwable $e, $request) => app(BaseErrorHandler::class)->render($request, $e));
+    })
+    ->create();
+```
+
+> **Heads-up — Sentry double-reporting.** `BaseErrorHandler::report()` calls `parent::report()`, which already feeds `sentry/sentry-laravel`'s default chain. If you also rely on sentry-laravel's L11 auto-wiring (which itself hooks into `withExceptions`), the same exception can be reported twice. If you see duplicate Sentry events after upgrading, drop the `->report()` closure above and keep only the `->render()` line — `parent::report()` inside `BaseErrorHandler` will still forward to Sentry through the framework's normal handler chain.
+
+#### Upgrading consumers to PHPUnit 10+ (Laravel 11)
+
+> **This is not optional under `^0.6.x`.** `DBSetupExtension` now declares `implements PHPUnit\Runner\Extension\Extension`. PHP resolves that interface at autoload, so any consumer code that does `new DBSetupExtension(...)` directly — for example a `tests/Utils/TestCase.php` that calls `->runTestingMigrations()` / `->runTestingSeeder(...)` outside the phpunit.xml extension lifecycle — will fatal on a PHPUnit 9 host the first time it loads the class:
+>
+> ```
+> Error: Interface "PHPUnit\Runner\Extension\Extension" not found
+> ```
+>
+> Upgrade PHPUnit to `^10.5` in the same PR as the package bump. The `<extension>` → `<bootstrap>` change shown below is necessary but **not** sufficient — it only addresses the phpunit.xml registration path, not direct instantiation. (Composer will also refuse the install outright on PHPUnit `<10.5` thanks to the `conflict` clause in our `composer.json`, so the upgrade order is forced.)
+
+The `DBSetupExtension` was ported from the removed `PHPUnit\Runner\BeforeFirstTestHook` to the new PHPUnit 10+ Extension API. If your service registers it in `phpunit.xml`, update the syntax — the old `<extension>` form silently no-ops on PHPUnit 10+:
+
+```xml
+<!-- OLD (PHPUnit 9) -->
+<extensions>
+    <extension class="NuiMarkets\LaravelSharedUtils\Testing\DBSetupExtension"/>
+</extensions>
+
+<!-- NEW (PHPUnit 10+) -->
+<extensions>
+    <bootstrap class="NuiMarkets\LaravelSharedUtils\Testing\DBSetupExtension"/>
+</extensions>
+```
+
+You will also need to migrate your own `phpunit.xml` to the PHPUnit 10 schema: drop `verbose="true"`, move the coverage `<include>` block into a top-level `<source>` element, and add `cacheDirectory=".phpunit.cache"`. The fastest path is `vendor/bin/phpunit --migrate-configuration`.
 
 ## Configuration
 

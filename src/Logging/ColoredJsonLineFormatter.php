@@ -5,11 +5,13 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 use JsonSerializable;
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Logger;
+use Monolog\LogRecord;
 use Throwable;
 
 /**
  * Formats log records as colored JSON lines with improved readability.
- * Compatible with both Monolog 2.x and 3.x.
+ *
+ * Operates on Monolog 3 `LogRecord` instances.
  */
 class ColoredJsonLineFormatter implements FormatterInterface
 {
@@ -45,19 +47,15 @@ class ColoredJsonLineFormatter implements FormatterInterface
         $this->colorsEnabled = $colorsEnabled;
     }
 
-    public function format($record): string
+    public function format(LogRecord $record): string
     {
-        // Handle both Monolog 2.x (array) and 3.x (LogRecord) formats
-        $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
+        $className = $this->extractClassName($record);
 
-        $className = $this->extractClassName($record, $isLogRecord);
-
-        // Extract data based on record type
-        $levelName = $isLogRecord ? $record->level->getName() : $record['level_name'];
-        $message = $isLogRecord ? $record->message : $record['message'];
-        $level = $isLogRecord ? $record->level->value : $record['level'];
-        $context = $isLogRecord ? $record->context : $record['context'];
-        $extra = $isLogRecord ? $record->extra : $record['extra'];
+        $levelName = $record->level->getName();
+        $message = $record->message;
+        $level = $record->level->value;
+        $context = $record->context;
+        $extra = $record->extra;
 
         // Format and colorize header
         $headerLine = sprintf(
@@ -91,13 +89,9 @@ class ColoredJsonLineFormatter implements FormatterInterface
         return $message;
     }
 
-    private function extractClassName($record, ?bool $isLogRecord = null): string
+    private function extractClassName(LogRecord $record): string
     {
-        if ($isLogRecord === null) {
-            $isLogRecord = class_exists('Monolog\LogRecord') && $record instanceof \Monolog\LogRecord;
-        }
-
-        $extra = $isLogRecord ? $record->extra : $record['extra'];
+        $extra = $record->extra;
 
         if (! isset($extra['source_file'])) {
             return '';

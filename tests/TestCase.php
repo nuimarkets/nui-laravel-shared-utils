@@ -7,6 +7,11 @@ use Orchestra\Testbench\TestCase as Orchestra;
 abstract class TestCase extends Orchestra
 {
     /**
+     * Store the latest HTTP response for test assertions.
+     */
+    public static $latestResponse;
+
+    /**
      * Setup the test environment.
      */
     protected function setUp(): void

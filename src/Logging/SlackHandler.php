@@ -67,82 +67,43 @@ class SlackHandler extends SlackWebhookHandler
         );
     }
 
-    public function isHandling(array|LogRecord $record): bool
+    public function isHandling(LogRecord $record): bool
     {
-
         if ($this->disabled) {
             return false;
         }
 
-        // Handle both Monolog 2.x array format and 3.x LogRecord
-        $level = is_array($record) ? $record['level'] : $record->level->value;
-        $context = is_array($record) ? $record['context'] : $record->context;
-
-        // Handle $this->level being either int (Monolog 2) or Level object (Monolog 3)
-        $initialLevel = is_object($this->level) ? $this->level->value : $this->level;
+        $level = $record->level->value;
+        $context = $record->context;
+        $initialLevel = $this->level->value;
 
         if ($initialLevel === Logger::ERROR && $level >= Logger::ERROR) {
             return true;
         }
 
         if ($initialLevel === Logger::WARNING && $level == Logger::WARNING) {
-
             // slack if this flag is included
-            $isSlack = isset($context['slack']) && $context['slack'] === true;
-
-            if ($isSlack) {
-                return true;
-            }
+            return isset($context['slack']) && $context['slack'] === true;
         }
 
         return false;
     }
 
-    protected function write(array|LogRecord $record): void
+    protected function write(LogRecord $record): void
     {
-
         if ($this->disabled) {
             return;
         }
 
-        // Handle both Monolog 2.x array format and 3.x LogRecord
-        if (is_array($record)) {
-            // Monolog 2.x: array format
+        $extra = $record->extra;
+        $context = $record->context;
 
-            // Filter out null values from extra
-            if (isset($record['extra']) && is_array($record['extra'])) {
-                $record['extra'] = array_filter($record['extra'], function ($value) {
-                    return $value !== null && $value !== '';
-                });
-            }
+        // Filter out null/empty values from extra
+        $extra = array_filter($extra, fn ($value) => $value !== null && $value !== '');
 
-            // Remove the slack param from context
-            if (isset($record['context']) && is_array($record['context'])) {
-                if (isset($record['context']['slack'])) {
-                    unset($record['context']['slack']);
-                }
-            }
-        } else {
-            // Monolog 3.x: LogRecord format
-            $extra = $record->extra;
-            $context = $record->context;
+        // Remove the slack flag from context (it's only used for routing)
+        unset($context['slack']);
 
-            // Filter out null values from extra
-            if (is_array($extra)) {
-                $extra = array_filter($extra, function ($value) {
-                    return $value !== null && $value !== '';
-                });
-            }
-
-            // Remove the slack param from context
-            if (is_array($context) && isset($context['slack'])) {
-                unset($context['slack']);
-            }
-
-            // Create new LogRecord with modified data
-            $record = $record->with(extra: $extra, context: $context);
-        }
-
-        parent::write($record);
+        parent::write($record->with(extra: $extra, context: $context));
     }
 }

@@ -18,17 +18,12 @@ use function Sentry\configureScope;
  */
 class SentryHandler extends AbstractProcessingHandler
 {
-    /**
-     * @param  LogRecord|array  $record
-     */
-    protected function write($record): void
+    protected function write(LogRecord $record): void
     {
-
         if (app()->bound('sentry')) {
-            // Handle both Monolog 2.x array format and 3.x LogRecord (laravel >=10)
-            $context = is_array($record) ? $record['context'] : $record->context;
-            $message = is_array($record) ? $record['message'] : $record->message;
-            $level = is_array($record) ? $record['level'] : $record->level->value;
+            $context = $record->context;
+            $message = $record->message;
+            $level = $record->level->value;
 
             // Configure Sentry scope with any tags from context
             configureScope(function (Scope $scope) use ($context): void {

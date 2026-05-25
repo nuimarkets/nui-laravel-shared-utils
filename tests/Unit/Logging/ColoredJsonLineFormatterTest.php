@@ -2,7 +2,6 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
-use Monolog\Logger;
 use NuiMarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\LoggingTestHelpers;
@@ -20,27 +19,8 @@ class ColoredJsonLineFormatterTest extends TestCase
     }
 
     /** @test */
-    public function test_formats_monolog_2_array_record_correctly()
+    public function test_formats_log_record_correctly()
     {
-        $record = $this->createLogRecord(
-            context: ['key' => 'value'],
-            extra: ['source_file' => '/path/to/TestClass.php']
-        );
-
-        $output = $this->formatter->format($record);
-
-        $this->assertStringContainsString('TestClass', $output);
-        $this->assertStringContainsString('INFO', $output);
-        $this->assertStringContainsString('Test message', $output);
-        $this->assertStringContainsString('key', $output);
-        $this->assertStringContainsString('value', $output);
-    }
-
-    /** @test */
-    public function test_formats_monolog_3_log_record_correctly()
-    {
-        $this->skipIfMonolog3NotAvailable();
-
         $record = $this->createMonolog3Record(
             context: ['key' => 'value'],
             extra: ['source_file' => '/path/to/TestClass.php']
@@ -58,7 +38,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_handles_empty_context_gracefully()
     {
-        $record = $this->createLogRecord();
+        $record = $this->createMonolog3Record();
 
         $output = $this->formatter->format($record);
 
@@ -71,7 +51,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_extracts_class_name_from_source_file()
     {
-        $record = $this->createLogRecord(
+        $record = $this->createMonolog3Record(
             extra: ['source_file' => '/app/src/Services/UserServiceTrait.php']
         );
 
@@ -85,20 +65,19 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_handles_missing_source_file()
     {
-        $record = $this->createLogRecord();
+        $record = $this->createMonolog3Record();
 
         $output = $this->formatter->format($record);
 
         $this->assertStringContainsString('Test message', $output);
         $this->assertStringContainsString('INFO', $output);
-        // Should handle gracefully without errors
         $this->assertIsString($output);
     }
 
     /** @test */
     public function test_formats_nested_context_data()
     {
-        $record = $this->createLogRecord(
+        $record = $this->createMonolog3Record(
             context: [
                 'user' => [
                     'id' => 123,
@@ -133,7 +112,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         ];
 
         foreach ($levels as $level => $name) {
-            $record = $this->createLogRecord(level: $level);
+            $record = $this->createMonolog3Record(level: $level);
 
             $output = $this->formatter->format($record);
 
@@ -152,17 +131,9 @@ class ColoredJsonLineFormatterTest extends TestCase
         ];
 
         foreach ($testCases as $fileName => $expectedClassName) {
-            $record = [
-                'message' => 'Test message',
-                'context' => [],
-                'level' => Logger::INFO,
-                'level_name' => 'INFO',
-                'channel' => 'test',
-                'datetime' => new \DateTimeImmutable,
-                'extra' => [
-                    'source_file' => "/app/src/{$fileName}",
-                ],
-            ];
+            $record = $this->createMonolog3Record(
+                extra: ['source_file' => "/app/src/{$fileName}"]
+            );
 
             $output = $this->formatter->format($record);
             $this->assertStringContainsString($expectedClassName, $output);
@@ -174,7 +145,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     {
         $exception = new \RuntimeException('Something broke');
 
-        $record = $this->createLogRecord(
+        $record = $this->createMonolog3Record(
             context: ['exception' => $exception],
             level: self::LOG_LEVEL_ERROR,
         );
@@ -192,7 +163,7 @@ class ColoredJsonLineFormatterTest extends TestCase
 
         $exception = new \RuntimeException('Something broke');
 
-        $record = $this->createLogRecord(
+        $record = $this->createMonolog3Record(
             context: ['exception' => $exception],
             level: self::LOG_LEVEL_ERROR,
         );
@@ -212,7 +183,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $previous = new \InvalidArgumentException('Root cause');
         $exception = new \RuntimeException('Something broke', 0, $previous);
 
-        $record = $this->createLogRecord(
+        $record = $this->createMonolog3Record(
             context: ['exception' => $exception],
             level: self::LOG_LEVEL_ERROR,
         );
@@ -227,15 +198,7 @@ class ColoredJsonLineFormatterTest extends TestCase
     /** @test */
     public function test_output_contains_newline_termination()
     {
-        $record = [
-            'message' => 'Test message',
-            'context' => [],
-            'level' => Logger::INFO,
-            'level_name' => 'INFO',
-            'channel' => 'test',
-            'datetime' => new \DateTimeImmutable,
-            'extra' => [],
-        ];
+        $record = $this->createMonolog3Record();
 
         $output = $this->formatter->format($record);
 

@@ -8,11 +8,9 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
  * Generates debug trace information while preventing field explosion in log storage
  * by limiting the number of frame fields created.
  *
- * Compatible with both Monolog 2.x (array records) and 3.x (LogRecord objects)
- *
- * Note: Does not implement ProcessorInterface directly due to incompatible
- * method signatures between Monolog 2.x and 3.x. Monolog accepts any callable
- * as a processor, so this works without implementing the interface.
+ * Operates on Monolog 3 `LogRecord` instances; implemented as a plain
+ * `__invoke()` callable rather than a `ProcessorInterface` to keep the public
+ * signature loose.
  */
 class SourceLocationProcessor
 {
@@ -33,16 +31,11 @@ class SourceLocationProcessor
     }
 
     /**
-     * Process log record to add source location information
-     *
-     * @param  array|\Monolog\LogRecord  $record
-     * @return array|\Monolog\LogRecord
+     * Process log record to add source location information.
      */
-    public function __invoke($record)
+    public function __invoke(\Monolog\LogRecord $record): \Monolog\LogRecord
     {
-        // Handle both Monolog 2.x (array) and 3.x (LogRecord object)
-        $isLogRecord = is_object($record);
-        $extra = $isLogRecord ? $record->extra : ($record['extra'] ?? []);
+        $extra = $record->extra;
 
         // Limit backtrace to prevent field explosion and improve performance
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $this->maxFrames);
@@ -75,13 +68,6 @@ class SourceLocationProcessor
             $extra['source_line'] = $sourceFrame['line'];
         }
 
-        // Return in the same format as received
-        if ($isLogRecord) {
-            return $record->with(extra: $extra);
-        } else {
-            $record['extra'] = $extra;
-
-            return $record;
-        }
+        return $record->with(extra: $extra);
     }
 }
