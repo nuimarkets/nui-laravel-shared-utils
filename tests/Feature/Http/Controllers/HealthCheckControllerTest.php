@@ -141,6 +141,53 @@ class HealthCheckControllerTest extends TestCase
         $this->assertEquals('ok', $data['status']);
     }
 
+    public function test_merged_framework_default_connection_not_probed_without_allowlist()
+    {
+        // Reproduces the Laravel 11 behaviour where the framework's default
+        // connections (pgsql, sqlsrv, ...) are deep-merged into every app's
+        // database.connections. Without an explicit allowlist, the health
+        // check must only probe the default connection and leave the merged
+        // pgsql stub alone - otherwise it reports a spurious connection error.
+        config()->set('database.connections.pgsql', [
+            'driver' => 'pgsql',
+            'host' => '127.0.0.1',
+            'port' => 5432,
+            'database' => 'unreachable',
+            'username' => 'nobody',
+            'password' => 'nobody',
+        ]);
+        config()->set('health-check.connections', null);
+
+        $response = $this->get('/healthcheck');
+
+        $data = $response->json();
+
+        $this->assertArrayNotHasKey('pgsql', $data['checks']);
+        $this->assertEquals('ok', $data['status']);
+    }
+
+    public function test_allowlisted_connection_is_probed()
+    {
+        // When a connection is explicitly allowlisted it must be probed, even
+        // if that surfaces a real connection failure (the point of the check).
+        config()->set('database.connections.pgsql', [
+            'driver' => 'pgsql',
+            'host' => '127.0.0.1',
+            'port' => 5432,
+            'database' => 'unreachable',
+            'username' => 'nobody',
+            'password' => 'nobody',
+        ]);
+        config()->set('health-check.connections', ['pgsql']);
+
+        $response = $this->get('/healthcheck');
+
+        $data = $response->json();
+
+        $this->assertArrayHasKey('pgsql', $data['checks']);
+        $this->assertEquals('error', $data['checks']['pgsql']['status']);
+    }
+
     public function test_health_check_shows_all_checks_structure()
     {
         $response = $this->get('/healthcheck');
