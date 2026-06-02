@@ -70,7 +70,12 @@ class ApplicationCacheControllerTest extends TestCase
         // Spy logs so the controller's Log::info() calls don't try to write
         // to disk. Keeps tests portable to sandboxes / CI runners with a
         // read-only filesystem under vendor/.
-        Log::spy();
+        //
+        // Stub channel() to return the spy: PHP deprecations raised mid-request
+        // (common on the prefer-lowest dependency floor) are routed by Laravel
+        // through $logger->channel('deprecations')->warning(), which would
+        // otherwise call warning() on the spy's null channel() and 500.
+        Log::spy()->shouldReceive('channel')->andReturnSelf();
 
         Cache::store()->flush();
     }
