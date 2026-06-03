@@ -75,7 +75,14 @@ class HealthCheckController extends Controller
 
         // Database checks (MySQL, PostgreSQL, etc.)
         if (file_exists(config_path('database.php')) && config('database.connections')) {
-            foreach (config('database.connections') as $connName => $connConfig) {
+            foreach ($this->resolveHealthCheckConnections() as $connName) {
+                $connConfig = config("database.connections.{$connName}");
+
+                // Skip connections that aren't actually configured
+                if (! is_array($connConfig)) {
+                    continue;
+                }
+
                 // skip any testing schemas
                 if (Str::contains($connName, 'test')) {
                     continue;
@@ -118,6 +125,37 @@ class HealthCheckController extends Controller
         }
 
         return new JsonResponse($results, 200);
+    }
+
+    /**
+     * Resolve which database connections the health check should probe.
+     *
+     * Laravel 11 deep-merges the framework's default `database.connections`
+     * (sqlite, mariadb, pgsql, sqlsrv) into every app's config, so iterating
+     * the full connection list now probes stub connections the app never
+     * uses - e.g. a pgsql stub pointing at 127.0.0.1:5432 - producing false
+     * "connection failed" errors. To stay explicit, consumers list the
+     * connections they actually want monitored:
+     *
+     *     // config/health-check.php
+     *     return ['connections' => ['mysql', 'fields']];
+     *
+     * When unset, only the default connection is probed (the one connection
+     * guaranteed to be intentional).
+     *
+     * @return string[]
+     */
+    protected function resolveHealthCheckConnections(): array
+    {
+        $configured = config('health-check.connections');
+
+        if (is_array($configured) && $configured !== []) {
+            return array_values($configured);
+        }
+
+        $default = config('database.default');
+
+        return $default ? [$default] : [];
     }
 
     /**
