@@ -113,7 +113,7 @@ class SensitiveDataProcessorTest extends TestCase
         // PII by LogFields::REQUEST_X_FORWARDED_FOR. Matched via substring on
         // 'x_forwarded_for' so the LogFields-style 'request.x_forwarded_for'
         // and any future variant both get redacted.
-        $record = $this->createLogRecord([
+        $record = $this->createMonolog3Record(context: [
             'request.x_forwarded_for' => '203.0.113.42, 198.51.100.7',
             'metadata' => [
                 'x_forwarded_for' => '198.51.100.99',
