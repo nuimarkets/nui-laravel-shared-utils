@@ -52,6 +52,11 @@
   "config": {
     "allow-plugins": {
       "php-http/discovery": true
+    },
+    "audit": {
+      "ignore": {
+        "CVE-2026-48019": "CRLF injection in Laravel's default email rule. No 10.x/11.x backport exists yet (fixed only in 12.60+/13.10+), so it blocks all installs in our ^10.15|^11.0 range. Remove once an 11.x patch ships."
+      }
     }
   }
 }
