@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\FailureCategory;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 class FailureCategoryTest extends TestCase
 {
@@ -35,9 +36,7 @@ class FailureCategoryTest extends TestCase
         $this->assertNotContains(FailureCategory::UNKNOWN, FailureCategory::TRANSIENT_CATEGORIES);
     }
 
-    /**
-     * @dataProvider transientCategoriesProvider
-     */
+    #[DataProvider('transientCategoriesProvider')]
     public function test_is_transient_returns_true_for_transient_categories(string $category): void
     {
         $this->assertTrue(FailureCategory::isTransient($category));
@@ -53,9 +52,7 @@ class FailureCategoryTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider nonTransientCategoriesProvider
-     */
+    #[DataProvider('nonTransientCategoriesProvider')]
     public function test_is_transient_returns_false_for_non_transient_categories(string $category): void
     {
         $this->assertFalse(FailureCategory::isTransient($category));

@@ -15,7 +15,7 @@
     "php": "^8.3",
     "ext-gd": "*",
     "monolog/monolog": "^3.0",
-    "laravel/framework": "^10.15|^11.0",
+    "laravel/framework": "^11.0|^12.0",
     "sentry/sentry-laravel": "^4.11",
     "guzzlehttp/guzzle": "^7.0",
     "swisnl/json-api-client": "^2.2",
@@ -31,8 +31,8 @@
     "test-coverage": "phpunit --coverage-html coverage"
   },
   "require-dev": {
-    "phpunit/phpunit": "^10.5|^11.0",
-    "orchestra/testbench": "^8.0|^9.0",
+    "phpunit/phpunit": "^10.5|^11.0|^12.0",
+    "orchestra/testbench": "^9.0|^10.0",
     "laravel/pint": "^1.0",
     "mockery/mockery": "^1.6"
   },
@@ -55,7 +55,7 @@
     },
     "audit": {
       "ignore": {
-        "CVE-2026-48019": "CRLF injection in Laravel's default email rule. No 10.x/11.x backport exists yet (fixed only in 12.60+/13.10+), so it blocks all installs in our ^10.15|^11.0 range. Remove once an 11.x patch ships."
+        "CVE-2026-48019": "CRLF injection in Laravel's default email rule. Fixed in 12.60+/13.10+; the upstream advisory (GHSA-5vg9-5847-vvmq) lists affected ranges as 12.x below 12.60 and 13.x up to 13.9 and does not list Laravel 11. Composer's advisory DB still flags our Laravel 11 floor, so `composer audit` reports it on both the L11 and the L12-below-12.60 legs; no 11.x patch is expected. Remove once resolved versions clear the advisory (L12 floored at 12.60+ and the L11 line dropped)."
       }
     }
   }
