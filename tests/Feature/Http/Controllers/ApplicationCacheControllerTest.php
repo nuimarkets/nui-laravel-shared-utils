@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Redis;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ApplicationCacheController;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ClearLadaAndResponseCacheController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Tests for ApplicationCacheController + the ?include=app delegation
@@ -87,7 +88,7 @@ class ApplicationCacheControllerTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function forget_removes_a_known_key()
     {
         Cache::put('lookup:countries:all', ['NZ', 'AU'], 600);
@@ -103,7 +104,7 @@ class ApplicationCacheControllerTest extends TestCase
         $this->assertFalse(Cache::has('lookup:countries:all'));
     }
 
-    /** @test */
+    #[Test]
     public function forget_reports_existed_before_false_when_key_missing()
     {
         $response = $this->get('/forget?key=cache:absent:all&token='.self::VALID_TOKEN);
@@ -115,7 +116,7 @@ class ApplicationCacheControllerTest extends TestCase
         $response->assertJsonPath('message', 'Application cache key was already absent');
     }
 
-    /** @test */
+    #[Test]
     public function forget_returns_422_when_key_missing()
     {
         $response = $this->get('/forget?token='.self::VALID_TOKEN);
@@ -127,7 +128,7 @@ class ApplicationCacheControllerTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function forget_returns_422_when_key_blank()
     {
         $response = $this->get('/forget?key=&token='.self::VALID_TOKEN);
@@ -135,7 +136,7 @@ class ApplicationCacheControllerTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[Test]
     public function forget_returns_401_without_token()
     {
         $response = $this->get('/forget?key=anything');
@@ -147,7 +148,7 @@ class ApplicationCacheControllerTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function forget_returns_401_with_wrong_token()
     {
         $response = $this->get('/forget?key=anything&token=not-the-real-token');
@@ -155,7 +156,7 @@ class ApplicationCacheControllerTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function forget_returns_401_when_clear_cache_token_unconfigured()
     {
         // Wipe the configured token: even a request carrying any token must fail.
@@ -166,7 +167,7 @@ class ApplicationCacheControllerTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function clear_cache_with_include_app_flushes_application_cache()
     {
         $this->skipIfNoRedis();
@@ -184,7 +185,7 @@ class ApplicationCacheControllerTest extends TestCase
         $this->assertFalse(Cache::has('lookup:currencies:all'));
     }
 
-    /** @test */
+    #[Test]
     public function clear_cache_without_include_app_does_not_flush_application_cache()
     {
         $this->skipIfNoRedis();
@@ -205,7 +206,7 @@ class ApplicationCacheControllerTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function clear_cache_with_include_app_returns_401_without_token()
     {
         // No skipIfNoRedis() here: the auth gate returns 401 before

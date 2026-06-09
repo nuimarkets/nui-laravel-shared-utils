@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\HealthCheckController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 class FrankenPhpHealthCheckTest extends TestCase
 {
@@ -15,7 +16,7 @@ class FrankenPhpHealthCheckTest extends TestCase
         config(['app.env' => 'local']);
     }
 
-    /** @test */
+    #[Test]
     public function test_php_environment_includes_frankenphp_info_when_running_under_frankenphp()
     {
         // Mock php_sapi_name to return 'frankenphp'
@@ -75,7 +76,7 @@ class FrankenPhpHealthCheckTest extends TestCase
         $this->assertContains('frankenphp_request_headers', $data['checks']['php']['frankenphp']['available_functions']);
     }
 
-    /** @test */
+    #[Test]
     public function test_php_environment_does_not_include_frankenphp_info_when_not_running_under_frankenphp()
     {
         $controller = new class extends HealthCheckController

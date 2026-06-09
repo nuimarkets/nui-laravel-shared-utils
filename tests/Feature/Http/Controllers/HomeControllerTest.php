@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\HomeController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Tests for the basic health endpoint (GET /) response shape.
@@ -33,7 +34,7 @@ class HomeControllerTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_the_standardized_health_payload()
     {
         putenv('GIT_TAG=v6.8.0');
@@ -49,7 +50,7 @@ class HomeControllerTest extends TestCase
         $response->assertJsonPath('git_tag', 'v6.8.0');
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_a_null_git_tag_when_unset()
     {
         // Explicitly clear so the test is deterministic regardless of test
@@ -67,7 +68,7 @@ class HomeControllerTest extends TestCase
         $response->assertJsonPath('git_tag', null);
     }
 
-    /** @test */
+    #[Test]
     public function it_omits_debug_when_app_debug_is_false()
     {
         config()->set('app.debug', false);
@@ -78,7 +79,7 @@ class HomeControllerTest extends TestCase
         $this->assertArrayNotHasKey('debug', $response->json());
     }
 
-    /** @test */
+    #[Test]
     public function it_includes_debug_when_app_debug_is_true()
     {
         config()->set('app.debug', true);
@@ -89,7 +90,7 @@ class HomeControllerTest extends TestCase
         $response->assertJsonPath('debug', true);
     }
 
-    /** @test */
+    #[Test]
     public function it_does_not_leak_the_old_response_shape()
     {
         config()->set('app.debug', true);

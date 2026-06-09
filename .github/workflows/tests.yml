@@ -15,22 +15,22 @@ jobs:
       fail-fast: false
       matrix:
         php-version: ['8.3', '8.4']
-        laravel-version: ['10.*', '11.*']
+        laravel-version: ['11.*', '12.*']
         dependency-version: [prefer-lowest, prefer-stable]
         include:
-          - laravel-version: '10.*'
-            testbench-version: '8.*'
           - laravel-version: '11.*'
             testbench-version: '9.*'
+          - laravel-version: '12.*'
+            testbench-version: '10.*'
         exclude:
-          # Floor versions of Laravel 10 (10.15) and Laravel 11 (11.0) both
-          # pull in Symfony 6.x / 7.0, which predate PHP 8.4 and emit
-          # "implicit-nullable param" deprecations that Laravel's bootstrap
-          # converts to fatals before the test runner starts. Skip the
-          # prefer-lowest legs on PHP 8.4 — floor coverage is still exercised
-          # on PHP 8.3 (matches the package's `php: ^8.3` requirement), and
-          # PHP 8.4 still gets prefer-stable coverage on both Laravel legs.
+          # Laravel 11's floor (11.0) pulls in Symfony 7.0, which predates PHP
+          # 8.4 and emits "implicit-nullable param" deprecations that Laravel's
+          # bootstrap converts to fatals before the test runner starts. Skip
+          # only that leg. Laravel 12's floor pulls Symfony 7.2 (8.4-clean), so
+          # it keeps prefer-lowest coverage on PHP 8.4. Both lines keep PHP 8.3
+          # floor coverage and PHP 8.4 prefer-stable coverage.
           - php-version: '8.4'
+            laravel-version: '11.*'
             dependency-version: prefer-lowest
 
     name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} (${{ matrix.dependency-version }})

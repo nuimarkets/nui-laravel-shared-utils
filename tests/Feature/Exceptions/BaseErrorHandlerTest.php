@@ -10,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class BaseErrorHandlerTest extends TestCase
@@ -390,9 +391,7 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertEquals('Invalid UUID format.', $data['errors'][0]['detail']);
     }
 
-    /**
-     * @dataProvider invalidStatusCodeProvider
-     */
+    #[DataProvider('invalidStatusCodeProvider')]
     public function test_invalid_status_codes_normalize_to_500(int $invalidCode): void
     {
         Log::shouldReceive('warning')
@@ -457,9 +456,7 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertEquals('Internal Server Error', $data['meta']['message']);
     }
 
-    /**
-     * @dataProvider validStatusCodeProvider
-     */
+    #[DataProvider('validStatusCodeProvider')]
     public function test_valid_status_codes_pass_through_unchanged(int $validCode, string $expectedTitle): void
     {
         // Valid codes should NOT trigger warning log

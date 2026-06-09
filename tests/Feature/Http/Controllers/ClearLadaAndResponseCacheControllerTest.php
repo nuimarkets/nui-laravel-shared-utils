@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 use Illuminate\Support\Facades\Redis;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ClearLadaAndResponseCacheController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Tests for ClearLadaAndResponseCacheController.
@@ -76,7 +77,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_correct_response_structure()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -103,7 +104,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_zeros_when_no_cache_libraries_installed()
     {
         // Without Lada/ResponseCache installed, should return 0s
@@ -119,7 +120,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         $this->assertEquals(0, $data['tag_keys']['before']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_correct_redis_prefix_in_response()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -128,7 +129,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         $this->assertEquals('test_prefix_', $response->json('detail.prefix'));
     }
 
-    /** @test */
+    #[Test]
     public function it_includes_duration_in_response()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -138,7 +139,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         $this->assertGreaterThanOrEqual(0, $response->json('detail.duration_ms'));
     }
 
-    /** @test */
+    #[Test]
     public function it_includes_correct_message_when_cache_not_available()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -150,7 +151,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function it_restricts_access_without_token()
     {
         $response = $this->get('/clear-cache');
@@ -162,7 +163,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function it_denies_access_with_invalid_token()
     {
         $response = $this->get('/clear-cache?token=wrong_token');
@@ -170,7 +171,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function it_denies_access_when_clear_cache_token_unconfigured()
     {
         // Wipe the configured token: even a request carrying any token must fail.
@@ -181,7 +182,7 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_response_cache_status()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -199,9 +200,8 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
      * installed in this package's test suite, so we invoke the private helper to
      * verify cursor/prefix handling, query-vs-tag classification, count-only vs
      * delete modes, and that unrelated keys survive.
-     *
-     * @test
      */
+    #[Test]
     public function it_scans_and_clears_only_lada_keys()
     {
         $connection = Redis::connection('default');
@@ -248,9 +248,8 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
      * Seeds more than SCAN_COUNT (1000) keys so the sweep spans multiple cursor
      * iterations and triggers the mid-loop UNLINK batch flush, not just the
      * trailing remainder. Guards the batching boundary the small test misses.
-     *
-     * @test
      */
+    #[Test]
     public function it_clears_lada_keys_across_multiple_scan_batches()
     {
         $connection = Redis::connection('default');

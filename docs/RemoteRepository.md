@@ -68,7 +68,7 @@ Required dependencies are automatically installed:
 
 - `php: ^8.3`
 - `swisnl/json-api-client: ^2.2`
-- `laravel/framework: ^10.15|^11.0`
+- `laravel/framework: ^11.0|^12.0`
 
 ## Basic Usage
 

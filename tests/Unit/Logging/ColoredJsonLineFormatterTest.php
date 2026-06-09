@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 use NuiMarkets\LaravelSharedUtils\Logging\ColoredJsonLineFormatter;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\LoggingTestHelpers;
+use PHPUnit\Framework\Attributes\Test;
 
 class ColoredJsonLineFormatterTest extends TestCase
 {
@@ -18,7 +19,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->formatter = new ColoredJsonLineFormatter;
     }
 
-    /** @test */
+    #[Test]
     public function test_formats_log_record_correctly()
     {
         $record = $this->createMonolog3Record(
@@ -35,7 +36,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringContainsString('value', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_handles_empty_context_gracefully()
     {
         $record = $this->createMonolog3Record();
@@ -48,7 +49,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringNotContainsString('key', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_extracts_class_name_from_source_file()
     {
         $record = $this->createMonolog3Record(
@@ -62,7 +63,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringNotContainsString('UserServiceTrait', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_handles_missing_source_file()
     {
         $record = $this->createMonolog3Record();
@@ -74,7 +75,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertIsString($output);
     }
 
-    /** @test */
+    #[Test]
     public function test_formats_nested_context_data()
     {
         $record = $this->createMonolog3Record(
@@ -100,7 +101,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringContainsString('192.168.1.1', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_handles_different_log_levels()
     {
         $levels = [
@@ -120,7 +121,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         }
     }
 
-    /** @test */
+    #[Test]
     public function test_removes_trait_interface_abstract_from_class_names()
     {
         $testCases = [
@@ -140,7 +141,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         }
     }
 
-    /** @test */
+    #[Test]
     public function test_exception_shows_object_name_by_default()
     {
         $exception = new \RuntimeException('Something broke');
@@ -156,7 +157,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringNotContainsString('Something broke', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_exception_expanded_when_config_enabled()
     {
         config()->set('logging-utils.error_logging.expand_exceptions', true);
@@ -175,7 +176,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringNotContainsString('Object(', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_expanded_exception_includes_previous()
     {
         config()->set('logging-utils.error_logging.expand_exceptions', true);
@@ -195,7 +196,7 @@ class ColoredJsonLineFormatterTest extends TestCase
         $this->assertStringContainsString('InvalidArgumentException', $output);
     }
 
-    /** @test */
+    #[Test]
     public function test_output_contains_newline_termination()
     {
         $record = $this->createMonolog3Record();

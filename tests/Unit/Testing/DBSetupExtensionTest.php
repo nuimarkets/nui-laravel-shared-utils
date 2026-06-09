@@ -7,6 +7,7 @@ use Mockery;
 use NuiMarkets\LaravelSharedUtils\Testing\DBSetupExtension;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Event\TestRunner\StartedSubscriber;
+use PHPUnit\Framework\Attributes\Test;
 
 class DBSetupExtensionTest extends TestCase
 {
@@ -24,7 +25,7 @@ class DBSetupExtensionTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function it_exposes_a_started_subscriber_for_registration(): void
     {
         $subscriber = (new DBSetupExtension)->createTestRunnerStartedSubscriber();
@@ -32,7 +33,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertInstanceOf(StartedSubscriber::class, $subscriber);
     }
 
-    /** @test */
+    #[Test]
     public function its_subscriber_routes_notify_to_execute_before_first_test(): void
     {
         // Concrete extension whose executeBeforeFirstTest() flips a flag — lets us
@@ -63,7 +64,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertTrue($extension->invoked);
     }
 
-    /** @test */
+    #[Test]
     public function it_skips_execution_when_db_setup_env_not_set(): void
     {
         // Ensure DB_SETUP is not set
@@ -78,7 +79,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertTrue(true);
     }
 
-    /** @test */
+    #[Test]
     public function it_creates_temporary_connection_without_database(): void
     {
         // Setup: Configure a test database connection
@@ -124,7 +125,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertEquals('127.0.0.1', $tempConnection['host']);
     }
 
-    /** @test */
+    #[Test]
     public function it_sets_config_directly_on_container_not_facade(): void
     {
         // Setup: Configure a test database connection
@@ -167,7 +168,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertEquals('pgsql', $containerConfig['driver']);
     }
 
-    /** @test */
+    #[Test]
     public function it_preserves_original_connection_config(): void
     {
         // Setup: Configure a test database connection
@@ -215,7 +216,7 @@ class DBSetupExtensionTest extends TestCase
         $this->assertNull($tempConfig['database'], 'Temp connection database should be null');
     }
 
-    /** @test */
+    #[Test]
     public function it_makes_temp_connection_resolvable_by_database_manager(): void
     {
         // Setup
