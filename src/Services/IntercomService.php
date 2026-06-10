@@ -151,8 +151,12 @@ class IntercomService
         try {
             $userData = [
                 'external_id' => $userId,
+                // last_request_at is a standard Intercom contact field. It must be set at the
+                // top level; Intercom rejects the whole POST /contacts payload with
+                // parameter_invalid ("'last_request_at' is one of our standard attributes") if
+                // it is nested under custom_attributes.
+                'last_request_at' => time(),
                 'custom_attributes' => array_merge($attributes, [
-                    'last_request_at' => time(),
                     'service_last_active' => $this->serviceName,
                 ]),
             ];

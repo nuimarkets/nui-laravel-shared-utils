@@ -186,6 +186,9 @@ class IntercomServiceTest extends TestCase
                    $data['external_id'] === 'user-123' &&
                    $data['email'] === 'test@example.com' &&
                    $data['name'] === 'Test User' &&
+                   // last_request_at is a reserved standard field: top level, never custom_attributes.
+                   is_int($data['last_request_at']) &&
+                   ! isset($data['custom_attributes']['last_request_at']) &&
                    $data['custom_attributes']['custom_field'] === 'custom_value' &&
                    $data['custom_attributes']['service_last_active'] === 'connect-service-test';
         });
