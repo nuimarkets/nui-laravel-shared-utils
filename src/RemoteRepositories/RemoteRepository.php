@@ -467,7 +467,7 @@ abstract class RemoteRepository
                 if (config('app.remote_repository.log_requests', false)) {
                     Log::info('Request Debug', [
                         'url' => $url,
-                        'body' => $this->client->encode($data),
+                        'body' => $data->toArray(),
                         'headers' => $this->headers,
                     ]);
                     Log::debug('API POST', ['url' => $url]);
