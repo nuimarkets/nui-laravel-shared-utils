@@ -71,6 +71,14 @@ jobs:
           "orchestra/testbench:${{ matrix.testbench-version }}"
 
     - name: Install dependencies
+      env:
+        # The matrix intentionally pins floor versions (e.g. Laravel 11.0 on
+        # prefer-lowest) that accumulate security advisories; composer 2.9+
+        # blocks advisory-flagged versions at resolve time by default, which
+        # would fail these legs. Scope the bypass to this install step only;
+        # `composer audit` still reports advisories in the log, and local
+        # `composer update`/`require` keep full security blocking.
+        COMPOSER_NO_SECURITY_BLOCKING: "1"
       run: composer update --${{ matrix.dependency-version }} --prefer-dist --no-interaction --no-progress
 
     - name: List Installed Dependencies

@@ -61,6 +61,10 @@ Opt-in write-request idempotency for retry-safe endpoints. Supports
 inflight locks, response replay, and conflict detection when a key is reused
 for different request content.
 
+### **Upload Malware Scanning**
+
+Opt-in YARA-X scanning of every upload processed by AttachmentService, before anything touches S3 or the database. Fail-closed by default, config-gated, and inert until a service ships the scanner binary and enables it.
+
 ### **Failure Caching**
 
 Intelligent caching of remote service failures to prevent cascading timeouts during outages. HTTP status-aware TTLs cache 404s longer than transient errors like timeouts. Includes failure classification, configurable per-category TTLs, and convenience methods for handling cached failures gracefully.
@@ -103,6 +107,7 @@ php artisan vendor:publish --provider="NuiMarkets\LaravelSharedUtils\Providers\L
 php artisan vendor:publish --tag=logging-utils-config
 php artisan vendor:publish --tag=intercom-config
 php artisan vendor:publish --tag=idempotency-config
+php artisan vendor:publish --tag=attachments-config
 ```
 
 ## Documentation
@@ -121,6 +126,7 @@ php artisan vendor:publish --tag=idempotency-config
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
 | **IAM RDS Connector** | Short-lived IAM tokens for RDS / RDS Proxy | [Guide](docs/iam-rds-connector.md) |
 | **Machine Token** | Client-credentials token retrieval and caching for service-to-service auth | [Guide](docs/machine-token.md) |
+| **Malware Scanning** | Opt-in YARA-X scan of uploads in AttachmentService | [Guide](docs/malware-scanning.md) |
 
 ### Quick Examples
 
@@ -402,6 +408,14 @@ REMOTE_REPOSITORY_LOG_REQUESTS=true
 INTERCOM_ENABLED=true
 INTERCOM_TOKEN=your_token
 INTERCOM_SERVICE_NAME=my-service
+
+# Attachment Malware Scanning (off by default; needs the yr binary in the image)
+ATTACHMENTS_MALWARE_SCAN_ENABLED=true
+ATTACHMENTS_MALWARE_SCAN_BINARY=yr
+ATTACHMENTS_MALWARE_SCAN_RULES_PATH=/etc/yara/rules.yarc
+ATTACHMENTS_MALWARE_SCAN_COMPILED_RULES=true
+ATTACHMENTS_MALWARE_SCAN_TIMEOUT=10
+ATTACHMENTS_MALWARE_SCAN_FAIL_OPEN=false
 ```
 
 ### RemoteRepository Configuration
