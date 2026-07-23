@@ -19,6 +19,8 @@ use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade as PHPUnitExtensionFacade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
+use RuntimeException;
+use Throwable;
 
 /**
  * DB Setup Extension for PHPUnit to drop/create testing database with migrations run.
@@ -93,26 +95,123 @@ class DBSetupExtension implements Extension
         // Set the application instance for Facades
         Facade::setFacadeApplication($app);
 
-        $this->setTemporaryDefaultConnection();
-        $this->resetDatabase();
+        // A refused connection during setup almost always means a local
+        // backing service is down, not a schema/data fault. The guard
+        // translates that into a clear, early error and re-throws anything
+        // else unchanged.
+        $this->guardBackingServices(function () {
+            $this->setTemporaryDefaultConnection();
+            $this->resetDatabase();
 
-        app('db')->setDefaultConnection(env('DB_CONNECTION'));
+            app('db')->setDefaultConnection(env('DB_CONNECTION'));
 
-        $testing = Config::get('database.connections.testing');
+            $testing = Config::get('database.connections.testing');
 
-        Log::debug('Testing connection', [$testing]);
+            Log::debug('Testing connection', [$testing]);
 
-        $this->runMigrations();
+            $this->runMigrations();
 
-        $this->verifyMigrations();
+            $this->verifyMigrations();
 
-        $this->runSeeder();
+            $this->runSeeder();
+        });
 
         $endTime = microtime(true);
         $executionTime = round(($endTime - $startTime) * 1000);
 
         Log::warning("DB Setup done in {$executionTime}ms (migrate:fresh + db:seed)");
 
+    }
+
+    /**
+     * Run the DB-setup pipeline, translating a refused-connection failure into
+     * a clear, early error. Any other failure is re-thrown unchanged so real
+     * schema/data faults surface as themselves. Kept as its own method so the
+     * catch/translate/re-throw boundary is unit-testable without a bootstrapped
+     * application.
+     */
+    protected function guardBackingServices(callable $pipeline): void
+    {
+        try {
+            $pipeline();
+        } catch (Throwable $e) {
+            $this->failIfBackingServiceUnavailable($e);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Translate a refused-connection failure during DB setup into a clear,
+     * early error naming the likely cause: a local backing service the test
+     * suite depends on (database and/or cache) is not running.
+     *
+     * Seeding can touch more than the database. A model event fired while
+     * seeding (for example one that flushes a response/redis cache on save)
+     * can reach a cache backend, so a refused connection here is usually "the
+     * local stack is down", not a schema or data problem. Left untranslated,
+     * the original failure surfaces as a buried driver trace, often behind an
+     * earlier SQL "Connection refused", which reads as a database fault and
+     * misdirects debugging.
+     *
+     * No-op when the failure is not a connection error; the caller then
+     * re-throws the original exception unchanged.
+     */
+    protected function failIfBackingServiceUnavailable(Throwable $e): void
+    {
+        if (! $this->isConnectionRefused($e)) {
+            return;
+        }
+
+        $message = 'Test DB setup could not reach a required backing service '
+            .'(database and/or cache). The local stack must be running before '
+            .'the test database can be built and seeded: start it and re-run. '
+            .'Original error: '.$e->getMessage();
+
+        $this->reportSetupFailure($message);
+
+        throw new RuntimeException($message, 0, $e);
+    }
+
+    /**
+     * Emit the setup-failure message straight to the console.
+     *
+     * This is the primary signal, not a nicety: the RuntimeException thrown by
+     * failIfBackingServiceUnavailable() bubbles through a PHPUnit event
+     * subscriber, where PHPUnit classifies a throwable originating outside its
+     * own source as a third-party-subscriber error, downgrades it to a warning,
+     * and does NOT re-throw (the run continues). Without this write the cause
+     * would be buried behind the earlier driver error. Overridable so tests can
+     * capture it instead of writing to the console.
+     */
+    protected function reportSetupFailure(string $message): void
+    {
+        fwrite(STDERR, PHP_EOL.'[DBSetupExtension] '.$message.PHP_EOL.PHP_EOL);
+    }
+
+    /**
+     * True when the throwable (or anything in its previous chain) looks like a
+     * refused TCP connection to a backing service: MySQL/Postgres via PDO, or
+     * Redis via predis/phpredis. Matches on message text so it stays
+     * client-agnostic across drivers.
+     *
+     * Scoped deliberately to "connection refused" (the observed failure mode
+     * for a down local stack). The canonical refused messages already carry
+     * that phrase, so matching the bare MySQL "[2002]" code is unnecessary and
+     * would mis-flag "[2002] No such file or directory" (a socket-path
+     * misconfiguration) as a stopped service.
+     */
+    protected function isConnectionRefused(Throwable $e): bool
+    {
+        $pattern = '/connection refused|actively refused/i';
+
+        for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+            if (preg_match($pattern, $current->getMessage()) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function runMigrations(): void
@@ -218,7 +317,7 @@ class DBSetupExtension implements Extension
         $connection = app('db')->connection();
         $grammar = $connection->getQueryGrammar();
 
-        log::debug("Resetting the test database $dbName ...");
+        Log::debug("Resetting the test database $dbName ...");
 
         if ($connection->getDriverName() === 'pgsql') {
             Log::debug("Terminating pg connections on $dbName");
@@ -234,7 +333,7 @@ class DBSetupExtension implements Extension
         $connection->unprepared("DROP DATABASE IF EXISTS {$quotedName}");
         $connection->unprepared("CREATE DATABASE {$quotedName}");
 
-        log::info("Dropped/Created database: {$dbName}");
+        Log::info("Dropped/Created database: {$dbName}");
 
     }
 
