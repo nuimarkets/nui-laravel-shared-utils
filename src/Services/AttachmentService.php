@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\ImageManager;
+use NuiMarkets\LaravelSharedUtils\Contracts\MalwareScanner;
+use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareDetectedException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareScanFailedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\ResizeFailedException;
 use Throwable;
 
@@ -75,6 +78,8 @@ class AttachmentService
      */
     protected ?array $imageResizeConfig = null;
 
+    protected ?MalwareScanner $malwareScanner = null;
+
     private ?ImageManager $imageManager = null;
 
     /** @var list<string> */
@@ -87,6 +92,7 @@ class AttachmentService
      * @param  string|null  $foreignKey  - Foreign key name (null for polymorphic)
      * @param  callable|null  $pathBuilder  - Custom path builder: fn(?string $scope): string
      * @param  callable|null  $scopeResolver  - Extract scope identifier from parent entity: fn($entity): ?string
+     * @param  MalwareScanner|null  $malwareScanner  - Scanner override; defaults to container binding or config-built YaraXScanner
      */
     public function __construct(
         string $diskName,
@@ -94,7 +100,8 @@ class AttachmentService
         ?string $pivotTable = null,
         ?string $foreignKey = null,
         ?callable $pathBuilder = null,
-        ?callable $scopeResolver = null
+        ?callable $scopeResolver = null,
+        ?MalwareScanner $malwareScanner = null
     ) {
         $this->diskName = $diskName;
         $this->attachmentModel = $attachmentModel;
@@ -102,6 +109,7 @@ class AttachmentService
         $this->foreignKey = $foreignKey;
         $this->pathBuilder = $pathBuilder;
         $this->scopeResolver = $scopeResolver;
+        $this->malwareScanner = $malwareScanner;
     }
 
     public function __destruct()
@@ -133,6 +141,10 @@ class AttachmentService
             if (! is_array($files)) {
                 $files = [$files];
             }
+
+            // Scan the raw uploads before any resize/re-encode or upload so a
+            // rejected file is never transformed and never leaves the tmp dir.
+            $this->scanForMalware($files);
 
             // Resize images first when the subclass has opted in. Non-image uploads
             // and resize-disabled subclasses fall through untouched.
@@ -444,6 +456,100 @@ class AttachmentService
                 ]);
             }
         }
+    }
+
+    // ========================================================================
+    // Malware scanning — opt-in via attachments.malware_scan config.
+    // ========================================================================
+
+    /**
+     * Scan raw uploads and reject the whole request on a match. No-op unless
+     * `attachments.malware_scan.enabled` is true, so the scanner is never even
+     * resolved for consumers that haven't opted in.
+     *
+     * Scan failures (engine missing/broken/timeout) reject the request too
+     * (fail closed) unless `fail_open` is set, which logs and continues.
+     * Detections always reject; fail_open never bypasses a match.
+     *
+     * @param  array  $files  Mixed array; only UploadedFile entries are scanned
+     *
+     * @throws MalwareDetectedException on a rule match (HTTP 422)
+     * @throws MalwareScanFailedException on scan failure when fail closed (HTTP 503)
+     */
+    protected function scanForMalware(array $files): void
+    {
+        if (! config('attachments.malware_scan.enabled', false)) {
+            return;
+        }
+
+        $failOpen = (bool) config('attachments.malware_scan.fail_open', false);
+
+        foreach ($files as $file) {
+            if (! $file instanceof UploadedFile) {
+                continue;
+            }
+
+            $filename = $file->getClientOriginalName();
+
+            try {
+                $path = $file->getRealPath();
+                if ($path === false || ! is_file($path)) {
+                    throw new MalwareScanFailedException('Upload tmp file is not readable for malware scan.');
+                }
+
+                $matches = $this->malwareScanner()->scan($path);
+            } catch (Throwable $e) {
+                // Custom scanner backends may throw anything; normalize so the
+                // fail-closed / fail_open semantics hold for every failure
+                // shape instead of leaking a generic 500.
+                if (! $e instanceof MalwareScanFailedException) {
+                    $e = new MalwareScanFailedException('Malware scanner threw an unexpected error.', $e);
+                }
+
+                if (! $failOpen) {
+                    Log::error('Malware scan failed - rejecting upload (fail closed)', [
+                        'file_name' => $filename,
+                        'error' => $e->getMessage(),
+                        'extra' => $e->getExtra(),
+                        'exception' => $e,
+                    ]);
+                    throw $e;
+                }
+
+                Log::warning('Malware scan failed - allowing upload (fail_open enabled)', [
+                    'file_name' => $filename,
+                    'error' => $e->getMessage(),
+                    'extra' => $e->getExtra(),
+                    'exception' => $e,
+                ]);
+
+                continue;
+            }
+
+            if ($matches !== []) {
+                Log::warning('Malware detected in upload - rejecting request', [
+                    'file_name' => $filename,
+                    'matched_rules' => $matches,
+                ]);
+                throw new MalwareDetectedException($filename, $matches);
+            }
+        }
+    }
+
+    /**
+     * Resolve the scanner lazily and cache it: constructor injection wins,
+     * then a container binding of the MalwareScanner interface, then a
+     * YaraXScanner built from config. Only called when scanning is enabled.
+     */
+    protected function malwareScanner(): MalwareScanner
+    {
+        if ($this->malwareScanner === null) {
+            $this->malwareScanner = app()->bound(MalwareScanner::class)
+                ? app(MalwareScanner::class)
+                : YaraXScanner::fromConfig((array) config('attachments.malware_scan', []));
+        }
+
+        return $this->malwareScanner;
     }
 
     // ========================================================================

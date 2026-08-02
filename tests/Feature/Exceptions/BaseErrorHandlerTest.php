@@ -2,12 +2,14 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareDetectedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -78,6 +80,25 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertEquals('Service Unavailable', $data['meta']['message']);
         $this->assertEquals(503, $data['meta']['status']);
         $this->assertEquals('Unable to connect to payment service', $data['errors'][0]['detail']);
+    }
+
+    public function test_malware_detected_response_does_not_leak_detection_internals()
+    {
+        // Rule ids, engine output, and paths live in the exception extra for
+        // logs/Sentry; the client response must never include them outside
+        // debug mode.
+        config()->set('app.debug', false);
+        $request = Request::create('/test', 'POST');
+
+        $exception = new MalwareDetectedException('invoice.pdf', ['Secret_Detection_Rule']);
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(422, $response->getStatusCode());
+
+        $content = $response->getContent();
+        $this->assertStringContainsString('invoice.pdf', $content);
+        $this->assertStringNotContainsString('Secret_Detection_Rule', $content);
+        $this->assertStringNotContainsString('matched_rules', $content);
     }
 
     public function test_remote_service_exception_with_tags_and_extra()
@@ -332,7 +353,7 @@ class BaseErrorHandlerTest extends TestCase
         $previousException = new \Exception('Invalid UUID');
 
         // Use reflection to determine the correct constructor signature
-        $reflection = new \ReflectionClass(\Illuminate\Database\QueryException::class);
+        $reflection = new \ReflectionClass(QueryException::class);
         $constructor = $reflection->getConstructor();
         $parameters = $constructor->getParameters();
 
@@ -341,7 +362,7 @@ class BaseErrorHandlerTest extends TestCase
 
         if ($paramCount >= 4) {
             // Laravel 10.x+ signature: connectionName, sql, bindings, previous
-            $exception = new \Illuminate\Database\QueryException(
+            $exception = new QueryException(
                 'pgsql',
                 'SELECT * FROM orders WHERE id = ?',
                 ['invalid-uuid'],
@@ -354,14 +375,14 @@ class BaseErrorHandlerTest extends TestCase
 
             if ($secondParamType && $secondParamType->getName() === 'array') {
                 // Laravel 9.x prefer-lowest signature: connectionName, bindings, previous
-                $exception = new \Illuminate\Database\QueryException(
+                $exception = new QueryException(
                     'pgsql',
                     ['invalid-uuid'],
                     $previousException
                 );
             } else {
                 // Laravel 9.x signature: connectionName, sql, previous
-                $exception = new \Illuminate\Database\QueryException(
+                $exception = new QueryException(
                     'pgsql',
                     'SELECT * FROM orders WHERE id = ?',
                     $previousException
@@ -369,7 +390,7 @@ class BaseErrorHandlerTest extends TestCase
             }
         } else {
             // Laravel 8.x or other fallback: connectionName, previous
-            $exception = new \Illuminate\Database\QueryException(
+            $exception = new QueryException(
                 'pgsql',
                 $previousException
             );

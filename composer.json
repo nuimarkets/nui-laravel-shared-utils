@@ -20,7 +20,8 @@
     "guzzlehttp/guzzle": "^7.0",
     "swisnl/json-api-client": "^2.2",
     "aws/aws-sdk-php": "^3.342",
-    "intervention/image": "^4.0"
+    "intervention/image": "^4.0",
+    "symfony/process": "^7.0"
   },
   "suggest": {},
   "scripts": {
