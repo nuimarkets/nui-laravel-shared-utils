@@ -55,7 +55,7 @@
     },
     "audit": {
       "ignore": {
-        "CVE-2026-48019": "CRLF injection in Laravel's default email rule. Fixed in 12.60+/13.10+; the upstream advisory (GHSA-5vg9-5847-vvmq) lists affected ranges as 12.x below 12.60 and 13.x up to 13.9 and does not list Laravel 11. Composer's advisory DB still flags our Laravel 11 floor, so `composer audit` reports it on both the L11 and the L12-below-12.60 legs; no 11.x patch is expected. Remove once resolved versions clear the advisory (L12 floored at 12.60+ and the L11 line dropped)."
+        "CVE-2026-48019": "CRLF injection in Laravel's default email rule (GHSA-5vg9-5847-vvmq). Fixed in 12.60+/13.10+. The advisory's affected range is `<12.60.0`, so it covers the whole Laravel 11 line as well as 12.x below 12.60, and no 11.x patch is expected. Every test matrix leg pins Laravel 12, so `composer audit` reports this only on the prefer-lowest L12-below-12.60 leg. Remove once the Laravel floor is raised to 12.60+, which drops the 11.x line with it."
       }
     }
   }
