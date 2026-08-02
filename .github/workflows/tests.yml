@@ -24,12 +24,12 @@ jobs:
     name: PHP ${{ matrix.php-version }} - Laravel ${{ matrix.laravel-version }} (${{ matrix.dependency-version }})
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         persist-credentials: false
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.composer/cache/files
         key: dependencies-laravel-${{ matrix.laravel-version }}-php-${{ matrix.php-version }}-${{ matrix.dependency-version }}-composer-${{ hashFiles('composer.json') }}
@@ -73,7 +73,7 @@ jobs:
     name: Code Quality
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         persist-credentials: false
 
@@ -86,7 +86,7 @@ jobs:
         tools: composer:v2
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.composer/cache/files
         key: dependencies-php-8.3-composer-${{ hashFiles('composer.json') }}
