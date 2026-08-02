@@ -329,10 +329,12 @@ If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Compo
 
 ### Cross-Version Compatibility
 
-| Laravel | PHP | Monolog | Orchestra Testbench |
-|---------|-----|---------|---------------------|
-| 11.x   | 8.3+ | 3.x | 9.x |
-| 12.x   | 8.3+ | 3.x | 10.x |
+| Laravel | PHP | Monolog | Orchestra Testbench | CI coverage |
+|---------|-----|---------|---------------------|-------------|
+| 11.x   | 8.3+ | 3.x | 9.x | Not tested |
+| 12.x   | 8.3+ | 3.x | 10.x | PHP 8.3/8.4, prefer-lowest + prefer-stable |
+
+> **Laravel 11 has no CI coverage.** Composer's advisory database flags every installable `11.*` release, so the Laravel 11 matrix legs can no longer complete `composer update`. The `^11.0` floor stays, and the library carries no Laravel-12-only code, so Laravel 11 consumers keep receiving releases; changes are verified on the Laravel 12 legs only.
 
 > `laravel/framework` floor is `^11.0`. Laravel 10 reached end-of-life (security support ended February 2025) and was dropped in 0.7.0. The `ScheduleRunCommand::handle()` override declares a 4-arg signature (`Schedule, Dispatcher, Cache, ExceptionHandler`) that matches both the Laravel 11 and Laravel 12 parent, so the class loads cleanly on either line.
 
