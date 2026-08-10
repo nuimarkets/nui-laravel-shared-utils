@@ -467,6 +467,11 @@ class AttachmentService
      * `attachments.malware_scan.enabled` is true, so the scanner is never even
      * resolved for consumers that haven't opted in.
      *
+     * The whole upload goes to the scanner as a single batch. Ruleset load
+     * dominates scan cost, so scanning file by file multiplies the expensive
+     * part by the file count and puts a multi-file upload over the gateway
+     * timeout; one batch pays that cost once.
+     *
      * Scan failures (engine missing/broken/timeout) reject the request too
      * (fail closed) unless `fail_open` is set, which logs and continues.
      * Detections always reject; fail_open never bypasses a match.
@@ -484,56 +489,119 @@ class AttachmentService
 
         $failOpen = (bool) config('attachments.malware_scan.fail_open', false);
 
+        // Keyed by path, in upload order, so which file a rejection names stays
+        // deterministic however the engine happens to order its matches.
+        $targets = [];
+
         foreach ($files as $file) {
             if (! $file instanceof UploadedFile) {
                 continue;
             }
 
             $filename = $file->getClientOriginalName();
+            $path = $file->getRealPath();
 
-            try {
-                $path = $file->getRealPath();
-                if ($path === false || ! is_file($path)) {
-                    throw new MalwareScanFailedException('Upload tmp file is not readable for malware scan.');
-                }
-
-                $matches = $this->malwareScanner()->scan($path);
-            } catch (Throwable $e) {
-                // Custom scanner backends may throw anything; normalize so the
-                // fail-closed / fail_open semantics hold for every failure
-                // shape instead of leaking a generic 500.
-                if (! $e instanceof MalwareScanFailedException) {
-                    $e = new MalwareScanFailedException('Malware scanner threw an unexpected error.', $e);
-                }
-
-                if (! $failOpen) {
-                    Log::error('Malware scan failed - rejecting upload (fail closed)', [
-                        'file_name' => $filename,
-                        'error' => $e->getMessage(),
-                        'extra' => $e->getExtra(),
-                        'exception' => $e,
-                    ]);
-                    throw $e;
-                }
-
-                Log::warning('Malware scan failed - allowing upload (fail_open enabled)', [
-                    'file_name' => $filename,
-                    'error' => $e->getMessage(),
-                    'extra' => $e->getExtra(),
-                    'exception' => $e,
-                ]);
+            if ($path === false || ! is_file($path)) {
+                $this->handleScanFailure(
+                    new MalwareScanFailedException('Upload tmp file is not readable for malware scan.'),
+                    [$filename],
+                    $failOpen,
+                );
 
                 continue;
             }
 
-            if ($matches !== []) {
-                Log::warning('Malware detected in upload - rejecting request', [
-                    'file_name' => $filename,
-                    'matched_rules' => $matches,
-                ]);
-                throw new MalwareDetectedException($filename, $matches);
+            $targets[$path] = $filename;
+        }
+
+        if ($targets === []) {
+            return;
+        }
+
+        try {
+            $matches = $this->malwareScanner()->scan(array_keys($targets));
+        } catch (Throwable $e) {
+            // Custom scanner backends may throw anything; normalize so the
+            // fail-closed / fail_open semantics hold for every failure
+            // shape instead of leaking a generic 500.
+            if (! $e instanceof MalwareScanFailedException) {
+                $e = new MalwareScanFailedException('Malware scanner threw an unexpected error.', $e);
+            }
+
+            $this->handleScanFailure($e, array_values($targets), $failOpen);
+
+            return;
+        }
+
+        // A verdict about a file we did not submit is not a verdict about the
+        // ones we did. Dropping it would turn a detection from a custom backend
+        // into a clean upload, so it fails the scan instead.
+        $unknown = array_diff(array_keys($matches), array_keys($targets));
+
+        if ($unknown !== []) {
+            $this->handleScanFailure(
+                new MalwareScanFailedException('Malware scanner reported a verdict for a file it was not given.', null, [
+                    'unexpected_files' => array_values($unknown),
+                ]),
+                array_values($targets),
+                $failOpen,
+            );
+
+            return;
+        }
+
+        // Keyed by path, so two uploads sharing a client filename cannot
+        // overwrite each other's rules.
+        $detected = [];
+
+        foreach ($targets as $path => $filename) {
+            if (! empty($matches[$path])) {
+                $detected[$path] = $filename;
             }
         }
+
+        if ($detected === []) {
+            return;
+        }
+
+        $path = (string) array_key_first($detected);
+        $filename = $detected[$path];
+        $rules = $matches[$path];
+
+        Log::warning('Malware detected in upload - rejecting request', [
+            'file_name' => $filename,
+            'matched_rules' => $rules,
+            'detected_file_names' => array_values($detected),
+        ]);
+
+        throw new MalwareDetectedException($filename, $rules);
+    }
+
+    /**
+     * Reject the upload, or log and let it through when `fail_open` is set.
+     * Only ever reached for a scan *failure*; a detection always rejects.
+     *
+     * @param  list<string>  $filenames  The uploads this failure covers
+     *
+     * @throws MalwareScanFailedException when failing closed
+     */
+    private function handleScanFailure(MalwareScanFailedException $e, array $filenames, bool $failOpen): void
+    {
+        $context = [
+            'file_name' => $filenames[0] ?? null,
+            'file_names' => $filenames,
+            'error' => $e->getMessage(),
+            'extra' => $e->getExtra(),
+            'exception' => $e,
+        ];
+
+        if (! $failOpen) {
+            Log::error('Malware scan failed - rejecting upload (fail closed)', $context);
+
+            throw $e;
+        }
+
+        Log::warning('Malware scan failed - allowing upload (fail_open enabled)', $context);
     }
 
     /**
