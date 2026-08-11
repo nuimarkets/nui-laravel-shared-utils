@@ -26,11 +26,7 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
 
     protected function getHeadersFromRepository(RemoteRepository $repository): array
     {
-        $reflection = new \ReflectionClass(RemoteRepository::class);
-        $headersProperty = $reflection->getProperty('headers');
-        $headersProperty->setAccessible(true);
-
-        return $headersProperty->getValue($repository);
+        return $repository->triggerRequestHeaders();
     }
 
     // ==================== Passthrough Headers ====================
@@ -44,7 +40,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -60,7 +55,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -77,7 +71,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -96,7 +89,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -113,7 +105,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -133,7 +124,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -157,7 +147,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -181,7 +170,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -200,7 +188,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -222,7 +209,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -244,7 +230,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -269,7 +254,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -290,7 +274,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -311,7 +294,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -338,7 +320,6 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->app->instance('request', $request);
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
-        $repository->triggerTokenLoad();
 
         $headers = $this->getHeadersFromRepository($repository);
 
@@ -346,6 +327,66 @@ class RemoteRepositoryHeaderForwardingTest extends TestCase
         $this->assertEquals('passthrough-value', $headers['X-Custom-Header']);
         $this->assertArrayHasKey('X-Context-Header', $headers);
         $this->assertEquals('resolved-value', $headers['X-Context-Header']);
+    }
+
+    // ==================== Per-call resolution ====================
+
+    public function test_contextual_header_is_resolved_on_every_call()
+    {
+        $resolver = new MutableTestHeaderResolver('actor-one');
+        $this->app->instance(MutableTestHeaderResolver::class, $resolver);
+
+        config(['app.remote_repository.contextual_headers' => [
+            'X-Context-Header' => MutableTestHeaderResolver::class,
+        ]]);
+
+        $this->app->instance('request', Request::create('/api/test', 'GET'));
+
+        $repository = $this->createTestRepositoryWithTokenTrigger();
+
+        $first = $this->getHeadersFromRepository($repository);
+        $resolver->value = 'actor-two';
+        $second = $this->getHeadersFromRepository($repository);
+
+        // Repositories are container singletons, so a value cached at first
+        // use would follow this instance for the life of the process.
+        $this->assertEquals('actor-one', $first['X-Context-Header']);
+        $this->assertEquals('actor-two', $second['X-Context-Header']);
+    }
+
+    public function test_contextual_header_is_dropped_when_a_later_call_has_no_actor()
+    {
+        $resolver = new MutableTestHeaderResolver('actor-one');
+        $this->app->instance(MutableTestHeaderResolver::class, $resolver);
+
+        config(['app.remote_repository.contextual_headers' => [
+            'X-Context-Header' => MutableTestHeaderResolver::class,
+        ]]);
+
+        $this->app->instance('request', Request::create('/api/test', 'GET'));
+
+        $repository = $this->createTestRepositoryWithTokenTrigger();
+
+        $first = $this->getHeadersFromRepository($repository);
+        $resolver->value = null;
+        $second = $this->getHeadersFromRepository($repository);
+
+        // A queue worker runs one job with an actor and the next without one.
+        // The second must send no actor rather than inherit the first's.
+        $this->assertArrayHasKey('X-Context-Header', $first);
+        $this->assertArrayNotHasKey('X-Context-Header', $second);
+    }
+}
+
+// Test resolver whose answer changes between calls, standing in for a resolver
+// reading request or job state that differs per call
+class MutableTestHeaderResolver implements HeaderResolverInterface
+{
+    public function __construct(public ?string $value) {}
+
+    public function resolve(): ?string
+    {
+        return $this->value;
     }
 }
 

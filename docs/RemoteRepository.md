@@ -276,6 +276,10 @@ The resolver is only called when:
 
 If the resolver returns `null`, the header is not added to outgoing requests.
 
+**Resolvers run on every outbound call, not once per repository.** Keep them cheap and free of side effects: read state and return, never make a remote call or a query. The resolved value is not cached, because a repository is typically registered as a container singleton and therefore outlives the request or queue job that first used it. Caching would let the first caller's context be sent on every later caller's requests from the same process, which is a wrong value rather than a missing one.
+
+A corollary worth designing for: a resolver may legitimately return a different value, or `null`, on a later call from the same instance. That is the point.
+
 ### Request Priority
 
 For contextual headers, **incoming request headers take priority** over resolver values. This allows upstream services to override values when needed:

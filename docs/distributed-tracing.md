@@ -265,18 +265,29 @@ Enable request logging to debug trace propagation:
 
 ### Verification
 
-Check that headers are being propagated correctly:
+Outbound headers are assembled per call and are not readable from a subclass, so
+verify them from what the client is handed rather than from repository state.
+
+Enable request logging and read the emitted entry:
 
 ```php
-// In RemoteRepository implementation
-protected function filter(array $data)
-{
-    Log::debug('Remote request headers', [
-        'headers' => $this->headers  // Check X-Amzn-Trace-Id is present
-    ]);
-    
-    // Continue with API call...
-}
+// config/app.php
+'remote_repository' => [
+    'log_requests' => true,
+],
+```
+
+`POST` logs the outbound header *names* under `Request Debug`, and `GET` logs the
+URL under `API GET`. Values are deliberately omitted: the set carries the machine
+token and the caller's actor context. To see values, capture them at the client,
+which is also how to assert on them in a test:
+
+```php
+$client->method('get')->willReturnCallback(function ($url, $headers) {
+    $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
+
+    return new Document;
+});
 ```
 
 ## Migration Guide
