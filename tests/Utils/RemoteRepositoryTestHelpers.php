@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Utils;
 use Mockery;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
+use Swis\JsonApi\Client\Document;
 use Swis\JsonApi\Client\ErrorCollection;
 use Swis\JsonApi\Client\Interfaces\DocumentClientInterface;
 use Swis\JsonApi\Client\Interfaces\DocumentInterface;
@@ -72,6 +73,30 @@ trait RemoteRepositoryTestHelpers
     }
 
     /**
+     * Create a mock client that records the headers of each outbound GET.
+     *
+     * Header assembly is private to RemoteRepository, so tests observe it the
+     * way a downstream service does: by looking at what actually goes out.
+     */
+    protected function createCapturingClient(\ArrayObject $captured): DocumentClientInterface
+    {
+        $client = $this->createMock(DocumentClientInterface::class);
+        $client->expects($this->any())
+            ->method('setBaseUri')
+            ->with($this->isType('string'));
+        $client->method('getBaseUri')->willReturn('https://test.example.com');
+        $client->method('get')->willReturnCallback(
+            function ($url, $headers) use ($captured) {
+                $captured->exchangeArray($headers);
+
+                return new Document;
+            }
+        );
+
+        return $client;
+    }
+
+    /**
      * Create a mock DocumentClientInterface with setBaseUri expectation.
      */
     protected function createMockClient(): DocumentClientInterface
@@ -106,11 +131,20 @@ trait RemoteRepositoryTestHelpers
      */
     protected function createTestRepositoryWithTokenTrigger(?DocumentClientInterface $client = null, ?MachineTokenServiceInterface $tokenService = null): RemoteRepository
     {
-        $client = $client ?? $this->createMockClient();
+        $captured = new \ArrayObject;
+        $client = $client ?? $this->createCapturingClient($captured);
         $tokenService = $tokenService ?? $this->createMockTokenService();
 
-        return new class($client, $tokenService) extends RemoteRepository
+        return new class($client, $tokenService, $captured) extends RemoteRepository
         {
+            public function __construct(
+                DocumentClientInterface $client,
+                MachineTokenServiceInterface $tokenService,
+                private \ArrayObject $captured
+            ) {
+                parent::__construct($client, $tokenService);
+            }
+
             protected function filter(array $data)
             {
                 return $data;
@@ -119,6 +153,20 @@ trait RemoteRepositoryTestHelpers
             public function triggerTokenLoad(): void
             {
                 $this->ensureTokenLoaded();
+            }
+
+            /**
+             * The headers this repository sends on a call made right now.
+             *
+             * Per-call headers are not stored on the instance and their
+             * assembly is private, so this makes a real call and reports what
+             * the client received.
+             */
+            public function triggerRequestHeaders(): array
+            {
+                $this->get('probe');
+
+                return $this->captured->getArrayCopy();
             }
         };
     }

@@ -3,7 +3,6 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use Illuminate\Http\Request;
-use NuiMarkets\LaravelSharedUtils\RemoteRepositories\RemoteRepository;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 
@@ -21,11 +20,7 @@ class RemoteRepositoryTracingTest extends TestCase
     {
         $repository = $this->createTestRepositoryWithTokenTrigger();
 
-        // Use reflection to access protected headers property
-        $reflection = new \ReflectionClass(RemoteRepository::class);
-        $headersProperty = $reflection->getProperty('headers');
-        $headersProperty->setAccessible(true);
-        $headers = $headersProperty->getValue($repository);
+        $headers = $repository->triggerRequestHeaders();
 
         $this->assertArrayNotHasKey('X-Request-ID', $headers);
         $this->assertArrayNotHasKey('X-Correlation-ID', $headers);
@@ -39,14 +34,7 @@ class RemoteRepositoryTracingTest extends TestCase
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
 
-        // Trigger token loading to populate headers
-        $repository->triggerTokenLoad();
-
-        // Use reflection to access protected headers property
-        $reflection = new \ReflectionClass(RemoteRepository::class);
-        $headersProperty = $reflection->getProperty('headers');
-        $headersProperty->setAccessible(true);
-        $headers = $headersProperty->getValue($repository);
+        $headers = $repository->triggerRequestHeaders();
 
         $this->assertArrayHasKey('X-Request-ID', $headers);
         $this->assertEquals('fallback-request-456', $headers['X-Request-ID']);
@@ -61,14 +49,7 @@ class RemoteRepositoryTracingTest extends TestCase
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
 
-        // Trigger token loading to populate headers
-        $repository->triggerTokenLoad();
-
-        // Use reflection to access protected headers property
-        $reflection = new \ReflectionClass(RemoteRepository::class);
-        $headersProperty = $reflection->getProperty('headers');
-        $headersProperty->setAccessible(true);
-        $headers = $headersProperty->getValue($repository);
+        $headers = $repository->triggerRequestHeaders();
 
         // Should propagate full X-Ray header for AWS trace continuity
         $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
@@ -88,14 +69,7 @@ class RemoteRepositoryTracingTest extends TestCase
 
         $repository = $this->createTestRepositoryWithTokenTrigger();
 
-        // Trigger token loading to populate headers
-        $repository->triggerTokenLoad();
-
-        // Use reflection to access protected headers property
-        $reflection = new \ReflectionClass(RemoteRepository::class);
-        $headersProperty = $reflection->getProperty('headers');
-        $headersProperty->setAccessible(true);
-        $headers = $headersProperty->getValue($repository);
+        $headers = $repository->triggerRequestHeaders();
 
         // Should propagate malformed header as-is for X-Ray
         $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);

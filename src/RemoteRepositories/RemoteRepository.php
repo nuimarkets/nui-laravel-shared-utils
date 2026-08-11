@@ -37,7 +37,10 @@ abstract class RemoteRepository
     private ?string $token = null;
 
     /**
-     * @var array - Headers to be sent with each request
+     * @var array - Headers that belong to this repository rather than to a
+     *            single call: the content negotiation pair and, once loaded,
+     *            the machine token. Per-call headers are built by
+     *            requestHeaders() and never stored here.
      */
     private array $headers;
 
@@ -87,23 +90,51 @@ abstract class RemoteRepository
 
         // Update Authorization header with the loaded token
         $this->headers['Authorization'] = 'Bearer '.$this->token;
+    }
+
+    /**
+     * Build the headers for a single outbound call.
+     *
+     * Everything that describes *this* call is resolved here rather than
+     * cached on the instance: the trace identifiers, the passthrough headers,
+     * and the contextual headers with their resolvers. Repositories are
+     * container singletons, so a value cached at first use outlives the
+     * request or queue job that produced it. In a worker that means the first
+     * job to touch a repository would stamp its trace and its acting actor
+     * onto every later job in the same process, which is a wrong attribution
+     * rather than a missing one.
+     *
+     * The token is the exception and stays cached by ensureTokenLoaded(): it
+     * identifies the calling service, which does not vary per call.
+     *
+     * Private deliberately. Nothing should override how a call's headers are
+     * assembled - a consumer that needs to contribute one registers a
+     * contextual-header resolver instead - and a private method on this base
+     * class cannot collide with a same-named method in the many subclasses
+     * across consuming services.
+     */
+    private function requestHeaders(): array
+    {
+        $this->ensureTokenLoaded();
+
+        $headers = $this->headers;
 
         // Add request ID if available
         $requestId = $this->getCurrentRequestId();
         if ($requestId) {
-            $this->headers['X-Request-ID'] = $requestId;
+            $headers['X-Request-ID'] = $requestId;
         }
 
         // Add X-Ray trace header if available (preserves full trace context)
         $traceHeader = $this->getCurrentTraceHeader();
         if ($traceHeader) {
-            $this->headers['X-Amzn-Trace-Id'] = $traceHeader;
+            $headers['X-Amzn-Trace-Id'] = $traceHeader;
         }
 
         // Add correlation ID as fallback for non-X-Ray scenarios
         $traceId = $this->getCurrentTraceId();
         if ($traceId) {
-            $this->headers['X-Correlation-ID'] = $traceId;
+            $headers['X-Correlation-ID'] = $traceId;
         }
 
         // Passthrough headers - forward if present in incoming request
@@ -111,7 +142,7 @@ abstract class RemoteRepository
         foreach ($passthroughHeaders as $header) {
             $value = request()?->headers->get($header);
             if ($value !== null) {
-                $this->headers[$header] = $value;
+                $headers[$header] = $value;
             }
         }
 
@@ -130,9 +161,11 @@ abstract class RemoteRepository
             }
 
             if ($value !== null) {
-                $this->headers[$header] = $value;
+                $headers[$header] = $value;
             }
         }
+
+        return $headers;
     }
 
     /**
@@ -304,8 +337,8 @@ abstract class RemoteRepository
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
 
-        // Lazy-load token on first request
-        $this->ensureTokenLoaded();
+        // Lazy-load token on first request, then build this call's headers
+        $headers = $this->requestHeaders();
 
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
@@ -330,7 +363,7 @@ abstract class RemoteRepository
                     Log::debug('API GET', ['url' => $url]);
                 }
 
-                $res = $this->client->get($url, $this->headers);
+                $res = $this->client->get($url, $headers);
 
                 if ($res->hasErrors()) {
                     // Check for specialized error patterns before general handling
@@ -406,8 +439,8 @@ abstract class RemoteRepository
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
 
-        // Lazy-load token on first request
-        $this->ensureTokenLoaded();
+        // Lazy-load token on first request, then build this call's headers
+        $headers = $this->requestHeaders();
 
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
@@ -416,7 +449,7 @@ abstract class RemoteRepository
             try {
                 Log::debug('getUserUrl', ['url' => $url]);
 
-                $res = $this->client->get($url, $this->headers);
+                $res = $this->client->get($url, $headers);
 
                 if ($res->hasErrors()) {
                     $errorMessages = [];
@@ -456,8 +489,8 @@ abstract class RemoteRepository
             throw new \RuntimeException('Client not initialized - tests should mock this repository');
         }
 
-        // Lazy-load token on first request
-        $this->ensureTokenLoaded();
+        // Lazy-load token on first request, then build this call's headers
+        $headers = $this->requestHeaders();
 
         $startTime = $this->profileStart(__METHOD__);
         $retry = $this->retry;
@@ -468,12 +501,14 @@ abstract class RemoteRepository
                     Log::info('Request Debug', [
                         'url' => $url,
                         'body' => $data->toArray(),
-                        'headers' => $this->headers,
+                        // Names only: the set carries the machine token and the
+                        // caller's actor context, neither of which belongs in a log.
+                        'header_names' => array_keys($headers),
                     ]);
                     Log::debug('API POST', ['url' => $url]);
                 }
 
-                $res = $this->client->post($url, $data, $this->headers);
+                $res = $this->client->post($url, $data, $headers);
 
                 if ($res->hasErrors()) {
                     $httpResponse = $res->getResponse();
