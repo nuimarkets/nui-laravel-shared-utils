@@ -3,7 +3,6 @@
 namespace NuiMarkets\LaravelSharedUtils\RemoteRepositories;
 
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Request;
 
 /**
  * Remote repository that validates UUIDs before making API calls.
@@ -57,16 +56,6 @@ abstract class UuidValidatingRemoteRepository extends RemoteRepository
                 'valid_count' => count($validUuids),
                 'invalid_uuids' => $invalidUuids,
             ];
-
-            // Add request context if available (defensive logging)
-            if (! Request::has('is_machine')) {
-                if (Request::user()) {
-                    $logData['request.user_id'] = Request::user()->id ?? null;
-                    $logData['request.org_id'] = Request::user()->org_id ?? null;
-                }
-                $logData['request.method'] = Request::method();
-                $logData['request.path'] = Request::path();
-            }
 
             Log::warning('Invalid UUIDs filtered from RemoteRepository query', $logData);
         }
