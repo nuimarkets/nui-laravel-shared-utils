@@ -150,6 +150,30 @@ class UuidValidatingRemoteRepositoryTest extends TestCase
         $this->assertCount(0, $result);
     }
 
+    public function test_log_payload_carries_only_diagnostic_keys()
+    {
+        // The warning payload is deliberately limited to what identifies the bad call.
+        // Request context (method, path, user_id, org_id) is injected into every log
+        // line by the ambient logging context, so repeating it here only adds noise.
+        // This assertion uses exact keys so that re-adding any of it fails loudly.
+        $captured = null;
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->with('Invalid UUIDs filtered from RemoteRepository query', Mockery::on(function ($logData) use (&$captured) {
+                $captured = $logData;
+
+                return true;
+            }));
+
+        $this->repository->test_filter_valid_uuids(['not-a-uuid']);
+
+        $this->assertSame(
+            ['repository', 'invalid_count', 'total_count', 'valid_count', 'invalid_uuids'],
+            array_keys($captured)
+        );
+    }
+
     public function test_find_by_ids_calls_filter_valid_uuids()
     {
         $mixedIds = [
