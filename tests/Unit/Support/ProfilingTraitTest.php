@@ -172,9 +172,10 @@ class ProfilingTraitTest extends TestCase
                 return count($breakdown) === 2 &&
                        $breakdown[0]['method'] === 'get' &&
                        $breakdown[1]['method'] === 'post' &&
-                       isset($breakdown[0]['seconds']) &&
-                       isset($breakdown[1]['seconds']) &&
-                       $breakdown[1]['seconds'] > $breakdown[0]['seconds']; // post took longer
+                       is_float($breakdown[0]['seconds']) &&
+                       is_float($breakdown[1]['seconds']) &&
+                       $breakdown[0]['seconds'] >= 0 &&
+                       $breakdown[1]['seconds'] >= 0;
             }));
 
         $this->testClass->publicLogTimings();

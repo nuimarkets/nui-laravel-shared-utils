@@ -126,6 +126,12 @@ Thrown when a cached lookup failure is hit. Provides structured error context.
 
 Base class for HTTP request exceptions with standardized error handling.
 
+- `extra` is included in logs and Sentry, and may appear in client responses when
+  application debug responses are enabled. Store only client-safe context there.
+- `logExtra` is merged into logs and Sentry through `getLogContext()`, but is never
+  included in client responses. Use it for internal diagnostics such as local paths,
+  upstream response fragments, and engine output.
+
 ## Abstract Base Classes
 
 ### RemoteRepository

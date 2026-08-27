@@ -2,10 +2,13 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\MessageBag;
 use Illuminate\Validation\ValidationException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use NuiMarkets\LaravelSharedUtils\Logging\ErrorLogger;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -88,6 +91,26 @@ class ErrorLoggerTest extends TestCase
         );
     }
 
+    public function test_log_exception_includes_log_only_context()
+    {
+        $exception = new BaseHttpRequestException(
+            'Scanner failed',
+            503,
+            extra: ['request_id' => 'visible-context'],
+            logExtra: ['scanner_binary' => '/usr/local/bin/yr'],
+        );
+
+        ErrorLogger::logException($exception);
+
+        Log::shouldHaveReceived('error')->once()->with(
+            'Scanner failed',
+            \Mockery::on(function ($context) {
+                return $context['request_id'] === 'visible-context' &&
+                       $context['scanner_binary'] === '/usr/local/bin/yr';
+            })
+        );
+    }
+
     public function test_validation_exception_logs_as_info()
     {
         // Ensure Log facade is properly spied on
@@ -96,8 +119,8 @@ class ErrorLoggerTest extends TestCase
             \Mockery::type('array')
         );
 
-        $validator = \Mockery::mock(\Illuminate\Contracts\Validation\Validator::class);
-        $validator->shouldReceive('errors')->andReturn(new \Illuminate\Support\MessageBag(['field' => ['error']]));
+        $validator = \Mockery::mock(Validator::class);
+        $validator->shouldReceive('errors')->andReturn(new MessageBag(['field' => ['error']]));
 
         $exception = new ValidationException($validator);
 

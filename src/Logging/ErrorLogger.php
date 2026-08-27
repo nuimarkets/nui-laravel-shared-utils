@@ -2,8 +2,15 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Logging;
 
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
+use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Centralized error logging with consistent formatting across services.
@@ -20,8 +27,9 @@ class ErrorLogger
      * Log an exception with standard context.
      *
      * When the exception is a BaseHttpRequestException (e.g. RemoteServiceException),
-     * any structured `extra` data (api.service, api.status, etc.) is automatically
-     * merged into the log context. This means callers can do:
+     * any structured client-safe or log-only data (api.service, api.status,
+     * etc.) is automatically merged into the log context. This means callers
+     * can do:
      *
      *     ErrorLogger::logException($e, ['address_id' => $id]);
      *
@@ -42,8 +50,8 @@ class ErrorLogger
 
         // Extract structured context from BaseHttpRequestException (e.g. RemoteServiceException)
         // This pulls in api.service, api.endpoint, api.status, api.errors etc.
-        if ($e instanceof BaseHttpRequestException && ! empty($e->getExtra())) {
-            $errorContext = array_merge($errorContext, $e->getExtra());
+        if ($e instanceof BaseHttpRequestException && ! empty($e->getLogContext())) {
+            $errorContext = array_merge($errorContext, $e->getLogContext());
         }
 
         // Add stack trace for non-production environments
@@ -111,11 +119,11 @@ class ErrorLogger
         ];
 
         // Handle different response types
-        if ($response instanceof \Illuminate\Http\Client\Response) {
+        if ($response instanceof Response) {
             $apiContext[LogFields::API_STATUS] = $response->status();
             $apiContext['response_body'] = static::truncateResponseBody($response->body());
             $apiContext['response_headers'] = $response->headers();
-        } elseif ($response instanceof \Psr\Http\Message\ResponseInterface) {
+        } elseif ($response instanceof ResponseInterface) {
             $apiContext[LogFields::API_STATUS] = $response->getStatusCode();
             $apiContext['response_body'] = static::truncateResponseBody((string) $response->getBody());
         } elseif (is_array($response)) {
@@ -172,13 +180,13 @@ class ErrorLogger
     protected static function getLogLevel(\Throwable $e): string
     {
         // Authentication/Authorization exceptions
-        if ($e instanceof \Illuminate\Auth\AuthenticationException ||
-            $e instanceof \Illuminate\Auth\Access\AuthorizationException) {
+        if ($e instanceof AuthenticationException ||
+            $e instanceof AuthorizationException) {
             return 'warning';
         }
 
         // Client errors (4xx) should be warnings
-        if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
+        if ($e instanceof HttpException) {
             $statusCode = $e->getStatusCode();
             if ($statusCode >= 400 && $statusCode < 500) {
                 return $statusCode === 404 ? 'info' : 'warning';
@@ -186,12 +194,12 @@ class ErrorLogger
         }
 
         // Validation exceptions are info level
-        if ($e instanceof \Illuminate\Validation\ValidationException) {
+        if ($e instanceof ValidationException) {
             return 'info';
         }
 
         // Database connection errors are critical
-        if ($e instanceof \Illuminate\Database\QueryException) {
+        if ($e instanceof QueryException) {
             if (str_contains($e->getMessage(), 'Connection refused') ||
                 str_contains($e->getMessage(), 'SQLSTATE[HY000]')) {
                 return 'critical';

@@ -40,8 +40,8 @@ class SentryHandler extends AbstractProcessingHandler
                         $scope->setTags($context['exception']->getTags());
                     }
 
-                    if (! empty($context['exception']->getExtra())) {
-                        $scope->setExtras($context['exception']->getExtra());
+                    if (! empty($context['exception']->getLogContext())) {
+                        $scope->setExtras($context['exception']->getLogContext());
                     }
                 }
 

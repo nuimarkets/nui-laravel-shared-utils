@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
 use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareDetectedException;
+use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareScanFailedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -84,9 +85,8 @@ class BaseErrorHandlerTest extends TestCase
 
     public function test_malware_detected_response_does_not_leak_detection_internals()
     {
-        // Rule ids, engine output, and paths live in the exception extra for
-        // logs/Sentry; the client response must never include them outside
-        // debug mode.
+        // Rule ids, engine output, and paths live in log-only context; the
+        // client response must never include them.
         config()->set('app.debug', false);
         $request = Request::create('/test', 'POST');
 
@@ -99,6 +99,62 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertStringContainsString('invoice.pdf', $content);
         $this->assertStringNotContainsString('Secret_Detection_Rule', $content);
         $this->assertStringNotContainsString('matched_rules', $content);
+    }
+
+    public function test_malware_diagnostics_stay_out_of_debug_response_but_reach_logs()
+    {
+        Log::spy();
+        $this->app->instance('env', 'production');
+        config()->set('app.debug', true);
+        $request = Request::create('/test', 'POST');
+
+        $exception = new MalwareDetectedException('invoice.pdf', ['Secret_Detection_Rule']);
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(422, $response->getStatusCode());
+        $content = $response->getContent();
+        $this->assertStringContainsString('invoice.pdf', $content);
+        $this->assertStringNotContainsString('Secret_Detection_Rule', $content);
+        $this->assertStringNotContainsString('matched_rules', $content);
+
+        Log::shouldHaveReceived('info')->once()->with(
+            'MalwareDetectedException',
+            \Mockery::on(function ($context) {
+                return $context['file_name'] === 'invoice.pdf' &&
+                       $context['matched_rules'] === ['Secret_Detection_Rule'];
+            })
+        );
+    }
+
+    public function test_malware_failure_diagnostics_stay_out_of_debug_response_but_reach_logs()
+    {
+        Log::spy();
+        $this->app->instance('env', 'production');
+        config()->set('app.debug', true);
+        $request = Request::create('/test', 'POST');
+
+        $exception = new MalwareScanFailedException('Malware scan failed.', extra: [
+            'rules_path' => '/etc/yara/private-rules.yarc',
+            'binary' => '/usr/local/bin/yr',
+            'stderr' => 'private engine output',
+        ]);
+        $this->handler->report($exception);
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(503, $response->getStatusCode());
+        $content = $response->getContent();
+        $this->assertStringNotContainsString('/etc/yara/private-rules.yarc', $content);
+        $this->assertStringNotContainsString('/usr/local/bin/yr', $content);
+        $this->assertStringNotContainsString('private engine output', $content);
+
+        Log::shouldHaveReceived('error')->once()->with(
+            'MalwareScanFailedException',
+            \Mockery::on(function ($context) {
+                return $context['rules_path'] === '/etc/yara/private-rules.yarc' &&
+                       $context['binary'] === '/usr/local/bin/yr' &&
+                       $context['stderr'] === 'private engine output';
+            })
+        );
     }
 
     public function test_remote_service_exception_with_tags_and_extra()

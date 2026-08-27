@@ -445,7 +445,7 @@ class YaraXScannerTest extends TestCase
             $this->scanner($binary)->scan([$this->targetFile]);
             $this->fail('Expected MalwareScanFailedException');
         } catch (MalwareScanFailedException $e) {
-            $this->assertLessThanOrEqual(1000, strlen($e->getExtra()['stderr']));
+            $this->assertLessThanOrEqual(1000, strlen($e->getLogExtra()['stderr']));
         }
     }
 
