@@ -126,8 +126,9 @@ class BaseErrorHandlerTest extends TestCase
         );
     }
 
-    public function test_malware_failure_diagnostics_stay_out_of_debug_response()
+    public function test_malware_failure_diagnostics_stay_out_of_debug_response_but_reach_logs()
     {
+        Log::spy();
         $this->app->instance('env', 'production');
         config()->set('app.debug', true);
         $request = Request::create('/test', 'POST');
@@ -137,6 +138,7 @@ class BaseErrorHandlerTest extends TestCase
             'binary' => '/usr/local/bin/yr',
             'stderr' => 'private engine output',
         ]);
+        $this->handler->report($exception);
         $response = $this->handler->render($request, $exception);
 
         $this->assertEquals(503, $response->getStatusCode());
@@ -144,6 +146,15 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertStringNotContainsString('/etc/yara/private-rules.yarc', $content);
         $this->assertStringNotContainsString('/usr/local/bin/yr', $content);
         $this->assertStringNotContainsString('private engine output', $content);
+
+        Log::shouldHaveReceived('error')->once()->with(
+            'MalwareScanFailedException',
+            \Mockery::on(function ($context) {
+                return $context['rules_path'] === '/etc/yara/private-rules.yarc' &&
+                       $context['binary'] === '/usr/local/bin/yr' &&
+                       $context['stderr'] === 'private engine output';
+            })
+        );
     }
 
     public function test_remote_service_exception_with_tags_and_extra()
