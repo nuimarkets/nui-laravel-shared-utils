@@ -591,7 +591,7 @@ class AttachmentService
             'file_name' => $filenames[0] ?? null,
             'file_names' => $filenames,
             'error' => $e->getMessage(),
-            'extra' => $e->getExtra(),
+            'extra' => $e->getLogContext(),
             'exception' => $e,
         ];
 

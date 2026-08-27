@@ -35,7 +35,7 @@ use Throwable;
 class YaraXScanner implements MalwareScanner
 {
     /**
-     * Cap on engine stdout/stderr captured into exception extra, so a
+     * Cap on engine stdout/stderr captured into exception log context, so a
      * misbehaving scanner can't flood logs or Sentry payloads.
      */
     private const OUTPUT_CAP = 1000;

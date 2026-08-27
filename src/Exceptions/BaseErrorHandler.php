@@ -188,7 +188,7 @@ class BaseErrorHandler extends ExceptionHandler
     /**
      * Return a minimal trace object for JSON output.
      */
-    protected function getExceptionTrace(\Throwable $e): array
+    protected function getExceptionTrace(Throwable $e): array
     {
         return [
             'file' => $e->getFile(),
@@ -215,10 +215,11 @@ class BaseErrorHandler extends ExceptionHandler
             'exception' => $e,
         ];
 
-        // Include structured context from BaseHttpRequestException (e.g. RemoteServiceException)
-        // so uncaught exceptions still produce rich log entries with api.service, api.status, etc.
-        if ($e instanceof BaseHttpRequestException && ! empty($e->getExtra())) {
-            $logContext = array_merge($e->getExtra(), $logContext);
+        // Include client-safe and log-only structured context from
+        // BaseHttpRequestException so uncaught exceptions still produce rich
+        // log entries without exposing diagnostics in debug responses.
+        if ($e instanceof BaseHttpRequestException && ! empty($e->getLogContext())) {
+            $logContext = array_merge($e->getLogContext(), $logContext);
         }
 
         Log::error(class_basename($e), $logContext);
@@ -234,12 +235,18 @@ class BaseErrorHandler extends ExceptionHandler
         $errorData = $this->getFormattedError($e);
 
         if (! $this->shouldReport($e)) {
+            $logContext = [
+                'errors' => $errorData['errors'],
+                'exception' => $e,
+            ];
+
+            if ($e instanceof BaseHttpRequestException && ! empty($e->getLogContext())) {
+                $logContext = array_merge($e->getLogContext(), $logContext);
+            }
+
             Log::info(
                 class_basename($e),
-                [
-                    'errors' => $errorData['errors'],
-                    'exception' => $e,
-                ],
+                $logContext,
             );
         }
 
