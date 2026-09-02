@@ -47,6 +47,19 @@ class AttachmentService
      */
     private const PIXEL_CAP = 15_000_000;
 
+    /**
+     * Widest bucket_path the attachments tables hold (varchar(255)). The full
+     * S3 key is stored verbatim, so the generated filename is budgeted against
+     * whatever the pathBuilder prefix leaves rather than against 255 flat.
+     */
+    public const MAX_BUCKET_PATH_LENGTH = 255;
+
+    /**
+     * Widest file_name the attachments tables hold (varchar(255)). Holds the
+     * original client name, which no upload path bounds.
+     */
+    public const MAX_FILE_NAME_LENGTH = 255;
+
     protected string $diskName;
 
     protected string $attachmentModel;
@@ -242,16 +255,22 @@ class AttachmentService
         ?string $type,
         int|string $userId
     ): array {
-        // Generate unique filename
         $originalFilename = $file->getClientOriginalName();
         $extension = $file->getClientOriginalExtension();
         $baseFilename = pathinfo($originalFilename, PATHINFO_FILENAME);
-        $uniqueFilename = $this->generateUniqueFilename($baseFilename, $extension);
 
         // Build bucket path - use custom pathBuilder if provided, otherwise default
         $bucketPath = $this->pathBuilder
             ? ($this->pathBuilder)($tenantIdentifier)
             : ($tenantIdentifier ? "{$tenantIdentifier}/attachments/" : 'attachments/');
+
+        // Budget the filename against what the prefix leaves, so the stored key
+        // fits the column whatever the prefix and the client filename cost.
+        $uniqueFilename = $this->generateUniqueFilename(
+            $baseFilename,
+            $extension,
+            self::MAX_BUCKET_PATH_LENGTH - mb_strlen($bucketPath)
+        );
         $fullFilePath = $bucketPath.$uniqueFilename;
 
         Log::info('S3: Starting upload', [
@@ -299,7 +318,7 @@ class AttachmentService
         return [
             'uuid' => Str::uuid()->toString(),
             'tenant_uuid' => $tenantIdentifier,
-            'file_name' => $originalFilename,
+            'file_name' => $this->truncateFileName($originalFilename),
             'file_size' => $file->getSize(),
             'bucket_path' => $fullFilePath,
             'type' => $finalType,
@@ -337,14 +356,51 @@ class AttachmentService
 
     /**
      * Generate unique filename to prevent collisions.
+     *
+     * @param  int|null  $maxLength  Characters available for the whole filename.
+     *                               Null leaves it unbounded.
      */
-    protected function generateUniqueFilename(string $baseFilename, string $extension): string
+    protected function generateUniqueFilename(string $baseFilename, string $extension, ?int $maxLength = null): string
     {
         $timestamp = now()->format('Ymd_His');
         $random = substr(md5(uniqid()), 0, 8);
+        $suffix = "_{$timestamp}_{$random}";
+        $dotExtension = $extension === '' ? '' : ".{$extension}";
         $sanitized = Str::slug($baseFilename);
 
-        return "{$sanitized}_{$timestamp}_{$random}.{$extension}";
+        if ($maxLength !== null) {
+            // The timestamp and the random hex carry the collision guarantee, so
+            // they are never trimmed: the readable stem absorbs the truncation
+            // first, then a pathological extension. A prefix leaving fewer than
+            // the 25 characters those two cost is a caller bug, and overflows.
+            $dotExtension = mb_substr($dotExtension, 0, max(0, $maxLength - mb_strlen($suffix)));
+            $stemBudget = max(0, $maxLength - mb_strlen($suffix.$dotExtension));
+            $sanitized = rtrim(mb_substr($sanitized, 0, $stemBudget), '-');
+        }
+
+        return $sanitized.$suffix.$dotExtension;
+    }
+
+    /**
+     * Fit the original client filename to the column that stores it.
+     *
+     * Keeps the extension: the frontends render this string as the file's
+     * label, and a name cut mid-word reads as a corrupt record.
+     */
+    protected function truncateFileName(string $filename, int $maxLength = self::MAX_FILE_NAME_LENGTH): string
+    {
+        if (mb_strlen($filename) <= $maxLength) {
+            return $filename;
+        }
+
+        $extension = pathinfo($filename, PATHINFO_EXTENSION);
+        $suffix = $extension === '' ? '' : ".{$extension}";
+
+        if (mb_strlen($suffix) >= $maxLength) {
+            return mb_substr($filename, 0, $maxLength);
+        }
+
+        return mb_substr($filename, 0, $maxLength - mb_strlen($suffix)).$suffix;
     }
 
     /**

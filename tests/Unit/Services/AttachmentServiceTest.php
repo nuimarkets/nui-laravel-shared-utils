@@ -12,6 +12,15 @@ use NuiMarkets\LaravelSharedUtils\Traits\HasAttachments;
 
 class AttachmentServiceTest extends TestCase
 {
+    /** Seller org UUID, the scope connect-order puts in the bucket prefix. */
+    private const TENANT_UUID = '82d0069b-16d4-416e-be93-584d7f6593dc';
+
+    /**
+     * A purchase-order name of the length that overflowed the column in
+     * production; its slug alone outruns what the bucket prefix leaves.
+     */
+    private const LONG_BASE_FILENAME = '3627 - NEW PURCHASE ORDER - CHILLED LAMB LEGS BONE-IN 4MT KG\'S FOR DELIVERY SEP-OCT 2026 - PLEASE DOUBLE CHECK THE DELIVERY ADDRESS PRIOR TO DEPARTURE FROM THE PLANT - DO NOT SEND FROZEN PRODUCT';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -59,6 +68,156 @@ class AttachmentServiceTest extends TestCase
         $this->assertNotEquals($filename1, $filename2);
         $this->assertStringContainsString('test-file', $filename1);
         $this->assertStringEndsWith('.jpg', $filename1);
+    }
+
+    public function test_generated_filename_fits_the_budget_it_is_given()
+    {
+        $service = new AttachmentService(
+            'test-disk',
+            TestAttachment::class,
+            'test_attachments',
+            'entity_id'
+        );
+
+        $method = (new \ReflectionClass($service))->getMethod('generateUniqueFilename');
+        $method->setAccessible(true);
+
+        // 255 minus "order-attachments/{uuid}/" is what connect-order leaves.
+        $budget = AttachmentService::MAX_BUCKET_PATH_LENGTH - mb_strlen('order-attachments/'.self::TENANT_UUID.'/');
+
+        $first = $method->invoke($service, self::LONG_BASE_FILENAME, 'pdf', $budget);
+        $second = $method->invoke($service, self::LONG_BASE_FILENAME, 'pdf', $budget);
+
+        $this->assertLessThanOrEqual($budget, mb_strlen($first));
+        $this->assertStringEndsWith('.pdf', $first);
+        $this->assertStringStartsWith('3627-new-purchase-order-chilled-lamb', $first);
+        $this->assertNotEquals($first, $second, 'truncation must not cost the uniqueness suffix');
+        $this->assertMatchesRegularExpression('/_\d{8}_\d{6}_[0-9a-f]{8}\.pdf$/', $first);
+    }
+
+    public function test_generated_filename_does_not_end_the_stem_on_a_hyphen()
+    {
+        $service = new AttachmentService(
+            'test-disk',
+            TestAttachment::class,
+            'test_attachments',
+            'entity_id'
+        );
+
+        $method = (new \ReflectionClass($service))->getMethod('generateUniqueFilename');
+        $method->setAccessible(true);
+
+        // "aaaa-bbbb-cccc" cut at 10 lands on the separator.
+        $filename = $method->invoke($service, 'aaaa bbbb cccc', 'pdf', 10 + strlen('_20260901_213003_90047571.pdf'));
+
+        $this->assertStringStartsWith('aaaa-bbbb_', $filename);
+    }
+
+    public function test_generated_filename_stays_unbounded_without_a_budget()
+    {
+        $service = new AttachmentService(
+            'test-disk',
+            TestAttachment::class,
+            'test_attachments',
+            'entity_id'
+        );
+
+        $method = (new \ReflectionClass($service))->getMethod('generateUniqueFilename');
+        $method->setAccessible(true);
+
+        $filename = $method->invoke($service, self::LONG_BASE_FILENAME, 'pdf');
+
+        $this->assertStringContainsString('do-not-send-frozen-product', $filename);
+
+        // Unbudgeted, this name plus connect-order's prefix is what overflowed
+        // the column in production.
+        $this->assertGreaterThan(
+            AttachmentService::MAX_BUCKET_PATH_LENGTH,
+            mb_strlen('order-attachments/'.self::TENANT_UUID.'/'.$filename)
+        );
+    }
+
+    public function test_long_filename_still_yields_a_storable_bucket_path()
+    {
+        Storage::fake('test-disk');
+
+        $entity = new TestEntity(['id' => 1, 'tenant_uuid' => self::TENANT_UUID]);
+        $entity->exists = true;
+        $entity->save();
+
+        $file = UploadedFile::fake()->create(self::LONG_BASE_FILENAME.'.pdf', 11, 'application/pdf');
+
+        $service = new AttachmentService(
+            diskName: 'test-disk',
+            attachmentModel: TestAttachment::class,
+            pivotTable: 'test_attachments',
+            foreignKey: 'entity_id',
+            pathBuilder: fn (?string $scope) => "order-attachments/{$scope}/"
+        );
+
+        $attachments = $service->processAttachments($entity, $file);
+
+        $this->assertCount(1, $attachments);
+        $this->assertLessThanOrEqual(
+            AttachmentService::MAX_BUCKET_PATH_LENGTH,
+            mb_strlen($attachments[0]->bucket_path)
+        );
+        $this->assertStringStartsWith('order-attachments/'.self::TENANT_UUID.'/', $attachments[0]->bucket_path);
+        $this->assertStringEndsWith('.pdf', $attachments[0]->bucket_path);
+        Storage::disk('test-disk')->assertExists($attachments[0]->bucket_path);
+    }
+
+    public function test_upload_stores_a_file_name_the_column_accepts()
+    {
+        Storage::fake('test-disk');
+
+        $entity = new TestEntity(['id' => 1, 'tenant_uuid' => self::TENANT_UUID]);
+        $entity->exists = true;
+        $entity->save();
+
+        // Longer than file_name holds, where LONG_BASE_FILENAME overruns only
+        // bucket_path. The two halves of the fix have different thresholds.
+        $file = UploadedFile::fake()->create(str_repeat('x', 290).'.pdf', 11, 'application/pdf');
+
+        $service = new AttachmentService(
+            diskName: 'test-disk',
+            attachmentModel: TestAttachment::class,
+            pivotTable: 'test_attachments',
+            foreignKey: 'entity_id',
+            pathBuilder: fn (?string $scope) => "order-attachments/{$scope}/"
+        );
+
+        $attachments = $service->processAttachments($entity, $file);
+
+        // Exactly the cap, not merely under it: a fake upload that quietly
+        // shortened the client name would pass a <= assertion vacuously.
+        $this->assertSame(
+            AttachmentService::MAX_FILE_NAME_LENGTH,
+            mb_strlen($attachments[0]->file_name)
+        );
+        $this->assertStringEndsWith('.pdf', $attachments[0]->file_name);
+    }
+
+    public function test_long_original_file_name_is_truncated_keeping_its_extension()
+    {
+        $service = new AttachmentService(
+            'test-disk',
+            TestAttachment::class,
+            'test_attachments',
+            'entity_id'
+        );
+
+        $method = (new \ReflectionClass($service))->getMethod('truncateFileName');
+        $method->setAccessible(true);
+
+        $long = str_repeat('a', 300).'.pdf';
+        $truncated = $method->invoke($service, $long);
+
+        $this->assertSame(AttachmentService::MAX_FILE_NAME_LENGTH, mb_strlen($truncated));
+        $this->assertStringEndsWith('.pdf', $truncated);
+
+        $short = 'invoice.pdf';
+        $this->assertSame($short, $method->invoke($service, $short));
     }
 
     public function test_detects_file_type_from_mime()
