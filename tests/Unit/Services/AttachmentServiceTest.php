@@ -83,7 +83,7 @@ class AttachmentServiceTest extends TestCase
         $method->setAccessible(true);
 
         // 255 minus "order-attachments/{uuid}/" is what connect-order leaves.
-        $budget = AttachmentService::MAX_BUCKET_PATH_LENGTH - strlen('order-attachments/'.self::TENANT_UUID.'/');
+        $budget = AttachmentService::MAX_BUCKET_PATH_LENGTH - mb_strlen('order-attachments/'.self::TENANT_UUID.'/');
 
         $first = $method->invoke($service, self::LONG_BASE_FILENAME, 'pdf', $budget);
         $second = $method->invoke($service, self::LONG_BASE_FILENAME, 'pdf', $budget);
@@ -165,6 +165,37 @@ class AttachmentServiceTest extends TestCase
         $this->assertStringStartsWith('order-attachments/'.self::TENANT_UUID.'/', $attachments[0]->bucket_path);
         $this->assertStringEndsWith('.pdf', $attachments[0]->bucket_path);
         Storage::disk('test-disk')->assertExists($attachments[0]->bucket_path);
+    }
+
+    public function test_upload_stores_a_file_name_the_column_accepts()
+    {
+        Storage::fake('test-disk');
+
+        $entity = new TestEntity(['id' => 1, 'tenant_uuid' => self::TENANT_UUID]);
+        $entity->exists = true;
+        $entity->save();
+
+        // Longer than file_name holds, where LONG_BASE_FILENAME overruns only
+        // bucket_path. The two halves of the fix have different thresholds.
+        $file = UploadedFile::fake()->create(str_repeat('x', 290).'.pdf', 11, 'application/pdf');
+
+        $service = new AttachmentService(
+            diskName: 'test-disk',
+            attachmentModel: TestAttachment::class,
+            pivotTable: 'test_attachments',
+            foreignKey: 'entity_id',
+            pathBuilder: fn (?string $scope) => "order-attachments/{$scope}/"
+        );
+
+        $attachments = $service->processAttachments($entity, $file);
+
+        // Exactly the cap, not merely under it: a fake upload that quietly
+        // shortened the client name would pass a <= assertion vacuously.
+        $this->assertSame(
+            AttachmentService::MAX_FILE_NAME_LENGTH,
+            mb_strlen($attachments[0]->file_name)
+        );
+        $this->assertStringEndsWith('.pdf', $attachments[0]->file_name);
     }
 
     public function test_long_original_file_name_is_truncated_keeping_its_extension()
