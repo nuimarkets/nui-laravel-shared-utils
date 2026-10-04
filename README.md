@@ -38,6 +38,10 @@ Route::get('/healthcheck', [HealthCheckController::class, 'detailed']);
 
 Complete request tracking with automatic performance metrics, X-Ray trace correlation, and customizable service context. One middleware class gives you request start/complete logs, duration tracking, memory usage, and business logic correlation.
 
+### **Client IP Behind API Gateway**
+
+`TrustAwsApiGatewayProxies` trusts the published AWS API Gateway ranges for your region, so `$request->ip()` returns the caller instead of the gateway's egress address. Client-supplied `X-Forwarded-For` entries are never returned.
+
 ### **Distributed Tracing**
 
 Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration. Automatic response headers (`X-Request-ID` and `X-Trace-ID`) for frontend correlation.
@@ -118,6 +122,7 @@ php artisan vendor:publish --tag=attachments-config
 |-----------|-------------|---------------|
 | **Distributed Tracing** | AWS X-Ray integration with request correlation | [Guide](docs/distributed-tracing.md) |
 | **Logging System** | Enhanced logging with Elasticsearch routing | [Guide](docs/logging-integration.md) |
+| **Trusted Proxies** | Real client IP behind AWS API Gateway and a load balancer | [Guide](docs/trusted-proxies.md) |
 | **RemoteRepository** | Service-to-service communication framework | [Guide](docs/RemoteRepository.md) |
 | **Idempotency Middleware** | Retry-safe write endpoints with response replay | [Guide](docs/idempotency.md) |
 | **Failure Caching** | Cache remote failures to prevent cascading timeouts | [Guide](docs/failure-caching.md) |
