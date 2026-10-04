@@ -32,6 +32,22 @@ Trusting the ranges as a whole would not be enough. A caller whose own address i
 ranges (another API Gateway, for instance) would make every entry trusted, and Symfony then
 falls back to the leftmost entry, which the client wrote.
 
+## Requirements
+
+The resolution relies on two facts about the deployment, and is only as trustworthy as they
+are:
+
+- **The load balancer appends to `X-Forwarded-For`.** On an AWS Application Load Balancer
+  that is the default `append` processing mode. In `preserve` mode the load balancer passes
+  the header through untouched, so the rightmost entry is whatever the client wrote: a
+  client can put a gateway-range address there and have the entry to its left returned.
+  `remove` mode leaves nothing to resolve. Keep the load balancer in `append` mode.
+- **Only the load balancer can reach the application.** The immediate caller
+  (`REMOTE_ADDR`) is always trusted, as with the framework's `'*'`, so anything that reaches
+  the application directly is treated as a proxy and can set the resolved IP through
+  `X-Forwarded-For`. Restrict ingress to the load balancer, for example with security groups
+  that admit only its traffic.
+
 ## Usage
 
 Register it as the first global middleware, in place of the framework's `TrustProxies`.
