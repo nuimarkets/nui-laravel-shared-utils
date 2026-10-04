@@ -121,7 +121,7 @@ class TrustAwsApiGatewayProxies extends TrustProxies
             // application chose to trust, so continuing past it is the intended behaviour.
             $caller = $i > 0 ? static::normaliseForwardedIp($entries[$i - 1]) : null;
             $remote = $request->server->get('REMOTE_ADDR');
-            if ($caller === null || $caller === $ip || (is_string($remote) && IpUtils::checkIp($caller, $remote))) {
+            if ($caller === null || IpUtils::checkIp($caller, $ip) || (is_string($remote) && IpUtils::checkIp($caller, $remote))) {
                 return null;
             }
 

@@ -34,19 +34,27 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         parent::tearDown();
     }
 
-    private function resolveIp(string $xff, string $remoteAddr = self::LB, ?string $region = 'ap-southeast-2', array $additional = []): ?string
+    private function resolveIp(string $xff, string $remoteAddr = self::LB, ?string $region = 'ap-southeast-2', array $additional = [], ?array $ranges = null): ?string
     {
         $request = Request::create('/api/orders', 'GET', [], [], [], [
             'REMOTE_ADDR' => $remoteAddr,
             'HTTP_X_FORWARDED_FOR' => $xff,
         ]);
 
-        $middleware = new class($region, $additional) extends TrustAwsApiGatewayProxies
+        $middleware = new class($region, $additional, $ranges) extends TrustAwsApiGatewayProxies
         {
-            public function __construct(?string $region, array $additional)
+            private static ?array $testRanges = null;
+
+            public function __construct(?string $region, array $additional, ?array $ranges)
             {
                 $this->region = $region;
                 $this->additionalProxies = $additional;
+                self::$testRanges = $ranges;
+            }
+
+            public static function apiGatewayRanges(?string $region): array
+            {
+                return self::$testRanges ?? parent::apiGatewayRanges($region);
             }
         };
 
@@ -85,6 +93,16 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
     {
         // Trusting the hop would strip both equal entries and expose the client-written one.
         $this->assertSame(self::GATEWAY, $this->resolveIp('198.51.100.9, '.self::GATEWAY.', '.self::GATEWAY));
+    }
+
+    public function test_caller_matching_the_gateway_hop_in_another_ipv6_spelling_falls_back()
+    {
+        // Equality must be by address, as Symfony compares, not by string.
+        $this->assertSame('2001:db8::10', $this->resolveIp(
+            '198.51.100.9, 2001:db8:0:0:0:0:0:10, 2001:db8::10',
+            additional: [],
+            ranges: ['2001:db8::/64'],
+        ));
     }
 
     public function test_caller_sharing_the_load_balancer_address_falls_back_to_the_gateway()
