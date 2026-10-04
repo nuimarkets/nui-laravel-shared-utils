@@ -91,13 +91,25 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
 
     public function test_region_falls_back_to_the_environment()
     {
-        $previous = getenv('AWS_REGION');
+        // Env reads $_SERVER and $_ENV before getenv(), so an ambient AWS_REGION would win.
+        $saved = [getenv('AWS_REGION'), $_SERVER['AWS_REGION'] ?? null, $_ENV['AWS_REGION'] ?? null];
         putenv('AWS_REGION=ap-southeast-2');
+        $_SERVER['AWS_REGION'] = $_ENV['AWS_REGION'] = 'ap-southeast-2';
 
         try {
             $this->assertSame('203.0.113.42', $this->resolveIp('203.0.113.42, '.self::GATEWAY, region: null));
         } finally {
-            $previous === false ? putenv('AWS_REGION') : putenv("AWS_REGION={$previous}");
+            $saved[0] === false ? putenv('AWS_REGION') : putenv("AWS_REGION={$saved[0]}");
+            if ($saved[1] === null) {
+                unset($_SERVER['AWS_REGION']);
+            } else {
+                $_SERVER['AWS_REGION'] = $saved[1];
+            }
+            if ($saved[2] === null) {
+                unset($_ENV['AWS_REGION']);
+            } else {
+                $_ENV['AWS_REGION'] = $saved[2];
+            }
         }
     }
 
@@ -108,6 +120,19 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         TrustProxies::at('**');
 
         $this->assertSame('203.0.113.42', $this->resolveIp('198.51.100.9, 203.0.113.42, '.self::GATEWAY));
+    }
+
+    public function test_inherits_the_framework_forwarded_headers()
+    {
+        // Swapping this in for the framework middleware must not drop X-Forwarded-Prefix.
+        $request = Request::create('/api/orders', 'GET', [], [], [], [
+            'REMOTE_ADDR' => self::LB,
+            'HTTP_X_FORWARDED_PREFIX' => '/svc',
+        ]);
+
+        $baseUrl = (new TrustAwsApiGatewayProxies)->handle($request, fn (Request $req) => $req->getBaseUrl());
+
+        $this->assertSame('/svc', $baseUrl);
     }
 
     public function test_bundled_ranges_cover_the_region()

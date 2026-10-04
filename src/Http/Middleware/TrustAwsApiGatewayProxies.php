@@ -3,7 +3,6 @@
 namespace NuiMarkets\LaravelSharedUtils\Http\Middleware;
 
 use Illuminate\Http\Middleware\TrustProxies;
-use Illuminate\Http\Request;
 use Illuminate\Support\Env;
 
 /**
@@ -29,7 +28,8 @@ use Illuminate\Support\Env;
  *
  * Usage: register it (or a subclass) as the first global middleware in place of the
  * framework's TrustProxies, and set `$region` when the runtime does not export AWS_REGION.
- * The static `TrustProxies::at()` override is deliberately ignored here.
+ * The static `TrustProxies::at()` override, a `$proxies` property and `trustedproxy.proxies`
+ * config are all ignored here; list extra proxies in `$additionalProxies`.
  */
 class TrustAwsApiGatewayProxies extends TrustProxies
 {
@@ -46,18 +46,6 @@ class TrustAwsApiGatewayProxies extends TrustProxies
      * @var array<int, string>
      */
     protected array $additionalProxies = [];
-
-    /**
-     * The headers that should be used to detect proxies.
-     *
-     * @var int
-     */
-    protected $headers =
-        Request::HEADER_X_FORWARDED_FOR |
-        Request::HEADER_X_FORWARDED_HOST |
-        Request::HEADER_X_FORWARDED_PORT |
-        Request::HEADER_X_FORWARDED_PROTO |
-        Request::HEADER_X_FORWARDED_AWS_ELB;
 
     /** @var array{create_date: string, regions: array<string, array<int, string>>}|null */
     private static ?array $ranges = null;

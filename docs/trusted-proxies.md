@@ -62,11 +62,13 @@ class TrustProxies extends TrustAwsApiGatewayProxies
 |---|---|---|
 | `$region` | `AWS_REGION`, then `AWS_DEFAULT_REGION` | Region whose API Gateway ranges are trusted. Set it explicitly when the runtime does not export the variable. |
 | `$additionalProxies` | `[]` | Extra IPs or CIDRs to trust, such as a CDN in front of the load balancer. |
-| `$headers` | `X-Forwarded-For`, `-Host`, `-Port`, `-Proto` | As in the framework middleware. |
+| `$headers` | The framework default | Which forwarded headers are honoured, as in the framework middleware. |
 
 The immediate caller (`REMOTE_ADDR`) is always trusted, as with `'*'`. The static
 `TrustProxies::at()` override is ignored, because `at('**')` would trust every hop and hand
-back the leftmost, client-controlled entry.
+back the leftmost, client-controlled entry. A `$proxies` property or `trustedproxy.proxies`
+config carried over from the framework middleware is ignored too: move those entries to
+`$additionalProxies`.
 
 ## What it guarantees and what it does not
 
