@@ -19,7 +19,9 @@ use Symfony\Component\HttpFoundation\IpUtils;
  * Exactly one hop is trusted, and only when its address is in the region's published
  * API_GATEWAY ranges: walking X-Forwarded-For from the right past the immediate caller and
  * `$additionalProxies`, the first entry is trusted if it is a gateway address, and nothing to
- * its left is. Trusting the ranges wholesale would let a caller whose own address is in those
+ * its left is. Symfony trusts by address rather than position, so the hop is trusted only
+ * when the entry to its left, the caller API Gateway appended, is a valid address other than
+ * the hop and the immediate caller; otherwise the gateway address is returned. Trusting the ranges wholesale would let a caller whose own address is in those
  * ranges have Symfony fall back to the leftmost entry, which the client chooses.
  *
  * Entries a client puts in X-Forwarded-For sit to the left of the address API Gateway
@@ -100,16 +102,30 @@ class TrustAwsApiGatewayProxies extends TrustProxies
         }
 
         $entries = explode(',', (string) $request->headers->get('X-Forwarded-For', ''));
-        foreach (array_reverse($entries) as $entry) {
-            $ip = static::normaliseForwardedIp($entry);
+        for ($i = count($entries) - 1; $i >= 0; $i--) {
+            $ip = static::normaliseForwardedIp($entries[$i]);
             if ($ip === null) {
                 return null;
             }
             if (IpUtils::checkIp($ip, $trusted)) {
                 continue;
             }
+            if (! IpUtils::checkIp($ip, $ranges)) {
+                return null;
+            }
 
-            return IpUtils::checkIp($ip, $ranges) ? $ip : null;
+            // Symfony trusts by address, not position, so a caller API Gateway appended that
+            // equals this hop or the immediate caller would be skipped too, exposing an entry
+            // the client wrote; a non-IP caller would be dropped, with the same effect. Keep
+            // the gateway address instead. A caller in $additionalProxies is a proxy the
+            // application chose to trust, so continuing past it is the intended behaviour.
+            $caller = $i > 0 ? static::normaliseForwardedIp($entries[$i - 1]) : null;
+            $remote = $request->server->get('REMOTE_ADDR');
+            if ($caller === null || $caller === $ip || (is_string($remote) && IpUtils::checkIp($caller, $remote))) {
+                return null;
+            }
+
+            return $ip;
         }
 
         return null;

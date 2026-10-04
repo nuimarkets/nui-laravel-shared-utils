@@ -22,7 +22,10 @@ through the gateway logs and throttles as one of a few AWS addresses.
 This middleware also trusts that one gateway hop, so the walk skips it and returns the
 address API Gateway appended. It trusts exactly one entry: walking from the right past the
 load balancer and any `$additionalProxies`, the first entry is trusted when it falls in the
-region's published `API_GATEWAY` ranges, and nothing to its left is. Requests that reach the
+region's published `API_GATEWAY` ranges, and nothing to its left is. Symfony trusts by
+address rather than position, so the hop is trusted only when the entry to its left (the
+caller API Gateway appended) is a valid address other than the hop and the load balancer.
+Otherwise the gateway address is returned. Requests that reach the
 load balancer directly resolve exactly as before.
 
 Trusting the ranges as a whole would not be enough. A caller whose own address is in those

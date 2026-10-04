@@ -81,6 +81,28 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         $this->assertSame('3.26.139.200', $this->resolveIp('3.26.138.1, 3.26.139.200, '.self::GATEWAY));
     }
 
+    public function test_caller_sharing_the_gateway_address_falls_back_to_the_gateway()
+    {
+        // Trusting the hop would strip both equal entries and expose the client-written one.
+        $this->assertSame(self::GATEWAY, $this->resolveIp('198.51.100.9, '.self::GATEWAY.', '.self::GATEWAY));
+    }
+
+    public function test_caller_sharing_the_load_balancer_address_falls_back_to_the_gateway()
+    {
+        $this->assertSame(self::GATEWAY, $this->resolveIp('198.51.100.9, '.self::LB.', '.self::GATEWAY));
+    }
+
+    public function test_caller_that_is_not_an_ip_falls_back_to_the_gateway()
+    {
+        // Symfony drops non-IP entries, which would expose the entry to their left.
+        $this->assertSame(self::GATEWAY, $this->resolveIp('198.51.100.9, string, '.self::GATEWAY));
+    }
+
+    public function test_gateway_hop_with_no_caller_entry_falls_back_to_the_gateway()
+    {
+        $this->assertSame(self::GATEWAY, $this->resolveIp(self::GATEWAY));
+    }
+
     public function test_a_gateway_address_the_client_sent_is_not_trusted_on_direct_traffic()
     {
         $this->assertSame('203.0.113.42', $this->resolveIp('198.51.100.9, '.self::GATEWAY.', 203.0.113.42'));
@@ -161,17 +183,27 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         $this->assertSame('203.0.113.42', $this->resolveIp('198.51.100.9, 203.0.113.42, '.self::GATEWAY));
     }
 
-    public function test_inherits_the_framework_forwarded_headers()
+    public function test_forwarded_headers_match_the_framework_middleware()
     {
-        // Swapping this in for the framework middleware must not drop X-Forwarded-Prefix.
-        $request = Request::create('/api/orders', 'GET', [], [], [], [
+        // Swapping this in for the framework middleware must not change URL generation.
+        $server = [
             'REMOTE_ADDR' => self::LB,
             'HTTP_X_FORWARDED_PREFIX' => '/svc',
-        ]);
+            'HTTP_X_FORWARDED_HOST' => 'api.example.test',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ];
+        $resolve = fn (TrustProxies $middleware) => $middleware->handle(
+            Request::create('/api/orders', 'GET', [], [], [], $server),
+            fn (Request $req) => $req->getSchemeAndHttpHost().$req->getBaseUrl(),
+        );
 
-        $baseUrl = (new TrustAwsApiGatewayProxies)->handle($request, fn (Request $req) => $req->getBaseUrl());
+        $framework = $resolve(new class extends TrustProxies
+        {
+            protected $proxies = '*';
+        });
 
-        $this->assertSame('/svc', $baseUrl);
+        $this->assertSame($framework, $resolve(new TrustAwsApiGatewayProxies));
+        $this->assertStringStartsWith('https://api.example.test', $framework);
     }
 
     public function test_bundled_ranges_cover_the_region()
