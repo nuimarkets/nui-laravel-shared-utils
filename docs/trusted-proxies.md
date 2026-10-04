@@ -65,7 +65,7 @@ class TrustProxies extends TrustAwsApiGatewayProxies
 ```
 
 | Property | Default | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `$region` | `AWS_REGION`, then `AWS_DEFAULT_REGION` | Region whose API Gateway ranges are trusted. Set it explicitly when the runtime does not export the variable. |
 | `$additionalProxies` | `[]` | Extra IPs or CIDRs to trust, such as a CDN in front of the load balancer. |
 | `$headers` | The framework default | Which forwarded headers are honoured, as in the framework middleware. |
