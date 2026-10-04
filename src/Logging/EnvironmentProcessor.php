@@ -34,16 +34,11 @@ class EnvironmentProcessor implements ProcessorInterface
                 $amzTraceId = request()->header('x-amzn-trace-id', '');
                 preg_match('/Root=(1-[a-z0-9]+-[a-z0-9]+)/', $amzTraceId, $matches);
 
-                // Get IP from x-forwarded-for header if available, or fall back to request->ip()
-                $ip = request()->header('x-forwarded-for') ?: request()->ip();
-                // If x-forwarded-for contains multiple IPs, get the first one (client IP)
-                if (strpos($ip, ',') !== false) {
-                    $ip = trim(explode(',', $ip)[0]);
-                }
-
                 $extraInfo = array_merge($extraInfo, [
                     'request.amz-trace-id' => $matches[1] ?? '',
-                    'request.ip' => $ip ?? '',
+                    // Resolved by the trusted-proxy middleware. The raw X-Forwarded-For
+                    // header is client-controlled and may not even hold an IP.
+                    'request.ip' => request()->ip() ?? '',
                     'request.method' => request()->method() ?? '',
                     'request.url' => request()->url() ?? '',
                     'request.path' => request()->path() ?? '',
