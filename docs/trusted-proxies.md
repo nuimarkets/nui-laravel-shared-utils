@@ -100,6 +100,8 @@ config carried over from the framework middleware is ignored too: move those ent
 
 ## What it guarantees and what it does not
 
+These hold when the [requirements](#requirements) above are met.
+
 - A value the client puts in `X-Forwarded-For` is never returned for traffic through your
   gateway: it sits to the left of the address API Gateway appends, and only the hop to the
   right of that address is trusted.
