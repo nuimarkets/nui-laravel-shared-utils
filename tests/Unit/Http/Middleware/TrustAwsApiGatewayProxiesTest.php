@@ -153,6 +153,13 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         }
     }
 
+    public function test_direct_application_access_is_trusted_as_a_proxy()
+    {
+        // Pins the documented ingress requirement: a caller that reaches the application
+        // directly is REMOTE_ADDR, which is always trusted, so it chooses the resolved IP.
+        $this->assertSame('203.0.113.42', $this->resolveIp('203.0.113.42, 198.51.100.7', remoteAddr: '198.51.100.7'));
+    }
+
     public function test_unknown_region_trusts_only_the_immediate_caller()
     {
         $this->assertSame(self::GATEWAY, $this->resolveIp('203.0.113.42, '.self::GATEWAY, region: 'xx-nowhere-1'));

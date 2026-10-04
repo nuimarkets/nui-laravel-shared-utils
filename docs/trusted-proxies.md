@@ -38,10 +38,13 @@ The resolution relies on two facts about the deployment, and is only as trustwor
 are:
 
 - **The load balancer appends to `X-Forwarded-For`.** On an AWS Application Load Balancer
-  that is the default `append` processing mode. In `preserve` mode the load balancer passes
-  the header through untouched, so the rightmost entry is whatever the client wrote: a
-  client can put a gateway-range address there and have the entry to its left returned.
-  `remove` mode leaves nothing to resolve. Keep the load balancer in `append` mode.
+  that is the default `append` processing mode, which puts the address of whoever connected
+  to it rightmost. In `preserve` mode it passes the header through untouched: traffic through
+  the gateway still resolves, because API Gateway's own append lands rightmost, but traffic
+  that reaches the load balancer directly carries a rightmost entry the client wrote, and
+  that value (or, if it is a gateway-range address, the entry to its left) becomes the
+  resolved IP. `remove` mode leaves nothing to resolve. Keep the load balancer in `append`
+  mode.
 - **Only the load balancer can reach the application.** The immediate caller
   (`REMOTE_ADDR`) is always trusted, as with the framework's `'*'`, so anything that reaches
   the application directly is treated as a proxy and can set the resolved IP through

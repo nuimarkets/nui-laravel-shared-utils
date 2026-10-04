@@ -38,8 +38,9 @@ use Symfony\Component\HttpFoundation\IpUtils;
  * trusted, which falls back to the gateway address rather than a client-supplied one.
  *
  * Requires the load balancer to append to X-Forwarded-For (ALB `append` mode, the default;
- * `preserve` lets the client write the rightmost entry) and application ingress restricted to
- * that load balancer, since the immediate caller is always trusted. See docs/trusted-proxies.md.
+ * under `preserve`, traffic reaching the load balancer directly carries a client-written
+ * rightmost entry) and application ingress restricted to that load balancer, since the
+ * immediate caller is always trusted. See docs/trusted-proxies.md.
  *
  * Usage: register it (or a subclass) as the first global middleware in place of the
  * framework's TrustProxies, and set `$region` when the runtime does not export AWS_REGION.
