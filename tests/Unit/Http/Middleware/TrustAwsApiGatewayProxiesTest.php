@@ -74,6 +74,45 @@ class TrustAwsApiGatewayProxiesTest extends TestCase
         $this->assertSame('203.0.113.42', $this->resolveIp('198.51.100.9, 203.0.113.42'));
     }
 
+    public function test_caller_inside_the_gateway_ranges_is_returned_not_a_client_prepended_entry()
+    {
+        // The caller itself has a gateway address. Trusting the ranges wholesale would make
+        // every entry trusted and fall back to the leftmost, which the client chose.
+        $this->assertSame('3.26.139.200', $this->resolveIp('3.26.138.1, 3.26.139.200, '.self::GATEWAY));
+    }
+
+    public function test_a_gateway_address_the_client_sent_is_not_trusted_on_direct_traffic()
+    {
+        $this->assertSame('203.0.113.42', $this->resolveIp('198.51.100.9, '.self::GATEWAY.', 203.0.113.42'));
+    }
+
+    public function test_port_on_the_gateway_entry_is_tolerated()
+    {
+        $this->assertSame('203.0.113.42', $this->resolveIp('203.0.113.42, '.self::GATEWAY.':443'));
+    }
+
+    public function test_additional_proxies_left_of_the_gateway_are_skipped()
+    {
+        // client -> CDN -> API Gateway -> load balancer
+        $this->assertSame('203.0.113.42', $this->resolveIp('203.0.113.42, 192.0.2.10, '.self::GATEWAY, additional: ['192.0.2.0/24']));
+    }
+
+    public function test_immediate_caller_is_read_from_the_request_not_the_global_server()
+    {
+        $previous = $_SERVER['REMOTE_ADDR'] ?? null;
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.250';
+
+        try {
+            $this->assertSame('203.0.113.42', $this->resolveIp('203.0.113.42, '.self::GATEWAY));
+        } finally {
+            if ($previous === null) {
+                unset($_SERVER['REMOTE_ADDR']);
+            } else {
+                $_SERVER['REMOTE_ADDR'] = $previous;
+            }
+        }
+    }
+
     public function test_unknown_region_trusts_only_the_immediate_caller()
     {
         $this->assertSame(self::GATEWAY, $this->resolveIp('203.0.113.42, '.self::GATEWAY, region: 'xx-nowhere-1'));

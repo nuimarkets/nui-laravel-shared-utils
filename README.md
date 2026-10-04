@@ -40,7 +40,7 @@ Complete request tracking with automatic performance metrics, X-Ray trace correl
 
 ### **Client IP Behind API Gateway**
 
-`TrustAwsApiGatewayProxies` trusts the published AWS API Gateway ranges for your region, so `$request->ip()` returns the caller instead of the gateway's egress address. Client-supplied `X-Forwarded-For` entries are never returned.
+`TrustAwsApiGatewayProxies` trusts the single AWS API Gateway hop in front of your load balancer, checked against the published ranges for your region, so `$request->ip()` returns the caller instead of the gateway's egress address. Client-supplied `X-Forwarded-For` entries are never returned.
 
 ### **Distributed Tracing**
 

@@ -64,10 +64,18 @@ foreach ($regions as $region => $cidrs) {
 $out .= "    ],\n";
 $out .= "];\n";
 
-if (! is_dir(dirname($target))) {
-    mkdir(dirname($target), 0755, true);
+if (! is_dir(dirname($target)) && ! mkdir(dirname($target), 0755, true) && ! is_dir(dirname($target))) {
+    fwrite(STDERR, 'Could not create '.dirname($target)."\n");
+    exit(1);
 }
-file_put_contents($target, $out);
+
+// Write beside the target and rename, so a failed write never leaves a truncated file.
+$tmp = $target.'.tmp';
+if (file_put_contents($tmp, $out) !== strlen($out) || ! rename($tmp, $target)) {
+    @unlink($tmp);
+    fwrite(STDERR, "Could not write {$target}\n");
+    exit(1);
+}
 
 $count = array_sum(array_map('count', $regions));
 echo "Wrote {$count} prefixes across ".count($regions)." regions (createDate {$data['createDate']}) to resources/aws/api-gateway-ranges.php\n";

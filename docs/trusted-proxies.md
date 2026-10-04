@@ -19,9 +19,15 @@ Symfony resolves the client IP by walking that list from the right, skipping tru
 Trusting only the load balancer stops at the API Gateway egress address, so every request
 through the gateway logs and throttles as one of a few AWS addresses.
 
-This middleware also trusts the published `API_GATEWAY` ranges for one AWS region, so the
-walk skips the gateway hop and returns the address API Gateway appended. Requests that reach
-the load balancer directly resolve exactly as before.
+This middleware also trusts that one gateway hop, so the walk skips it and returns the
+address API Gateway appended. It trusts exactly one entry: walking from the right past the
+load balancer and any `$additionalProxies`, the first entry is trusted when it falls in the
+region's published `API_GATEWAY` ranges, and nothing to its left is. Requests that reach the
+load balancer directly resolve exactly as before.
+
+Trusting the ranges as a whole would not be enough. A caller whose own address is in those
+ranges (another API Gateway, for instance) would make every entry trusted, and Symfony then
+falls back to the leftmost entry, which the client wrote.
 
 ## Usage
 
@@ -73,12 +79,13 @@ config carried over from the framework middleware is ignored too: move those ent
 ## What it guarantees and what it does not
 
 - A value the client puts in `X-Forwarded-For` is never returned for traffic through your
-  gateway: it sits to the left of the address API Gateway appends.
+  gateway: it sits to the left of the address API Gateway appends, and only the hop to the
+  right of that address is trusted.
 - Non-IP strings in the header are dropped by Symfony, never returned.
 - An unknown region, or one with no published ranges, trusts only the immediate caller,
   which is the framework's `'*'` behaviour.
 - **Anyone can run their own API Gateway in the same region and choose what it forwards**,
-  since its egress is trusted too. Treat the resolved IP as good for logging, attribution and
+  since its egress is a gateway address too. Treat the resolved IP as good for logging, attribution and
   throttling. Enforce IP allow-lists at the gateway on the source IP it records, not on
   `$request->ip()`.
 
