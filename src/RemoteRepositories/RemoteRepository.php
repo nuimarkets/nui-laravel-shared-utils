@@ -9,6 +9,7 @@ use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Support\ProfilingTrait;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Support\TraceContext;
 use Swis\JsonApi\Client\Document;
 use Swis\JsonApi\Client\Error as JsonApiError;
 use Swis\JsonApi\Client\ErrorCollection;
@@ -868,35 +869,51 @@ abstract class RemoteRepository
     }
 
     /**
-     * Get the current X-Ray trace ID from the log context.
+     * Get the current X-Ray trace ID: the inbound request's, else the one the
+     * current job or command run carries.
      */
     protected function getCurrentTraceId(): ?string
     {
-        // Fallback to request headers if available
         if (request() && request()->headers) {
             $traceHeader = request()->headers->get('X-Amzn-Trace-Id');
             if ($traceHeader && preg_match('/Root=([^;]+)/', $traceHeader, $matches)) {
                 return $matches[1];
             }
 
-            return $traceHeader;
+            if ($traceHeader) {
+                return $traceHeader;
+            }
         }
 
-        return null;
+        return $this->getPropagatedTraceId();
     }
 
     /**
      * Get the full X-Ray trace header for propagation to downstream services.
      * This preserves the complete trace context including Parent and Sampled flags.
+     * With no inbound request it falls back to the bare id the current job or
+     * command run carries, the same shape the gateway forwards.
      */
     protected function getCurrentTraceHeader(): ?string
     {
         // Get full trace header to preserve X-Ray trace context
         if (request() && request()->headers) {
-            return request()->headers->get('X-Amzn-Trace-Id');
+            $traceHeader = request()->headers->get('X-Amzn-Trace-Id');
+            if ($traceHeader) {
+                return $traceHeader;
+            }
         }
 
-        return null;
+        return $this->getPropagatedTraceId();
+    }
+
+    /**
+     * The trace id a queued job or console command carries. Null unless the
+     * service registers TracingServiceProvider, which binds the context.
+     */
+    private function getPropagatedTraceId(): ?string
+    {
+        return app()->bound(TraceContext::class) ? app(TraceContext::class)->current() : null;
     }
 
     /**
