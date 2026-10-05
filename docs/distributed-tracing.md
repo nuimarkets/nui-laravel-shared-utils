@@ -8,6 +8,7 @@ This library provides comprehensive distributed tracing support for Laravel appl
 
 - [Features](#features)
 - [Quick Start](#quick-start)
+- [Queued Jobs and Console Commands](#queued-jobs-and-console-commands)
 - [Architecture](#architecture)
 - [Configuration](#configuration)
 - [Usage Examples](#usage-examples)
@@ -97,6 +98,54 @@ class ProductRepository extends RemoteRepository
     }
 }
 ```
+
+## Queued Jobs and Console Commands
+
+A queue worker or a console command has no inbound request, so on its own a
+job's logs carry no trace fields and its RemoteRepository calls send no trace
+headers. Register `TracingServiceProvider` to carry the trace id across the
+queue:
+
+```php
+// config/app.php
+'providers' => [
+    // Other providers...
+    NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider::class,
+],
+```
+
+Each job then carries the id of whatever dispatched it, and work with nothing
+upstream mints its own:
+
+| Unit of work | Trace id |
+|--------------|----------|
+| Job dispatched while handling a request | The request's `X-Amzn-Trace-Id` root |
+| Job dispatched by another job | The parent job's |
+| Job dispatched by a command run | The run's |
+| Job arriving without one (pushed by another producer, or queued before the provider was registered) | Freshly minted |
+| Console command run | Freshly minted, one for the whole run. A command started with `Artisan::call()` keeps its caller's |
+
+How it works:
+
+- Dispatching stamps the current id onto the job payload under `nui_trace_id`.
+- On `JobProcessing` the worker restores it into `TraceContext` for every
+  queued job, so a job never sees the previous job's id, including under a
+  worker that does not reset scoped instances between jobs, such as this
+  package's `WorkCommand`.
+- The id joins the log context as `request.amz_trace_id` and the legacy
+  `request.trace_id`, the same fields request logs carry. Both hold the bare
+  id. A request that received a full `Root=...;Parent=...` header logs that raw
+  header in `request.amz_trace_id`, so search by the root to find its jobs.
+- A request with no inbound header gets an id minted at its first dispatch,
+  which joins its log context from that point on.
+- With no inbound request, RemoteRepository sends it as `X-Amzn-Trace-Id` and
+  `X-Correlation-ID`. An inbound request's own header always wins.
+- A sync job runs inside its dispatcher and keeps its id, leaving a request's
+  raw `X-Amzn-Trace-Id` in the log context untouched.
+
+Minted ids use the X-Ray trace id format, `1-<8 hex epoch seconds>-<24 hex>`, so
+they travel the same header and land in the same downstream log field as an id
+the gateway issued. `X-Request-ID` is not propagated: each service mints its own.
 
 ## Architecture
 

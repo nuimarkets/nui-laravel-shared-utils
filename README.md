@@ -44,7 +44,7 @@ Complete request tracking with automatic performance metrics, X-Ray trace correl
 
 ### **Distributed Tracing**
 
-Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration. Automatic response headers (`X-Request-ID` and `X-Trace-ID`) for frontend correlation.
+Native AWS X-Ray integration with automatic trace propagation across microservices. Track requests through your entire service mesh with zero configuration. Automatic response headers (`X-Request-ID` and `X-Trace-ID`) for frontend correlation. Register `TracingServiceProvider` and queued jobs and console commands carry a trace id too: a job inherits the id of the request, job or command run that dispatched it (see the [guide](docs/distributed-tracing.md#queued-jobs-and-console-commands)).
 
 ### **Advanced Logging**
 
