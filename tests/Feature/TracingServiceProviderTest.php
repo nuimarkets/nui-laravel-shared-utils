@@ -74,6 +74,40 @@ class TracingServiceProviderTest extends TestCase
         $this->assertSame($first, $this->payloadTraceId());
     }
 
+    public function test_a_dispatch_with_no_inbound_trace_puts_the_minted_id_in_the_log_context()
+    {
+        TraceProbeJob::dispatch();
+
+        $minted = TraceProbeJob::$ranWith;
+        $this->assertMatchesRegularExpression(self::XRAY_ID, $minted);
+        $this->assertSame($minted, app(TraceContext::class)->current());
+        $this->assertLoggedTraceId($minted);
+    }
+
+    public function test_a_real_payload_carries_its_id_to_the_worker()
+    {
+        $this->setRequestTraceHeader(self::FULL_REQUEST_HEADER);
+        $payload = $this->createPayload();
+
+        // The worker side: a fresh unit of work with no request header.
+        $this->app->instance('request', Request::create('/'));
+        $this->resetLikeTheWorker();
+        $this->processJob($payload);
+
+        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
+        $this->assertLoggedTraceId(self::REQUEST_ROOT);
+    }
+
+    public function test_a_command_called_from_inside_a_job_keeps_the_job_id()
+    {
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
+
+        $this->startCommand('app:nested-call');
+
+        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
+        $this->assertLoggedTraceId(self::REQUEST_ROOT);
+    }
+
     public function test_a_worker_job_adopts_the_trace_id_in_its_payload()
     {
         $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
@@ -195,14 +229,21 @@ class TracingServiceProviderTest extends TestCase
     }
 
     /**
+     * The payload a job dispatched right now would be queued with.
+     */
+    private function createPayload(): array
+    {
+        $queue = $this->app['queue']->connection('sync');
+
+        return json_decode((new \ReflectionMethod($queue, 'createPayload'))->invoke($queue, new TraceProbeJob, 'default'), true);
+    }
+
+    /**
      * The trace id a job dispatched right now would carry in its payload.
      */
     private function payloadTraceId(): ?string
     {
-        $queue = $this->app['queue']->connection('sync');
-        $payload = json_decode((new \ReflectionMethod($queue, 'createPayload'))->invoke($queue, new TraceProbeJob, 'default'), true);
-
-        return $payload[TraceContext::PAYLOAD_KEY] ?? null;
+        return $this->createPayload()[TraceContext::PAYLOAD_KEY] ?? null;
     }
 
     private function processJob(array $payload): void

@@ -133,7 +133,11 @@ How it works:
   worker that does not reset scoped instances between jobs, such as this
   package's `WorkCommand`.
 - The id joins the log context as `request.amz_trace_id` and the legacy
-  `request.trace_id`, the same fields request logs carry.
+  `request.trace_id`, the same fields request logs carry. Both hold the bare
+  id. A request that received a full `Root=...;Parent=...` header logs that raw
+  header in `request.amz_trace_id`, so search by the root to find its jobs.
+- A request with no inbound header gets an id minted at its first dispatch,
+  which joins its log context from that point on.
 - With no inbound request, RemoteRepository sends it as `X-Amzn-Trace-Id` and
   `X-Correlation-ID`. An inbound request's own header always wins.
 - A sync job runs inside its dispatcher and keeps its id, leaving a request's

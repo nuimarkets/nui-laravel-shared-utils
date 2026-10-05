@@ -42,9 +42,21 @@ class TracingServiceProvider extends ServiceProvider
     {
         // The payload hooks are static and outlive this application instance,
         // so resolve the context when the hook runs rather than capturing it.
-        Queue::createPayloadUsing(static fn () => [
-            TraceContext::PAYLOAD_KEY => app(TraceContext::class)->ensure(),
-        ]);
+        Queue::createPayloadUsing(static function (): array {
+            $context = app(TraceContext::class);
+            $minted = $context->current() === null;
+            $traceId = $context->ensure();
+
+            // Nothing upstream carried an id (a request with no inbound
+            // header), so this unit of work's logs carry none. From here on
+            // they carry the one its jobs and outbound calls do, which also
+            // covers a sync job, since it runs inside this unit of work.
+            if ($minted) {
+                self::addToLogContext($traceId);
+            }
+
+            return [TraceContext::PAYLOAD_KEY => $traceId];
+        });
 
         $this->app['events']->listen(JobProcessing::class, static function (JobProcessing $event): void {
             $traceId = $event->job->payload()[TraceContext::PAYLOAD_KEY] ?? null;
