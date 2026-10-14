@@ -272,12 +272,12 @@ class TracingServiceProviderTest extends TestCase
 
     public function test_a_job_with_an_unusable_trace_id_mints_one_and_drops_its_sampled()
     {
-        foreach ([['not' => 'a string'], 'not-an-xray-root', self::REQUEST_ROOT.';Sampled=1'] as $unusable) {
+        foreach ([['not' => 'a string'], 'not-an-xray-root', self::REQUEST_ROOT.';Sampled=1', self::REQUEST_ROOT."\n"] as $unusable) {
             $this->processJob([TraceContext::PAYLOAD_KEY => $unusable, TraceContext::PAYLOAD_SAMPLED_KEY => '1']);
 
             $context = app(TraceContext::class);
             $this->assertMatchesRegularExpression(self::XRAY_ID, $context->current());
-            $this->assertNotSame(self::REQUEST_ROOT, $context->current());
+            $this->assertStringStartsNotWith(self::REQUEST_ROOT, $context->current());
             $this->assertNull($context->sampled());
         }
     }

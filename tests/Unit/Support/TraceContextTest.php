@@ -170,4 +170,16 @@ class TraceContextTest extends TestCase
         $this->assertNotSame('not-a-root', $context->current());
         $this->assertNull($context->sampled());
     }
+
+    public function test_a_trailing_newline_makes_a_root_or_parent_invalid()
+    {
+        $context = new TraceContext;
+
+        $context->start(self::ROOT, self::PARENT."\n", '1');
+        $this->assertSame('Root='.self::ROOT.';Sampled=1', $context->header());
+
+        $context->start(self::ROOT."\n", null, '1');
+        $this->assertStringStartsNotWith(self::ROOT, $context->current());
+        $this->assertNull($context->sampled());
+    }
 }

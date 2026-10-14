@@ -42,9 +42,10 @@ final class TraceContext
      */
     public const PAYLOAD_SAMPLED_KEY = 'nui_trace_sampled';
 
-    private const ROOT_PATTERN = '/^1-[0-9a-f]{8}-[0-9a-f]{24}$/';
+    // \z rather than $, which also matches before a trailing newline.
+    private const ROOT_PATTERN = '/^1-[0-9a-f]{8}-[0-9a-f]{24}\z/';
 
-    private const PARENT_PATTERN = '/^[0-9a-f]{16}$/';
+    private const PARENT_PATTERN = '/^[0-9a-f]{16}\z/';
 
     private ?string $root = null;
 
