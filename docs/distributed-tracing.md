@@ -478,7 +478,9 @@ class ProductRepository extends RemoteRepository
 
 ### Breaking Changes
 
-**None** - The implementation works with existing logging patterns without modifications.
+Adopting the package in place of a custom correlation implementation changes no
+existing logging patterns. Upgrading from 0.7.x has the breaking changes listed
+under [Upgrading to 0.8.0](#upgrading-to-080).
 
 ## Performance Considerations
 

@@ -316,27 +316,28 @@ This package follows a **trait-based architecture** allowing you to:
 - Extend base classes for customization
 - Integrate gradually into existing codebases
 
-### No Service Provider Required
+### Service Providers
 
-The package intentionally doesn't auto-register a service provider, giving you full control over which components to use.
+The package auto-registers one provider, `TracingServiceProvider`, which starts the trace of every request, queued job and command run; RemoteRepository's trace header depends on it. Every other provider is opt-in, giving you full control over which components to use.
 
 ### Picking a release line
 
 This package ships multiple release lines, selected via your `composer.json` constraint:
 
-| Constraint | Laravel | PHP    | PHPUnit | Status                                |
-|------------|---------|--------|---------|---------------------------------------|
-| `^0.7.x`   | 11.x / 12.x   | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
-| `^0.6.x`   | 10.15+ / 11.x | 8.3+ | 10.5+ | Maintenance pin for Laravel 10 consumers. No new features. |
-| `^0.5.x`   | 8.x / 9.x     | 8.0+ | 9.x   | Maintenance pin for legacy consumers. No new features. |
+| Constraint | Laravel | PHP | PHPUnit | Status |
+| --- | --- | --- | --- | --- |
+| `^0.8.x` | 11.x / 12.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
+| `^0.7.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.8.x`, which changes the outbound trace header (see [Upgrading to 0.8.0](docs/distributed-tracing.md#upgrading-to-080)). No new features. |
+| `^0.6.x` | 10.15+ / 11.x | 8.3+ | 10.5+ | Maintenance pin for Laravel 10 consumers. No new features. |
+| `^0.5.x` | 8.x / 9.x | 8.0+ | 9.x | Maintenance pin for legacy consumers. No new features. |
 
-Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades: `composer update` will not pull `0.7.x` over a `^0.6.x` pin. To move to the new line, change the constraint explicitly:
+Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades: `composer update` will not pull `0.8.x` over a `^0.7.x` pin. To move to the new line, change the constraint explicitly:
 
 ```bash
-composer require nuimarkets/laravel-shared-utils:^0.7
+composer require nuimarkets/laravel-shared-utils:^0.8
 ```
 
-If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` line requires `laravel/framework: ^11.0|^12.0` and declares `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
+If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` and `0.8.x` lines require `laravel/framework: ^11.0|^12.0` and declares `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
 
 ### Cross-Version Compatibility
 
@@ -370,7 +371,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
 #### Upgrading consumers to PHPUnit 10+ (Laravel 11)
 
-> **This is not optional under `^0.7.x`.** `DBSetupExtension` now declares `implements PHPUnit\Runner\Extension\Extension`. PHP resolves that interface at autoload, so any consumer code that does `new DBSetupExtension(...)` directly — for example a `tests/Utils/TestCase.php` that calls `->runTestingMigrations()` / `->runTestingSeeder(...)` outside the phpunit.xml extension lifecycle — will fatal on a PHPUnit 9 host the first time it loads the class:
+> **This is not optional under `^0.7.x` and later.** `DBSetupExtension` now declares `implements PHPUnit\Runner\Extension\Extension`. PHP resolves that interface at autoload, so any consumer code that does `new DBSetupExtension(...)` directly — for example a `tests/Utils/TestCase.php` that calls `->runTestingMigrations()` / `->runTestingSeeder(...)` outside the phpunit.xml extension lifecycle — will fatal on a PHPUnit 9 host the first time it loads the class:
 >
 > ```
 > Error: Interface "PHPUnit\Runner\Extension\Extension" not found
