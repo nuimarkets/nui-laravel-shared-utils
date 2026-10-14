@@ -172,10 +172,15 @@ class TracingServiceProviderTest extends TestCase
 
     public function test_a_request_with_a_bare_or_malformed_header_mints_a_root_for_its_jobs()
     {
+        // Each pass runs in the same application, so it must mint a root of
+        // its own rather than pass on the previous pass's.
+        $previous = null;
         foreach ([self::REQUEST_ROOT, 'MalformedTraceId', null] as $header) {
             $this->get('/trace/probe', $header === null ? [] : [TraceContext::HEADER => $header])->assertNoContent();
 
             $minted = $this->seen['root'];
+            $this->assertNotSame($previous, $minted);
+            $previous = $minted;
             $this->assertMatchesRegularExpression(self::XRAY_ID, $minted);
             $this->assertNotSame(self::REQUEST_ROOT, $minted);
             $this->assertNull($this->seen['parent']);
