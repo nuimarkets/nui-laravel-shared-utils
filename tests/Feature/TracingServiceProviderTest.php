@@ -150,6 +150,18 @@ class TracingServiceProviderTest extends TestCase
         $this->assertSame('1', $this->seen['sampled']);
     }
 
+    public function test_each_request_starts_its_own_trace_in_a_reused_application()
+    {
+        $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
+        $this->assertSame(self::REQUEST_ROOT, $this->seen['root']);
+
+        $this->get('/trace/probe', [TraceContext::HEADER => 'Root=1-5f84c7a1-0123456789abcdef01234567'])->assertNoContent();
+
+        $this->assertSame('1-5f84c7a1-0123456789abcdef01234567', $this->seen['root']);
+        $this->assertNull($this->seen['parent']);
+        $this->assertNull($this->seen['sampled']);
+    }
+
     public function test_a_job_dispatched_during_a_request_carries_its_root_and_sampled_but_no_parent()
     {
         $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
