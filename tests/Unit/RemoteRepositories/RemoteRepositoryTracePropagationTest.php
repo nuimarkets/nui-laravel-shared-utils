@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Contracts\Queue\Job;
+use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
 use Mockery;
 use NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider;
@@ -138,8 +139,30 @@ class RemoteRepositoryTracePropagationTest extends TestCase
         $this->assertArrayNotHasKey('X-Correlation-ID', $headers);
     }
 
+    public function test_header_forwarding_config_cannot_replace_or_duplicate_the_trace_header()
+    {
+        config([
+            'app.remote_repository.passthrough_headers' => [TraceContext::HEADER],
+            'app.remote_repository.contextual_headers' => ['x-amzn-trace-id' => null],
+        ]);
+
+        $this->get('/trace/call', [
+            TraceContext::HEADER => 'Self=1-67a92467-0123456789abcdef01234567;Root='.self::ROOT.';Parent='.self::PARENT.';Sampled=1',
+        ])->assertNoContent();
+
+        $traceHeaders = array_filter(array_keys($this->requestCallHeaders), fn ($name) => strcasecmp($name, TraceContext::HEADER) === 0);
+        $this->assertSame([TraceContext::HEADER], array_values($traceHeaders));
+        $this->assertSame('Root='.self::ROOT.';Parent='.self::PARENT.';Sampled=1', $this->requestCallHeaders[TraceContext::HEADER]);
+    }
+
     public function test_no_trace_header_when_no_trace_has_started()
     {
+        // Even with the inbound header present and configured for forwarding.
+        config(['app.remote_repository.passthrough_headers' => [TraceContext::HEADER]]);
+        $request = Request::create('/api/test', 'GET');
+        $request->headers->set(TraceContext::HEADER, 'Root='.self::ROOT);
+        $this->app->instance('request', $request);
+
         $headers = $this->createTestRepositoryWithTokenTrigger()->triggerRequestHeaders();
 
         $this->assertArrayNotHasKey(TraceContext::HEADER, $headers);

@@ -133,9 +133,14 @@ abstract class RemoteRepository
             $headers[TraceContext::HEADER] = $traceHeader;
         }
 
-        // Passthrough headers - forward if present in incoming request
+        // Passthrough headers - forward if present in incoming request. The
+        // trace header is never one: TraceContext is its only writer, above.
         $passthroughHeaders = config('app.remote_repository.passthrough_headers') ?? [];
         foreach ($passthroughHeaders as $header) {
+            if (self::isTraceHeader($header)) {
+                continue;
+            }
+
             $value = request()?->headers->get($header);
             if ($value !== null) {
                 $headers[$header] = $value;
@@ -145,6 +150,10 @@ abstract class RemoteRepository
         // Contextual headers - passthrough OR resolve via resolver class
         $contextualHeaders = config('app.remote_repository.contextual_headers') ?? [];
         foreach ($contextualHeaders as $header => $resolverClass) {
+            if (self::isTraceHeader($header)) {
+                continue;
+            }
+
             // First try passthrough
             $value = request()?->headers->get($header);
 
@@ -162,6 +171,15 @@ abstract class RemoteRepository
         }
 
         return $headers;
+    }
+
+    /**
+     * Whether a configured header name is the trace header, in any case, which
+     * header forwarding must not overwrite or duplicate.
+     */
+    private static function isTraceHeader(string $header): bool
+    {
+        return strcasecmp($header, TraceContext::HEADER) === 0;
     }
 
     /**

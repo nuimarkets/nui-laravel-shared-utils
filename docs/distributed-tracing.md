@@ -131,7 +131,7 @@ dispatched, and a job's or command's log fields.
 | Request with no valid Root (local runs, tests) | A minted root | `Root=r` |
 | Sync job (runs inside its dispatcher) | Its dispatcher's, unchanged | Its dispatcher's |
 | Queued job dispatched by a request or another job | Root and sampling decision from its payload | `Root=r;Sampled=s` |
-| Queued job dispatched by a command run | Root from its payload | `Root=r` |
+| Queued job dispatched by a top-level command run | Root from its payload | `Root=r` |
 | Job arriving with no usable root (pushed by another producer, or queued before the provider was registered) | A minted root | `Root=r` |
 | Console command run | A minted root, one for the whole run. A command started with `Artisan::call()` keeps its caller's | `Root=r` |
 
@@ -170,9 +170,9 @@ How it works:
 - **Sync jobs** run inside their dispatcher and keep its trace, Parent
   included, leaving a request's raw `X-Amzn-Trace-Id` in the log context
   untouched.
-- **No correlation header.** RemoteRepository sends no `X-Correlation-ID`: an
-  API Gateway HTTP integration forwards only the headers it maps, so the root in
-  `X-Amzn-Trace-Id` is what reaches the next service.
+- **No correlation header.** RemoteRepository sends no `X-Correlation-ID`: a
+  non-proxy API Gateway HTTP integration forwards only the headers it maps, so
+  the root in `X-Amzn-Trace-Id` is what reliably reaches the next service.
 
 Minted roots use the X-Ray trace id format, `1-<8 hex epoch seconds>-<24 hex>`,
 so they travel the same header and land in the same downstream log field as a
@@ -411,10 +411,13 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
     list the provider itself.
 - **The outbound `X-Amzn-Trace-Id` is rebuilt, not forwarded.** A request sends
   `Root`, `Parent` and `Sampled` from its inbound header and drops `Self`,
-  `Lineage` and any other field. A job or command sends `Root=<id>` instead of
-  the bare id, so its calls stay on the trace that started it.
+  `Lineage` and any other field. An inbound Root that is not a valid X-Ray trace
+  id is not continued: the request mints a root instead. A job or command sends
+  `Root=<id>` instead of the bare id, so its calls stay on the trace that
+  started it. `passthrough_headers` and `contextual_headers` entries naming
+  `X-Amzn-Trace-Id` are ignored.
 - **`X-Correlation-ID` is no longer sent.** Read the Root of `X-Amzn-Trace-Id`
-  instead.
+  instead, or forward the inbound one with `passthrough_headers`.
 - **Removed**: `RemoteRepository::getCurrentTraceId()` and
   `getCurrentTraceHeader()` (protected), and `TraceContext::ensure()` and
   `set()`. `TraceContext::current()` no longer falls back to the request's

@@ -23,9 +23,9 @@ against a deployed API Gateway with X-Ray tracing on:
   is continued and gets the gateway's own sampling decision.
 - **Forwarding a request's inbound header nests each downstream hop under its
   caller in X-Ray**, through its Parent.
-- **`X-Correlation-ID` never reached the next service.** An API Gateway HTTP
-  integration forwards only the headers it maps, and none mapped it. Nothing
-  read it.
+- **`X-Correlation-ID` rarely reached the next service, and nothing read it.**
+  A non-proxy API Gateway HTTP integration forwards only the headers it maps,
+  and none mapped it; only the few proxy integrations passed it through.
 
 ## Decision
 
@@ -34,6 +34,8 @@ against a deployed API Gateway with X-Ray tracing on:
   `StartTraceContext`, prepended to the global middleware stack, for a request;
   a `JobProcessing` listener for a queued job; a `CommandStarting` listener for
   a command run with no trace yet. Nothing after the entry reads the request.
+- **One writer.** Header forwarding configuration cannot replace or duplicate
+  the trace header.
 - **One shape.** Every outbound call sends
   `Root=<root>[;Parent=<parent>][;Sampled=<0|1>]`, and only those fields. A Root
   must be `1-<8 hex>-<24 hex>`, a Parent 16 hex, a Sampled `0` or `1`. An

@@ -315,6 +315,19 @@ class TracingServiceProviderTest extends TestCase
         $this->assertLoggedTraceId($context->current());
     }
 
+    public function test_each_job_takes_its_own_sampling_decision_even_on_the_same_root()
+    {
+        // No worker reset between them, as under this package's WorkCommand.
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => '1']);
+        $this->assertSame('Root='.self::REQUEST_ROOT.';Sampled=1', app(TraceContext::class)->header());
+
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => '0']);
+        $this->assertSame('Root='.self::REQUEST_ROOT.';Sampled=0', app(TraceContext::class)->header());
+
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
+        $this->assertSame('Root='.self::REQUEST_ROOT, app(TraceContext::class)->header());
+    }
+
     public function test_a_job_logs_its_id_when_the_worker_clears_only_the_log_context()
     {
         // The package's WorkCommand builds its Worker with no resetScope: it
