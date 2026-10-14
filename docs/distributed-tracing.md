@@ -46,11 +46,8 @@ that turns package discovery off lists it where it registers its own providers
 instead:
 
 ```php
-// bootstrap/providers.php, or the 'providers' array in config/app.php
-'providers' => [
-    // Other providers...
-    NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider::class,
-],
+// bootstrap/providers.php's returned list, or the 'providers' array in config/app.php
+NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider::class,
 ```
 
 Without it, RemoteRepository sends no trace header at all.
