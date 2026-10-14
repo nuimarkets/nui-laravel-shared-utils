@@ -3,9 +3,10 @@
 **Status**: Proposed; partly superseded by ADR-002
 **Date**: 2026-10-05
 
-ADR-002 supersedes the RemoteRepository fallback and the opt-in registration
-below, and corrects the reason given for rejecting Laravel `Context`. The
-payload carrier, the per-job restore and the command-run mint stand.
+ADR-002 supersedes the RemoteRepository fallback, the mint at dispatch and the
+opt-in registration below, along with two of the consequences, and corrects the
+reason given for rejecting Laravel `Context`. The payload carrier, the per-job
+restore and the command-run mint stand.
 
 ## Context
 
@@ -35,6 +36,8 @@ The decision rests on these premises:
 
 - A queue payload hook stamps the current unit of work's id onto every job
   under `nui_trace_id`, minting one when the unit of work has none.
+  *Superseded by ADR-002: the hook stamps only a trace that has started, and a
+  queued job dispatched with none mints its own root when it starts.*
 - A `JobProcessing` listener restores that id into a scoped `TraceContext`, or
   mints a fresh one when the payload has none, and adds it to the log context.
 - A `CommandStarting` listener gives each console command run one id for the
@@ -74,9 +77,12 @@ provider is auto-discovered.*
   since the payload is reused.
 - Every job payload carries `nui_trace_id`. A producer outside Laravel can set
   it to join an existing trace; one that does not set it gets a fresh id per
-  message.
+  message. *Superseded by ADR-002: only a job dispatched under a started trace
+  carries it.*
 - Minted ids are correlation ids in X-Ray shape, not X-Ray traces: nothing
-  records segments for them.
+  records segments for them. *No longer true under ADR-002: a minted root is
+  sent as `Root=`, which API Gateway continues under its own sampling decision,
+  so its hops can be recorded.*
 - A service that does not register the provider behaves exactly as before.
   *No longer true under ADR-002: without the provider RemoteRepository sends no
   trace header.*

@@ -5,8 +5,8 @@
 This library provides distributed tracing support for Laravel applications:
 one AWS X-Ray trace id joins a request, the queued jobs and console commands it
 leads to, and every downstream service call any of them makes. The trace is
-decided once, where each unit of work starts, and every outbound call sends it
-as an X-Ray `X-Amzn-Trace-Id` header.
+decided once, where each unit of work starts, and every RemoteRepository call
+sends it as an X-Ray `X-Amzn-Trace-Id` header.
 
 ## Table of Contents
 
@@ -42,9 +42,11 @@ as an X-Ray `X-Amzn-Trace-Id` header.
 Nothing to do: the package auto-discovers `TracingServiceProvider`, which starts
 the trace of every request, queued job and console command run (see
 [Queued Jobs and Console Commands](#queued-jobs-and-console-commands)). A service
-that turns package discovery off lists it in `config/app.php` instead:
+that turns package discovery off lists it where it registers its own providers
+instead:
 
 ```php
+// bootstrap/providers.php, or the 'providers' array in config/app.php
 'providers' => [
     // Other providers...
     NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider::class,
@@ -153,10 +155,12 @@ How it works:
   other than `0` or `1`, is dropped.
 - **Parent on the request path only.** A request forwards the Parent it
   received, which keeps each downstream hop nested under its caller in X-Ray. A
-  job runs after its dispatcher has finished, so it sends no Parent.
+  queued job is not a child of its dispatcher's call: it runs on its own,
+  usually after that call has returned, so it sends no Parent.
 - **Sampling travels with jobs.** A job carries its dispatcher's root under
-  `nui_trace_id` and its sampling decision under `nui_trace_sampled` (`"1"` or
-  `"0"`, absent when there was none). API Gateway records a hop that arrives
+  `nui_trace_id` and its sampling decision under `nui_trace_sampled` (the
+  string `"1"` or `"0"`, absent when there was none; any other value is
+  ignored). API Gateway records a hop that arrives
   with `Sampled=1` in the caller's trace, so a sampled request's jobs show up in
   its X-Ray trace.
 - **Log fields.** A job's or command's root joins the log context as
@@ -165,8 +169,10 @@ How it works:
   `RequestLoggingMiddleware`'s, which logs the raw inbound header in
   `request.amz_trace_id`, so search by the root to find its jobs.
 - **Nothing started, nothing sent.** Code running outside the three entries,
-  such as a unit test, has no trace: RemoteRepository sends no trace header, and
-  a job it dispatches mints its own root when it starts.
+  such as a unit test, or a feature test that calls `withoutMiddleware()` (which
+  skips the request entry too), has no trace: RemoteRepository sends no trace
+  header, a queued job it dispatches mints its own root when it starts, and a
+  sync job it dispatches runs with none.
 - **Sync jobs** run inside their dispatcher and keep its trace, Parent
   included, leaving a request's raw `X-Amzn-Trace-Id` in the log context
   untouched.
@@ -177,8 +183,9 @@ How it works:
 Minted roots use the X-Ray trace id format, `1-<8 hex epoch seconds>-<24 hex>`,
 so they travel the same header and land in the same downstream log field as a
 root the gateway issued. A producer outside Laravel can set `nui_trace_id` (and
-`nui_trace_sampled`) in a job's payload to continue an existing trace. A job or
-command sends no `X-Request-ID`: each service mints its own.
+`nui_trace_sampled`) in a job's payload to continue an existing trace, as
+strings, with the root in lowercase hex. A queued job or a top-level command run
+sends no `X-Request-ID`: each service mints its own.
 
 ## Architecture
 
@@ -207,8 +214,9 @@ Every RemoteRepository call builds its headers from the current unit of work:
 1. **X-Amzn-Trace-Id**: the trace `TraceContext` holds, always in X-Ray's
    `Root=` form (see the table under
    [Queued Jobs and Console Commands](#queued-jobs-and-console-commands))
-2. **X-Request-ID**: the inbound request's, during a request that has one;
-   never sent from a job or command
+2. **X-Request-ID**: the inbound request's, during a request that has one,
+   including a sync job or `Artisan::call()` it runs; never sent from a queued
+   job or a top-level command run
 
 ## Configuration
 
@@ -384,11 +392,14 @@ Enable request logging and read the emitted entry:
 `POST` logs the outbound header *names* under `Request Debug`, and `GET` logs the
 URL under `API GET`. Values are deliberately omitted: the set carries the machine
 token and the caller's actor context. To see values, capture them at the client,
-which is also how to assert on them in a test:
+which is also how to assert on them in a test. A test that calls a repository
+directly runs outside the three entries, so it starts the trace itself first:
 
 ```php
+app(TraceContext::class)->startFromHeader('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Sampled=1');
+
 $client->method('get')->willReturnCallback(function ($url, $headers) {
-    $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
+    $this->assertSame('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Sampled=1', $headers['X-Amzn-Trace-Id'] ?? null);
 
     return new Document;
 });
@@ -403,10 +414,13 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
   Without the provider, RemoteRepository sends no trace header at all, since it
   no longer reads the inbound request itself. Two ways to end up without it:
   - Laravel reads discovered providers from `bootstrap/cache/packages.php` and
-    rebuilds that file only when it is missing. A project whose
-    `composer.json` does not run `php artisan package:discover` after
-    `composer install` keeps a stale copy, so run it once after upgrading (or
-    delete the file). A fresh image with no cached copy builds it on boot.
+    rebuilds that file only when it is missing. The skeleton's
+    `post-autoload-dump` scripts (`ComposerScripts::postAutoloadDump`, which
+    deletes it, and `php artisan package:discover`) refresh it on every
+    `composer install`. A project without them, or an install run with
+    `--no-scripts`, keeps a copy built before the upgrade, so run
+    `php artisan package:discover` once (or delete the file). A fresh image
+    with no cached copy builds it on boot.
   - A project that turns discovery off for this package (`dont-discover`) must
     list the provider itself.
 - **The outbound `X-Amzn-Trace-Id` is rebuilt, not forwarded.** A request sends
@@ -417,15 +431,22 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
   started it. `passthrough_headers` and `contextual_headers` entries naming
   `X-Amzn-Trace-Id` are ignored.
 - **`X-Correlation-ID` is no longer sent.** Read the Root of `X-Amzn-Trace-Id`
-  instead, or forward the inbound one with `passthrough_headers`.
+  instead.
 - **Removed**: `RemoteRepository::getCurrentTraceId()` and
   `getCurrentTraceHeader()` (protected), and `TraceContext::ensure()` and
   `set()`. `TraceContext::current()` no longer falls back to the request's
   header: the request entry has already started the trace. Use `start()`,
   `startFromHeader()`, `current()` and `header()`.
 - **A request with no valid inbound Root** mints a root for its jobs and calls,
-  as before, but no longer writes it into the request's own log context at its
-  first dispatch.
+  and its own log fields keep whatever header arrived (none, or the invalid
+  value), so they do not join its jobs. Under 0.7.x a request with no header
+  wrote the root it minted into its log context at its first dispatch, and a
+  bare or malformed inbound value travelled to its jobs and calls as it was.
+- **Tests that drove the trace header through the request.** A test that put an
+  inbound `X-Amzn-Trace-Id` on the bound request to get an outbound one now gets
+  none. Start the trace with `TraceContext::startFromHeader()` or `start()`, or
+  send the request through the kernel; `withoutMiddleware()` skips the request
+  entry too.
 - **Payloads are compatible both ways.** `nui_trace_id` keeps its shape and
   `nui_trace_sampled` is optional: a job queued by an earlier version restores
   its root with no sampling decision, and an earlier worker ignores the new

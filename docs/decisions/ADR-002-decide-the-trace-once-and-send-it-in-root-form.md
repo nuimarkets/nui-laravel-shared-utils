@@ -2,9 +2,10 @@
 
 **Status**: Proposed
 **Date**: 2026-10-14
-**Supersedes**: ADR-001's RemoteRepository fallback, its opt-in registration,
-and its "behaves exactly as before" consequence; corrects its rationale for
-rejecting Laravel `Context`
+**Supersedes**: ADR-001's RemoteRepository fallback, its mint at dispatch, its
+opt-in registration, and its "every payload carries `nui_trace_id`", "nothing
+records segments for them" and "behaves exactly as before" consequences;
+corrects its rationale for rejecting Laravel `Context`
 
 ## Context
 
@@ -33,12 +34,14 @@ against a deployed API Gateway with X-Ray tracing on:
   parent and sampling decision. It is started once, at the entry:
   `StartTraceContext`, prepended to the global middleware stack, for a request;
   a `JobProcessing` listener for a queued job; a `CommandStarting` listener for
-  a command run with no trace yet. Nothing after the entry reads the request.
+  a command run with no trace yet. Nothing after the entry reads the request to
+  decide the trace it sends or stamps.
 - **One writer.** Header forwarding configuration cannot replace or duplicate
   the trace header.
-- **One shape.** Every outbound call sends
+- **One shape.** Every RemoteRepository call sends
   `Root=<root>[;Parent=<parent>][;Sampled=<0|1>]`, and only those fields. A Root
-  must be `1-<8 hex>-<24 hex>`, a Parent 16 hex, a Sampled `0` or `1`. An
+  must be `1-<8 hex>-<24 hex>` and a Parent 16 hex, in lowercase with nothing
+  after them, and a Sampled `0` or `1`. An
   invalid Root starts a new trace with a minted root; an invalid Parent or
   Sampled is dropped.
 - **Parent on the request path only.** A request forwards the Parent it
@@ -46,7 +49,8 @@ against a deployed API Gateway with X-Ray tracing on:
 - **Sampling travels with jobs**, under `nui_trace_sampled` next to
   `nui_trace_id`.
 - **No trace, no header.** Outside the three entries, such as a unit test,
-  nothing is sent, and a job dispatched there mints its own root when it starts.
+  nothing is sent. A queued job dispatched there mints its own root when it
+  starts, and a sync one runs with none.
 - **`X-Correlation-ID` is removed.**
 - **The provider is auto-discovered** through the package's `composer.json`.
 
@@ -57,7 +61,8 @@ against a deployed API Gateway with X-Ray tracing on:
   it keeps a second header path and forwards fields (`Lineage`, unknown ones)
   that are not this service's to propagate.
 - **Send Parent from jobs**: a job's call is not a child of its request's
-  segment, which had ended by the time the job ran. With no Parent the gateway
+  segment: the job runs on its own, usually after that segment has ended. With
+  no Parent the gateway
   records the job's hop as its own segment inside the same trace.
 - **Root alone from jobs**: every job hop would get the gateway's own sampling
   decision, so a sampled request's jobs would be recorded only sometimes, and an
@@ -78,7 +83,7 @@ to run after Context hydrates a job, which ties correctness to the order two
 providers register listeners in". That premise does not hold. Laravel's queue
 listener hydrates `Context` on every `JobProcessing`, passing null when the
 payload carried none, and `Illuminate\Log\Context\Repository::hydrate()`
-dispatches `Hydrated` either way, so a `Context::hydrated()` callback runs for
+dispatches `ContextHydrated` either way, so a `Context::hydrated()` callback runs for
 every job and can mint there with no listener ordering. ADR-001's other reason
 stands: hydration replaces the whole repository for each job.
 
@@ -102,6 +107,6 @@ log pipeline indexes.
 - Payloads are compatible both ways: `nui_trace_id` keeps its shape and
   `nui_trace_sampled` is optional.
 - A request with no valid inbound Root mints a root for its jobs and calls, but
-  its own log lines carry none, since its log fields stay with the request
-  logging middleware.
+  its own log lines do not carry it: its log fields stay with the request
+  logging middleware, which logs whatever header arrived, if any.
 - `X-Request-ID` stays request-only.
