@@ -17,7 +17,7 @@ The provider is a no-op unless `config('iam-rds.auth_mode')` equals `'iam'`. Wit
 
 1. Bump this package in `composer.json` and `composer update nuimarkets/laravel-shared-utils`.
 
-2. Register the service provider (this package ships no auto-discovered provider by design):
+2. Register the service provider (the package auto-discovers only `TracingServiceProvider`):
 
    ```php
    // config/app.php (Laravel 10) or bootstrap/providers.php (Laravel 11+)

@@ -337,7 +337,7 @@ Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrade
 composer require nuimarkets/laravel-shared-utils:^0.8
 ```
 
-If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` and `0.8.x` lines require `laravel/framework: ^11.0|^12.0` and declares `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
+If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` and `0.8.x` lines require `laravel/framework: ^11.0|^12.0` and declare `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
 
 ### Cross-Version Compatibility
 
