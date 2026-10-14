@@ -209,6 +209,14 @@ class TracingServiceProviderTest extends TestCase
         $this->assertArrayNotHasKey(TraceContext::PAYLOAD_SAMPLED_KEY, $payload);
     }
 
+    public function test_a_sync_job_dispatched_with_no_trace_leaves_none_behind()
+    {
+        TraceProbeJob::dispatch();
+
+        $this->assertNull(TraceProbeJob::$ranWith);
+        $this->assertNull(app(TraceContext::class)->current());
+    }
+
     public function test_a_job_queued_with_no_trace_mints_its_own_when_it_starts()
     {
         $payload = $this->createPayload();

@@ -88,14 +88,15 @@ class TracingServiceProvider extends ServiceProvider
             $context = app(TraceContext::class);
 
             // A sync job runs inside its dispatcher, whose trace this already
-            // is. Restarting it would drop a request's Parent for the rest of
-            // the request, and re-adding the log fields would replace its raw
-            // X-Amzn-Trace-Id with the bare root. Only a sync job may skip: a
-            // worker that clears the log context between jobs without
-            // forgetting scoped instances (this package's WorkCommand) still
-            // holds the previous job's trace here, and a job sharing that root
-            // would otherwise log none.
-            if ($event->job instanceof SyncJob && is_string($root) && $context->current() === $root) {
+            // is, or no trace when its dispatcher has none. Restarting it would
+            // drop a request's Parent for the rest of the request, re-adding
+            // the log fields would replace its raw X-Amzn-Trace-Id with the
+            // bare root, and minting would hand the dispatcher a trace it never
+            // started. Only a sync job may skip: a worker that clears the log
+            // context between jobs without forgetting scoped instances (this
+            // package's WorkCommand) still holds the previous job's trace here,
+            // and a job sharing that root would otherwise log none.
+            if ($event->job instanceof SyncJob && $context->current() === $root) {
                 return;
             }
 
