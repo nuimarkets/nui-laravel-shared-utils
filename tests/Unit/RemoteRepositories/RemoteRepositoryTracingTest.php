@@ -3,6 +3,7 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use Illuminate\Http\Request;
+use NuiMarkets\LaravelSharedUtils\Support\TraceContext;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 
@@ -16,13 +17,14 @@ class RemoteRepositoryTracingTest extends TestCase
         $this->setUpRemoteRepositoryConfig();
     }
 
-    public function test_does_not_include_request_id_header_when_not_available()
+    public function test_does_not_include_request_id_or_trace_headers_when_not_available()
     {
         $repository = $this->createTestRepositoryWithTokenTrigger();
 
         $headers = $repository->triggerRequestHeaders();
 
         $this->assertArrayNotHasKey('X-Request-ID', $headers);
+        $this->assertArrayNotHasKey(TraceContext::HEADER, $headers);
         $this->assertArrayNotHasKey('X-Correlation-ID', $headers);
     }
 
@@ -40,43 +42,45 @@ class RemoteRepositoryTracingTest extends TestCase
         $this->assertEquals('fallback-request-456', $headers['X-Request-ID']);
     }
 
-    public function test_propagates_full_xray_trace_header_for_distributed_tracing()
+    public function test_propagates_the_xray_trace_header_the_context_was_started_from()
     {
-        $fullTraceHeader = 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1';
-        $request = Request::create('/api/test', 'GET');
-        $request->headers->set('X-Amzn-Trace-Id', $fullTraceHeader);
-        $this->app->instance('request', $request);
+        $this->startTraceContextFrom('Self=1-67a92467-0123456789abcdef01234567;Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1');
 
-        $repository = $this->createTestRepositoryWithTokenTrigger();
+        $headers = $this->createTestRepositoryWithTokenTrigger()->triggerRequestHeaders();
 
-        $headers = $repository->triggerRequestHeaders();
-
-        // Should propagate full X-Ray header for AWS trace continuity
-        $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
-        $this->assertEquals($fullTraceHeader, $headers['X-Amzn-Trace-Id']);
-
-        // Should also set correlation ID with extracted trace ID
-        $this->assertArrayHasKey('X-Correlation-ID', $headers);
-        $this->assertEquals('1-67a92466-4b6aa15a05ffcd4c510de968', $headers['X-Correlation-ID']);
+        // Root, Parent and Sampled continue the caller's trace; the load
+        // balancer's Self is not forwarded.
+        $this->assertSame('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1', $headers[TraceContext::HEADER] ?? null);
+        $this->assertArrayNotHasKey('X-Correlation-ID', $headers);
     }
 
-    public function test_handles_malformed_trace_id_in_request_headers()
+    public function test_a_malformed_inbound_trace_header_is_replaced_by_a_minted_root()
     {
-        $malformedHeader = 'MalformedTraceId';
+        $this->startTraceContextFrom('MalformedTraceId');
+
+        $headers = $this->createTestRepositoryWithTokenTrigger()->triggerRequestHeaders();
+
+        $this->assertMatchesRegularExpression('/^Root=1-[0-9a-f]{8}-[0-9a-f]{24}$/', $headers[TraceContext::HEADER] ?? '');
+        $this->assertArrayNotHasKey('X-Correlation-ID', $headers);
+    }
+
+    public function test_the_inbound_header_is_not_forwarded_without_the_trace_context()
+    {
+        // TracingServiceProvider binds the context; the package auto-discovers
+        // it, so this is a service that opted out of discovery.
         $request = Request::create('/api/test', 'GET');
-        $request->headers->set('X-Amzn-Trace-Id', $malformedHeader);
+        $request->headers->set(TraceContext::HEADER, 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1');
         $this->app->instance('request', $request);
 
-        $repository = $this->createTestRepositoryWithTokenTrigger();
+        $headers = $this->createTestRepositoryWithTokenTrigger()->triggerRequestHeaders();
 
-        $headers = $repository->triggerRequestHeaders();
+        $this->assertArrayNotHasKey(TraceContext::HEADER, $headers);
+    }
 
-        // Should propagate malformed header as-is for X-Ray
-        $this->assertArrayHasKey('X-Amzn-Trace-Id', $headers);
-        $this->assertEquals($malformedHeader, $headers['X-Amzn-Trace-Id']);
-
-        // Should also set correlation ID (malformed headers become fallback values)
-        $this->assertArrayHasKey('X-Correlation-ID', $headers);
-        $this->assertEquals($malformedHeader, $headers['X-Correlation-ID']);
+    private function startTraceContextFrom(string $header): void
+    {
+        $context = new TraceContext;
+        $context->startFromHeader($header);
+        $this->app->instance(TraceContext::class, $context);
     }
 }

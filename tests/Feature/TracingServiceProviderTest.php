@@ -3,16 +3,18 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Contracts\Queue\Job;
-use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Log;
 use Mockery;
 use Monolog\Handler\TestHandler;
+use NuiMarkets\LaravelSharedUtils\Http\Middleware\StartTraceContext;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
 use NuiMarkets\LaravelSharedUtils\Providers\TracingServiceProvider;
 use NuiMarkets\LaravelSharedUtils\Support\TraceContext;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
+use NuiMarkets\LaravelSharedUtils\Tests\Utils\TraceContextReadingMiddleware;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\TraceProbeJob;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
@@ -23,7 +25,18 @@ class TracingServiceProviderTest extends TestCase
 
     private const REQUEST_ROOT = '1-67a92466-4b6aa15a05ffcd4c510de968';
 
-    private const FULL_REQUEST_HEADER = 'Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1';
+    private const REQUEST_PARENT = '53995c3f42cd8ad8';
+
+    /**
+     * What a load balancer hands the service: its own Self ahead of the
+     * gateway's Root, Parent and Sampled.
+     */
+    private const INBOUND_HEADER = 'Self=1-67a92467-0123456789abcdef01234567;Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1';
+
+    /**
+     * What the route under test saw, recorded inside the request.
+     */
+    private array $seen = [];
 
     protected function getPackageProviders($app)
     {
@@ -40,6 +53,57 @@ class TracingServiceProviderTest extends TestCase
             'driver' => 'monolog',
             'handler' => TestHandler::class,
         ]);
+
+        // A service lists its own logging middleware in its kernel. Resolving
+        // the kernel here, before any provider boots, is also the order a
+        // served request runs in (public/index.php builds the kernel and its
+        // handle() boots the providers), so a provider that only hooks the
+        // kernel's later resolution never reaches it.
+        $app->make(HttpKernel::class)->pushMiddleware(TraceContextReadingMiddleware::class);
+    }
+
+    protected function defineRoutes($router)
+    {
+        $router->get('/trace/probe', function () {
+            $context = app(TraceContext::class);
+            $this->seen = [
+                'root' => $context->current(),
+                'parent' => $context->parent(),
+                'sampled' => $context->sampled(),
+                'payload' => $this->createPayload(),
+                'second_payload' => $this->createPayload(),
+                'log' => $this->loggedContext(),
+            ];
+
+            return response()->noContent();
+        });
+
+        $router->get('/trace/sync-job', function () {
+            // As RequestLoggingMiddleware sets it: the raw inbound header.
+            Log::withContext([LogFields::TRACE_ID_HEADER => self::INBOUND_HEADER]);
+
+            TraceProbeJob::dispatch();
+
+            $this->seen = [
+                'header' => app(TraceContext::class)->header(),
+                'log' => $this->loggedContext(),
+            ];
+
+            return response()->noContent();
+        });
+
+        $router->get('/trace/command', function () {
+            Log::withContext([LogFields::TRACE_ID_HEADER => self::INBOUND_HEADER]);
+
+            $this->startCommand('cache:clear');
+
+            $this->seen = [
+                'header' => app(TraceContext::class)->header(),
+                'log' => $this->loggedContext(),
+            ];
+
+            return response()->noContent();
+        });
     }
 
     protected function setUp(): void
@@ -47,6 +111,15 @@ class TracingServiceProviderTest extends TestCase
         parent::setUp();
 
         TraceProbeJob::$ranWith = null;
+        TraceProbeJob::$ranWithHeader = null;
+        TraceContextReadingMiddleware::$sawRoot = null;
+    }
+
+    public function test_the_package_auto_discovers_the_provider()
+    {
+        $composer = json_decode(file_get_contents(__DIR__.'/../../composer.json'), true);
+
+        $this->assertContains(TracingServiceProvider::class, $composer['extra']['laravel']['providers'] ?? []);
     }
 
     public function test_the_context_is_scoped_to_one_unit_of_work()
@@ -59,68 +132,133 @@ class TracingServiceProviderTest extends TestCase
         $this->assertNotSame($first, app(TraceContext::class));
     }
 
-    public function test_a_job_dispatched_during_a_request_carries_the_request_trace_id()
+    public function test_the_request_entry_runs_ahead_of_the_service_middleware()
     {
-        $this->setRequestTraceHeader(self::FULL_REQUEST_HEADER);
+        $this->assertSame(StartTraceContext::class, $this->app->make(HttpKernel::class)->getGlobalMiddleware()[0]);
 
-        $this->assertSame(self::REQUEST_ROOT, $this->payloadTraceId());
+        $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
+
+        $this->assertSame(self::REQUEST_ROOT, TraceContextReadingMiddleware::$sawRoot);
     }
 
-    public function test_jobs_dispatched_with_no_inbound_trace_share_one_minted_id()
+    public function test_a_request_continues_root_parent_and_sampled_from_its_inbound_header()
     {
-        $first = $this->payloadTraceId();
+        $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
 
-        $this->assertMatchesRegularExpression(self::XRAY_ID, $first);
-        $this->assertSame($first, $this->payloadTraceId());
+        $this->assertSame(self::REQUEST_ROOT, $this->seen['root']);
+        $this->assertSame(self::REQUEST_PARENT, $this->seen['parent']);
+        $this->assertSame('1', $this->seen['sampled']);
     }
 
-    public function test_a_dispatch_with_no_inbound_trace_puts_the_minted_id_in_the_log_context()
+    public function test_a_job_dispatched_during_a_request_carries_its_root_and_sampled_but_no_parent()
     {
-        TraceProbeJob::dispatch();
+        $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
 
-        $minted = TraceProbeJob::$ranWith;
-        $this->assertMatchesRegularExpression(self::XRAY_ID, $minted);
-        $this->assertSame($minted, app(TraceContext::class)->current());
-        $this->assertLoggedTraceId($minted);
+        $this->assertSame(self::REQUEST_ROOT, $this->seen['payload'][TraceContext::PAYLOAD_KEY] ?? null);
+        $this->assertSame('1', $this->seen['payload'][TraceContext::PAYLOAD_SAMPLED_KEY] ?? null);
     }
 
-    public function test_a_real_payload_carries_its_id_to_the_worker()
+    public function test_a_request_with_a_bare_or_malformed_header_mints_a_root_for_its_jobs()
     {
-        $this->setRequestTraceHeader(self::FULL_REQUEST_HEADER);
+        foreach ([self::REQUEST_ROOT, 'MalformedTraceId', null] as $header) {
+            $this->get('/trace/probe', $header === null ? [] : [TraceContext::HEADER => $header])->assertNoContent();
+
+            $minted = $this->seen['root'];
+            $this->assertMatchesRegularExpression(self::XRAY_ID, $minted);
+            $this->assertNotSame(self::REQUEST_ROOT, $minted);
+            $this->assertNull($this->seen['parent']);
+            $this->assertNull($this->seen['sampled']);
+            $this->assertSame([TraceContext::PAYLOAD_KEY => $minted], array_intersect_key($this->seen['payload'], array_flip([TraceContext::PAYLOAD_KEY, TraceContext::PAYLOAD_SAMPLED_KEY])));
+            $this->assertSame($minted, $this->seen['second_payload'][TraceContext::PAYLOAD_KEY]);
+        }
+    }
+
+    public function test_the_request_entry_writes_no_log_fields()
+    {
+        $this->get('/trace/probe')->assertNoContent();
+
+        $this->assertArrayNotHasKey(LogFields::TRACE_ID_HEADER, $this->seen['log']);
+        $this->assertArrayNotHasKey(LogFields::TRACE_ID, $this->seen['log']);
+    }
+
+    public function test_a_sync_job_runs_inside_its_request_trace_and_leaves_it_whole()
+    {
+        $this->get('/trace/sync-job', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
+
+        // The job runs under the request's trace, Parent included, and the
+        // request still has its Parent and raw log header afterwards.
+        $expected = 'Root='.self::REQUEST_ROOT.';Parent='.self::REQUEST_PARENT.';Sampled=1';
+        $this->assertSame($expected, TraceProbeJob::$ranWithHeader);
+        $this->assertSame($expected, $this->seen['header']);
+        $this->assertSame(self::INBOUND_HEADER, $this->seen['log'][LogFields::TRACE_ID_HEADER]);
+    }
+
+    public function test_a_command_called_during_a_request_leaves_the_request_trace_alone()
+    {
+        $this->get('/trace/command', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
+
+        $this->assertSame('Root='.self::REQUEST_ROOT.';Parent='.self::REQUEST_PARENT.';Sampled=1', $this->seen['header']);
+        $this->assertSame(self::INBOUND_HEADER, $this->seen['log'][LogFields::TRACE_ID_HEADER]);
+    }
+
+    public function test_nothing_is_stamped_when_no_trace_has_started()
+    {
         $payload = $this->createPayload();
 
-        // The worker side: a fresh unit of work with no request header.
-        $this->app->instance('request', Request::create('/'));
+        $this->assertArrayNotHasKey(TraceContext::PAYLOAD_KEY, $payload);
+        $this->assertArrayNotHasKey(TraceContext::PAYLOAD_SAMPLED_KEY, $payload);
+    }
+
+    public function test_a_job_queued_with_no_trace_mints_its_own_when_it_starts()
+    {
+        $payload = $this->createPayload();
+
         $this->resetLikeTheWorker();
         $this->processJob($payload);
 
-        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
+        $minted = app(TraceContext::class)->current();
+        $this->assertMatchesRegularExpression(self::XRAY_ID, $minted);
+        $this->assertLoggedTraceId($minted);
+    }
+
+    public function test_a_real_payload_carries_root_and_sampled_to_the_worker()
+    {
+        $this->get('/trace/probe', [TraceContext::HEADER => self::INBOUND_HEADER])->assertNoContent();
+
+        $this->resetLikeTheWorker();
+        $this->processJob($this->seen['payload']);
+
+        $this->assertSame('Root='.self::REQUEST_ROOT.';Sampled=1', app(TraceContext::class)->header());
         $this->assertLoggedTraceId(self::REQUEST_ROOT);
     }
 
-    public function test_a_command_called_from_inside_a_job_keeps_the_job_id()
+    public function test_a_payload_from_before_the_sampled_key_restores_its_root()
     {
         $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
 
-        $this->startCommand('app:nested-call');
-
-        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
+        $this->assertSame('Root='.self::REQUEST_ROOT, app(TraceContext::class)->header());
         $this->assertLoggedTraceId(self::REQUEST_ROOT);
     }
 
-    public function test_a_worker_job_adopts_the_trace_id_in_its_payload()
+    public function test_a_job_dispatched_by_a_job_carries_its_root_and_sampled()
     {
-        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => '0']);
 
-        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
-        $this->assertLoggedTraceId(self::REQUEST_ROOT);
+        $payload = $this->createPayload();
+
+        $this->assertSame(self::REQUEST_ROOT, $payload[TraceContext::PAYLOAD_KEY] ?? null);
+        $this->assertSame('0', $payload[TraceContext::PAYLOAD_SAMPLED_KEY] ?? null);
     }
 
-    public function test_a_job_dispatched_by_a_job_carries_the_parent_trace_id()
+    public function test_a_job_dispatched_by_a_command_carries_its_root_and_no_sampled()
     {
-        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
+        $this->startCommand('app:nightly-sync');
+        $runRoot = app(TraceContext::class)->current();
 
-        $this->assertSame(self::REQUEST_ROOT, $this->payloadTraceId());
+        $payload = $this->createPayload();
+
+        $this->assertSame($runRoot, $payload[TraceContext::PAYLOAD_KEY] ?? null);
+        $this->assertArrayNotHasKey(TraceContext::PAYLOAD_SAMPLED_KEY, $payload);
     }
 
     public function test_a_job_arriving_without_a_trace_id_mints_one()
@@ -132,11 +270,25 @@ class TracingServiceProviderTest extends TestCase
         $this->assertLoggedTraceId($minted);
     }
 
-    public function test_a_job_with_an_unusable_trace_id_mints_one()
+    public function test_a_job_with_an_unusable_trace_id_mints_one_and_drops_its_sampled()
     {
-        $this->processJob([TraceContext::PAYLOAD_KEY => ['not' => 'a string']]);
+        foreach ([['not' => 'a string'], 'not-an-xray-root', self::REQUEST_ROOT.';Sampled=1'] as $unusable) {
+            $this->processJob([TraceContext::PAYLOAD_KEY => $unusable, TraceContext::PAYLOAD_SAMPLED_KEY => '1']);
 
-        $this->assertMatchesRegularExpression(self::XRAY_ID, app(TraceContext::class)->current());
+            $context = app(TraceContext::class);
+            $this->assertMatchesRegularExpression(self::XRAY_ID, $context->current());
+            $this->assertNotSame(self::REQUEST_ROOT, $context->current());
+            $this->assertNull($context->sampled());
+        }
+    }
+
+    public function test_a_job_with_an_unusable_sampled_keeps_its_root()
+    {
+        foreach ([true, 1, '?', 'yes'] as $unusable) {
+            $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => $unusable]);
+
+            $this->assertSame('Root='.self::REQUEST_ROOT, app(TraceContext::class)->header());
+        }
     }
 
     public function test_back_to_back_jobs_in_one_worker_never_share_an_id()
@@ -152,21 +304,22 @@ class TracingServiceProviderTest extends TestCase
         $this->assertLoggedTraceId($second);
     }
 
-    public function test_a_job_never_inherits_the_previous_job_id_even_without_the_worker_reset()
+    public function test_a_job_never_inherits_the_previous_job_trace_even_without_the_worker_reset()
     {
-        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => '1']);
         $this->processJob([]);
 
-        $second = app(TraceContext::class)->current();
-        $this->assertNotSame(self::REQUEST_ROOT, $second);
-        $this->assertLoggedTraceId($second);
+        $context = app(TraceContext::class);
+        $this->assertNotSame(self::REQUEST_ROOT, $context->current());
+        $this->assertNull($context->sampled());
+        $this->assertLoggedTraceId($context->current());
     }
 
     public function test_a_job_logs_its_id_when_the_worker_clears_only_the_log_context()
     {
         // The package's WorkCommand builds its Worker with no resetScope: it
         // clears the log context after each job but never forgets scoped
-        // instances, so the context still holds the previous job's id.
+        // instances, so the context still holds the previous job's trace.
         $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT]);
         Log::withoutContext();
 
@@ -181,9 +334,10 @@ class TracingServiceProviderTest extends TestCase
 
         $runId = app(TraceContext::class)->current();
         $this->assertMatchesRegularExpression(self::XRAY_ID, $runId);
+        $this->assertSame('Root='.$runId, app(TraceContext::class)->header());
         $this->assertLoggedTraceId($runId);
-        $this->assertSame($runId, $this->payloadTraceId());
-        $this->assertSame($runId, $this->payloadTraceId());
+        $this->assertSame($runId, $this->createPayload()[TraceContext::PAYLOAD_KEY]);
+        $this->assertSame($runId, $this->createPayload()[TraceContext::PAYLOAD_KEY]);
     }
 
     public function test_a_command_called_from_another_command_keeps_the_caller_id()
@@ -197,35 +351,14 @@ class TracingServiceProviderTest extends TestCase
         $this->assertLoggedTraceId($runId);
     }
 
-    public function test_a_command_called_during_a_request_leaves_the_request_log_context_alone()
+    public function test_a_command_called_from_inside_a_job_keeps_the_job_trace()
     {
-        $this->setRequestTraceHeader(self::FULL_REQUEST_HEADER);
-        // As RequestLoggingMiddleware sets it: the raw inbound header.
-        Log::withContext([LogFields::TRACE_ID_HEADER => self::FULL_REQUEST_HEADER]);
+        $this->processJob([TraceContext::PAYLOAD_KEY => self::REQUEST_ROOT, TraceContext::PAYLOAD_SAMPLED_KEY => '1']);
 
-        $this->startCommand('cache:clear');
+        $this->startCommand('app:nested-call');
 
-        $this->assertSame(self::REQUEST_ROOT, app(TraceContext::class)->current());
-        $this->assertSame(self::FULL_REQUEST_HEADER, $this->loggedContext()[LogFields::TRACE_ID_HEADER]);
-    }
-
-    public function test_a_sync_job_runs_under_its_request_id_and_leaves_the_request_log_context_alone()
-    {
-        $this->setRequestTraceHeader(self::FULL_REQUEST_HEADER);
-        // As RequestLoggingMiddleware sets it: the raw inbound header.
-        Log::withContext([LogFields::TRACE_ID_HEADER => self::FULL_REQUEST_HEADER]);
-
-        TraceProbeJob::dispatch();
-
-        $this->assertSame(self::REQUEST_ROOT, TraceProbeJob::$ranWith);
-        $this->assertSame(self::FULL_REQUEST_HEADER, $this->loggedContext()[LogFields::TRACE_ID_HEADER]);
-    }
-
-    private function setRequestTraceHeader(string $header): void
-    {
-        $request = Request::create('/api/test', 'GET');
-        $request->headers->set('X-Amzn-Trace-Id', $header);
-        $this->app->instance('request', $request);
+        $this->assertSame('Root='.self::REQUEST_ROOT.';Sampled=1', app(TraceContext::class)->header());
+        $this->assertLoggedTraceId(self::REQUEST_ROOT);
     }
 
     /**
@@ -236,14 +369,6 @@ class TracingServiceProviderTest extends TestCase
         $queue = $this->app['queue']->connection('sync');
 
         return json_decode((new \ReflectionMethod($queue, 'createPayload'))->invoke($queue, new TraceProbeJob, 'default'), true);
-    }
-
-    /**
-     * The trace id a job dispatched right now would carry in its payload.
-     */
-    private function payloadTraceId(): ?string
-    {
-        return $this->createPayload()[TraceContext::PAYLOAD_KEY] ?? null;
     }
 
     private function processJob(array $payload): void

@@ -97,7 +97,7 @@ abstract class RemoteRepository
      * Build the headers for a single outbound call.
      *
      * Everything that describes *this* call is resolved here rather than
-     * cached on the instance: the trace identifiers, the passthrough headers,
+     * cached on the instance: the trace header, the passthrough headers,
      * and the contextual headers with their resolvers. Repositories are
      * container singletons, so a value cached at first use outlives the
      * request or queue job that produced it. In a worker that means the first
@@ -126,16 +126,11 @@ abstract class RemoteRepository
             $headers['X-Request-ID'] = $requestId;
         }
 
-        // Add X-Ray trace header if available (preserves full trace context)
-        $traceHeader = $this->getCurrentTraceHeader();
-        if ($traceHeader) {
-            $headers['X-Amzn-Trace-Id'] = $traceHeader;
-        }
-
-        // Add correlation ID as fallback for non-X-Ray scenarios
-        $traceId = $this->getCurrentTraceId();
-        if ($traceId) {
-            $headers['X-Correlation-ID'] = $traceId;
+        // The current unit of work's trace, as TraceContext holds it: the
+        // request's, the job's or the command run's, always in Root= form.
+        $traceHeader = app()->bound(TraceContext::class) ? app(TraceContext::class)->header() : null;
+        if ($traceHeader !== null) {
+            $headers[TraceContext::HEADER] = $traceHeader;
         }
 
         // Passthrough headers - forward if present in incoming request
@@ -866,54 +861,6 @@ abstract class RemoteRepository
         }
 
         return null;
-    }
-
-    /**
-     * Get the current X-Ray trace ID: the inbound request's, else the one the
-     * current job or command run carries.
-     */
-    protected function getCurrentTraceId(): ?string
-    {
-        if (request() && request()->headers) {
-            $traceHeader = request()->headers->get('X-Amzn-Trace-Id');
-            if ($traceHeader && preg_match('/Root=([^;]+)/', $traceHeader, $matches)) {
-                return $matches[1];
-            }
-
-            if ($traceHeader) {
-                return $traceHeader;
-            }
-        }
-
-        return $this->getPropagatedTraceId();
-    }
-
-    /**
-     * Get the full X-Ray trace header for propagation to downstream services.
-     * This preserves the complete trace context including Parent and Sampled flags.
-     * With no inbound request it falls back to the bare id the current job or
-     * command run carries, the same shape the gateway forwards.
-     */
-    protected function getCurrentTraceHeader(): ?string
-    {
-        // Get full trace header to preserve X-Ray trace context
-        if (request() && request()->headers) {
-            $traceHeader = request()->headers->get('X-Amzn-Trace-Id');
-            if ($traceHeader) {
-                return $traceHeader;
-            }
-        }
-
-        return $this->getPropagatedTraceId();
-    }
-
-    /**
-     * The trace id a queued job or console command carries. Null unless the
-     * service registers TracingServiceProvider, which binds the context.
-     */
-    private function getPropagatedTraceId(): ?string
-    {
-        return app()->bound(TraceContext::class) ? app(TraceContext::class)->current() : null;
     }
 
     /**
