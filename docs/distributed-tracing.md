@@ -350,9 +350,11 @@ try {
 
 **Cause**: `TracingServiceProvider` is not registered (the service turned package
 discovery off), or the call runs outside a request, a queued job and a command
-run, such as in a unit test
+run, such as in a unit test. A command run inside a test counts as outside:
+Laravel fires `CommandStarting` only when it is not running unit tests
 **Solution**: Register the provider (see [Quick Start](#1-tracingserviceprovider)).
-Outside the three entries no trace has started, and none is sent by design
+Outside the three entries no trace has started, and none is sent by design; a
+test starts one with `TraceContext::startFromHeader()` or `start()`
 
 #### Issue: A Job's Downstream Calls Start a New Trace
 
@@ -393,6 +395,8 @@ which is also how to assert on them in a test. A test that calls a repository
 directly runs outside the three entries, so it starts the trace itself first:
 
 ```php
+use NuiMarkets\LaravelSharedUtils\Support\TraceContext;
+
 app(TraceContext::class)->startFromHeader('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Sampled=1');
 
 $client->method('get')->willReturnCallback(function ($url, $headers) {
@@ -443,7 +447,9 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
   inbound `X-Amzn-Trace-Id` on the bound request to get an outbound one now gets
   none. Start the trace with `TraceContext::startFromHeader()` or `start()`, or
   send the request through the kernel; `withoutMiddleware()` skips the request
-  entry too.
+  entry too. A command a test runs (`$this->artisan()`, `Artisan::call()`)
+  starts no trace either, since Laravel fires `CommandStarting` only outside
+  unit tests.
 - **Payloads are compatible both ways.** `nui_trace_id` keeps its shape and
   `nui_trace_sampled` is optional: a job queued by an earlier version restores
   its root with no sampling decision, and an earlier worker ignores the new

@@ -4,7 +4,7 @@
 **Date**: 2026-10-05
 
 ADR-002 supersedes the RemoteRepository fallback, the mint at dispatch and the
-opt-in registration below, along with two of the consequences, and corrects the
+opt-in registration below, along with three of the consequences, and corrects the
 reason given for rejecting Laravel `Context`. The payload carrier, the per-job
 restore and the command-run mint stand.
 
@@ -36,8 +36,9 @@ The decision rests on these premises:
 
 - A queue payload hook stamps the current unit of work's id onto every job
   under `nui_trace_id`, minting one when the unit of work has none.
-  *Superseded by ADR-002: the hook stamps only a trace that has started, and a
-  queued job dispatched with none mints its own root when it starts.*
+  *Superseded by ADR-002: the hook stamps only a trace that has started. A
+  queued job dispatched with none mints its own root when it starts, and a sync
+  job dispatched with none runs with none.*
 - A `JobProcessing` listener restores that id into a scoped `TraceContext`, or
   mints a fresh one when the payload has none, and adds it to the log context.
 - A `CommandStarting` listener gives each console command run one id for the

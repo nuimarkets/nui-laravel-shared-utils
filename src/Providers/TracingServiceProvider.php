@@ -64,8 +64,8 @@ class TracingServiceProvider extends ServiceProvider
 
         // The payload hooks are static and outlive this application instance,
         // so resolve the context when the hook runs rather than capturing it.
-        // Nothing is stamped when no trace has started: the job then mints its
-        // own root when it starts.
+        // Nothing is stamped when no trace has started: a queued job then
+        // mints its own root when it starts, and a sync job runs with none.
         Queue::createPayloadUsing(static function (): array {
             $context = app(TraceContext::class);
             if ($context->current() === null) {
