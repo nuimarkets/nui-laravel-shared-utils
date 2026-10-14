@@ -223,6 +223,9 @@ class TracingServiceProviderTest extends TestCase
 
     public function test_a_sync_job_dispatched_with_no_trace_leaves_none_behind()
     {
+        // A value the job overwrites, so the null below shows it ran.
+        TraceProbeJob::$ranWith = 'not run';
+
         TraceProbeJob::dispatch();
 
         $this->assertNull(TraceProbeJob::$ranWith);
