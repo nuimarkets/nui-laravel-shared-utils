@@ -158,14 +158,14 @@ class ErrorLoggerTest extends TestCase
         Log::shouldNotHaveReceived('error');
     }
 
-    public function test_records_not_found_exception_logs_as_info()
+    public function test_bare_records_not_found_exception_still_logs_as_error()
     {
         $exception = new RecordsNotFoundException('No records found');
 
         ErrorLogger::logException($exception);
 
-        Log::shouldHaveReceived('info')->once();
-        Log::shouldNotHaveReceived('error');
+        Log::shouldHaveReceived('error')->once();
+        Log::shouldNotHaveReceived('info');
     }
 
     public function test_http_exception_5xx_logs_as_error()
