@@ -221,6 +221,10 @@ The RemoteRepository supports configurable header forwarding for inter-service c
 
 **Contextual Headers**: Forwarded from the incoming request if present, OR resolved via a resolver class if not. Use when headers need to be derived from application context (e.g., current user, tenant, session data).
 
+`X-Amzn-Trace-Id` is never forwarded either way, in any letter case: the
+current trace is its only source (see
+[Distributed Tracing](distributed-tracing.md#header-propagation-strategy)).
+
 ### Configuration
 
 ```php

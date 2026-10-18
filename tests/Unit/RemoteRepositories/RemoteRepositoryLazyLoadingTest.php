@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\RemoteRepositories;
 
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Support\SimpleDocument;
+use NuiMarkets\LaravelSharedUtils\Support\TraceContext;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use NuiMarkets\LaravelSharedUtils\Tests\Utils\RemoteRepositoryTestHelpers;
 use Swis\JsonApi\Client\Item;
@@ -135,8 +136,10 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
                 return $successResponse;
             });
 
-        // Set up request with trace headers
-        $this->app['request']->headers->set('X-Amzn-Trace-Id', 'Root=1-67890-abc123');
+        // A started trace, as TracingServiceProvider's request entry leaves it
+        $traceContext = new TraceContext;
+        $traceContext->startFromHeader('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1');
+        $this->app->instance(TraceContext::class, $traceContext);
         $this->app['request']->headers->set('X-Request-ID', 'req-12345');
 
         $repository = $this->createTestRepositoryWithPublicMethods($mockClient);
@@ -146,7 +149,7 @@ class RemoteRepositoryLazyLoadingTest extends TestCase
 
         // Verify trace headers were preserved
         $this->assertArrayHasKey('X-Amzn-Trace-Id', $capturedHeaders);
-        $this->assertEquals('Root=1-67890-abc123', $capturedHeaders['X-Amzn-Trace-Id']);
+        $this->assertEquals('Root=1-67a92466-4b6aa15a05ffcd4c510de968;Parent=53995c3f42cd8ad8;Sampled=1', $capturedHeaders['X-Amzn-Trace-Id']);
         $this->assertArrayHasKey('X-Request-ID', $capturedHeaders);
         $this->assertEquals('req-12345', $capturedHeaders['X-Request-ID']);
     }

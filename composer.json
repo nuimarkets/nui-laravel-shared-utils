@@ -50,6 +50,13 @@
       "NuiMarkets\\LaravelSharedUtils\\Tests\\": "tests/"
     }
   },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "NuiMarkets\\LaravelSharedUtils\\Providers\\TracingServiceProvider"
+      ]
+    }
+  },
   "config": {
     "allow-plugins": {
       "php-http/discovery": true
