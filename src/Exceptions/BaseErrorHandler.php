@@ -111,6 +111,11 @@ class BaseErrorHandler extends ExceptionHandler
             }
         } elseif ($e instanceof ModelNotFoundException) {
             $status = Response::HTTP_NOT_FOUND;            // 404
+            $errors[] = [
+                'status' => (string) $status,
+                'title' => Response::$statusTexts[$status],
+                'detail' => $this->modelNotFoundMessage(),
+            ];
         } elseif ($e instanceof AuthorizationException) {
             $status = Response::HTTP_FORBIDDEN;            // 403
         } elseif ($e instanceof BaseHttpRequestException) {
@@ -178,6 +183,17 @@ class BaseErrorHandler extends ExceptionHandler
     }
 
     /**
+     * Client-facing detail for a ModelNotFoundException. Deliberately generic:
+     * the exception carries only a class name and the ids that were looked up,
+     * neither of which reads well to a user. To say more, throw a
+     * BaseHttpRequestException subclass where the code knows what was missing.
+     */
+    protected function modelNotFoundMessage(): string
+    {
+        return "We couldn't find what you were looking for. It may have been removed, or you may not have access to it.";
+    }
+
+    /**
      * When app.debug=true (and not in PHPUnit), show stack traces.
      */
     protected function shouldShowDebugInfo(): bool
@@ -229,6 +245,9 @@ class BaseErrorHandler extends ExceptionHandler
 
     /**
      * Render into JSON-API response.
+     *
+     * Callbacks registered with renderable() are not run; override
+     * getFormattedError() to change a response.
      */
     public function render($request, Throwable $e): Response|JsonResponse
     {

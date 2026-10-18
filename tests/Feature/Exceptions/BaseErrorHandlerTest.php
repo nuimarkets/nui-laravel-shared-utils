@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class BaseErrorHandlerTest extends TestCase
 {
+    private const MODEL_NOT_FOUND_DETAIL = "We couldn't find what you were looking for. It may have been removed, or you may not have access to it.";
+
     protected BaseErrorHandler $handler;
 
     protected function setUp(): void
@@ -371,6 +374,67 @@ class BaseErrorHandlerTest extends TestCase
 
         // Verify shouldReport returns false for ValidationException
         $this->assertFalse($this->handler->shouldReport($exception));
+    }
+
+    #[DataProvider('modelNotFoundProvider')]
+    public function test_model_not_found_returns_404_with_generic_detail(ModelNotFoundException $exception): void
+    {
+        $request = Request::create('/test', 'GET');
+
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertEquals('Not Found', $data['meta']['message']);
+        $this->assertSame([
+            ['status' => '404', 'title' => 'Not Found', 'detail' => self::MODEL_NOT_FOUND_DETAIL],
+        ], $data['errors']);
+        $this->assertStringNotContainsString('WidgetPriceType', $response->getContent());
+    }
+
+    public static function modelNotFoundProvider(): array
+    {
+        return [
+            'findOrFail, one id' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5])],
+            'findOrFail, several ids' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5, 7])],
+            'firstOrFail, no ids' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType')],
+            'hand-thrown with a message' => [new ModelNotFoundException('WidgetPriceType not found for id: 5')],
+            'no model or message' => [new ModelNotFoundException],
+        ];
+    }
+
+    public function test_model_not_found_detail_can_be_reworded_by_a_subclass(): void
+    {
+        $handler = new class($this->app) extends BaseErrorHandler
+        {
+            protected function modelNotFoundMessage(): string
+            {
+                return 'That record is no longer available.';
+            }
+        };
+
+        $response = $handler->render(Request::create('/test', 'GET'), new ModelNotFoundException);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('That record is no longer available.', $data['errors'][0]['detail']);
+    }
+
+    public function test_model_not_found_is_logged_at_info_and_not_reported(): void
+    {
+        Log::spy();
+        $request = Request::create('/test', 'GET');
+        $exception = (new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5]);
+
+        $this->assertFalse($this->handler->shouldReport($exception));
+
+        $this->handler->render($request, $exception);
+
+        Log::shouldHaveReceived('info')->once()->with(
+            'ModelNotFoundException',
+            \Mockery::on(fn ($context) => $context['errors'][0]['detail'] === self::MODEL_NOT_FOUND_DETAIL)
+        );
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_content_type_header_with_json_api_accept()
