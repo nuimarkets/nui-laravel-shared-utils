@@ -327,14 +327,14 @@ This package ships multiple release lines, selected via your `composer.json` con
 | Constraint | Laravel | PHP | PHPUnit | Status |
 | --- | --- | --- | --- | --- |
 | `^0.8.x` | 11.x / 12.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
-| `^0.7.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.8.x`, which changes the outbound trace header (see [Upgrading to 0.8.0](docs/distributed-tracing.md#upgrading-to-080)). No new features. |
+| `^0.7.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.8.x`, which changes the outbound trace header (see [Upgrading to 0.8.1](docs/distributed-tracing.md#upgrading-to-081)). No new features. |
 | `^0.6.x` | 10.15+ / 11.x | 8.3+ | 10.5+ | Maintenance pin for Laravel 10 consumers. No new features. |
 | `^0.5.x` | 8.x / 9.x | 8.0+ | 9.x | Maintenance pin for legacy consumers. No new features. |
 
 Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades: `composer update` will not pull `0.8.x` over a `^0.7.x` pin. To move to the new line, change the constraint explicitly:
 
 ```bash
-composer require nuimarkets/laravel-shared-utils:^0.8
+composer require nuimarkets/laravel-shared-utils:^0.8.1
 ```
 
 If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` and `0.8.x` lines require `laravel/framework: ^11.0|^12.0` and declare `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.

@@ -98,7 +98,7 @@ log pipeline indexes.
   service's logs, and a sampled request's job hops appear in its X-Ray trace.
 - RemoteRepository's trace path reads only `TraceContext`, and there is one
   header writer to test.
-- Breaking for 0.7.x consumers (the guide's Upgrading to 0.8.0 lists each
+- Breaking for 0.7.x consumers (the guide's Upgrading to 0.8.1 lists each
   change). In particular, a service without the provider no longer behaves as
   before: it sends no trace header at all, where 0.7.x forwarded the inbound
   one.
