@@ -5,6 +5,7 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\RecordsNotFoundException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -191,6 +192,11 @@ class ErrorLogger
             if ($statusCode >= 400 && $statusCode < 500) {
                 return $statusCode === 404 ? 'info' : 'warning';
             }
+        }
+
+        // A lookup miss (findOrFail, firstOrFail, sole) renders as a 404, so it logs like one
+        if ($e instanceof RecordsNotFoundException) {
+            return 'info';
         }
 
         // Validation exceptions are info level

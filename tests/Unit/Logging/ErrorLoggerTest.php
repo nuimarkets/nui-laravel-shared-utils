@@ -3,7 +3,9 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Logging;
 
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\RecordsNotFoundException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\MessageBag;
@@ -144,6 +146,26 @@ class ErrorLoggerTest extends TestCase
         ErrorLogger::logException($exception);
 
         Log::shouldHaveReceived('info')->once();
+    }
+
+    public function test_model_not_found_exception_logs_as_info()
+    {
+        $exception = (new ModelNotFoundException)->setModel('App\\Models\\Order', ['missing-id']);
+
+        ErrorLogger::logException($exception);
+
+        Log::shouldHaveReceived('info')->once();
+        Log::shouldNotHaveReceived('error');
+    }
+
+    public function test_records_not_found_exception_logs_as_info()
+    {
+        $exception = new RecordsNotFoundException('No records found');
+
+        ErrorLogger::logException($exception);
+
+        Log::shouldHaveReceived('info')->once();
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_http_exception_5xx_logs_as_error()
