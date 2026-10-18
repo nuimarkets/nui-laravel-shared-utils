@@ -172,7 +172,18 @@ How it works:
   sync job it dispatches runs with none.
 - **Sync jobs** run inside their dispatcher and keep its trace, Parent
   included, leaving a request's raw `X-Amzn-Trace-Id` in the log context
-  untouched.
+  untouched. Laravel 12's `background` queue connection is the exception: it
+  runs the job on the sync queue in a child `php artisan` process, a command
+  run of its own, so the job gets that run's minted root, not its
+  dispatcher's.
+- **Long-running commands** keep one root for the whole run. A command that
+  handles many independent messages itself, such as a poller or a stream
+  consumer calling repositories rather than dispatching jobs, gives each
+  message its own trace by calling `app(TraceContext::class)->start()` per
+  message. Its log fields keep the run's root unless it also re-adds them with
+  `Log::withContext()` under `LogFields::TRACE_ID_HEADER` and
+  `LogFields::TRACE_ID`. A queue worker needs neither: each job starts its
+  trace from its payload.
 - **No correlation header.** RemoteRepository sends no `X-Correlation-ID`: a
   non-proxy API Gateway HTTP integration forwards only the headers it maps, so
   the root in `X-Amzn-Trace-Id` is what reliably reaches the next service.
@@ -350,11 +361,14 @@ try {
 
 **Cause**: `TracingServiceProvider` is not registered (the service turned package
 discovery off), or the call runs outside a request, a queued job and a command
-run, such as in a unit test. A command run inside a test counts as outside:
-Laravel fires `CommandStarting` only when it is not running unit tests
+run, such as in a unit test. A command run counts as outside when the
+application environment is `testing`: Laravel fires `CommandStarting` only when
+it is not, so a command a test runs, and every command in a deployed environment
+named `testing`, starts no trace
 **Solution**: Register the provider (see [Quick Start](#1-tracingserviceprovider)).
 Outside the three entries no trace has started, and none is sent by design; a
-test starts one with `TraceContext::startFromHeader()` or `start()`
+test starts one with `app(TraceContext::class)->startFromHeader()` or
+`->start()`. A deployed environment needs a name other than `testing`
 
 #### Issue: A Job's Downstream Calls Start a New Trace
 
@@ -435,9 +449,12 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
   instead.
 - **Removed**: `RemoteRepository::getCurrentTraceId()` and
   `getCurrentTraceHeader()` (protected), and `TraceContext::ensure()` and
-  `set()`. `TraceContext::current()` no longer falls back to the request's
-  header: the request entry has already started the trace. Use `start()`,
-  `startFromHeader()`, `current()` and `header()`.
+  `set()`. A subclass that overrode either RemoteRepository method gets no
+  error: its override is no longer called, and nothing replaces it, since the
+  trace header comes only from `TraceContext`. `TraceContext::current()` no
+  longer falls back to the request's header: the request entry has already
+  started the trace. Use `start()`, `startFromHeader()`, `current()` and
+  `header()`.
 - **A request with no valid inbound Root** mints a root for its jobs and calls,
   and its own log fields keep whatever header arrived (none, or the invalid
   value), so they do not join its jobs. Under 0.7.x a request with no header
@@ -445,15 +462,24 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
   bare or malformed inbound value travelled to its jobs and calls as it was.
 - **Tests that drove the trace header through the request.** A test that put an
   inbound `X-Amzn-Trace-Id` on the bound request to get an outbound one now gets
-  none. Start the trace with `TraceContext::startFromHeader()` or `start()`, or
-  send the request through the kernel; `withoutMiddleware()` skips the request
-  entry too. A command a test runs (`$this->artisan()`, `Artisan::call()`)
-  starts no trace either, since Laravel fires `CommandStarting` only outside
-  unit tests.
+  none. Start the trace with `app(TraceContext::class)->startFromHeader()` or
+  `->start()`, or send the request through the kernel; `withoutMiddleware()`
+  skips the request entry too. A command a test runs (`$this->artisan()`,
+  `Artisan::call()`) starts no trace either: Laravel fires `CommandStarting`
+  only when the application environment is not `testing`.
 - **Payloads are compatible both ways.** `nui_trace_id` keeps its shape and
   `nui_trace_sampled` is optional: a job queued by an earlier version restores
   its root with no sampling decision, and an earlier worker ignores the new
-  key.
+  key. A worker restores only a valid X-Ray root (`1-<8 hex>-<24 hex>`, in
+  lowercase), where 0.7.x restored any non-empty id, and mints a new root for
+  anything else. So a job an outside producer stamped with an id of another
+  shape, or one 0.7.x queued under a malformed inbound header, starts a new
+  trace.
+- **A request handled inside a job or command run**, through the HTTP kernel
+  (`app()->handle(...)`), starts its own trace, a minted root when it carries no
+  trace header, and that trace replaces the job's or the command run's for the
+  rest of that job or run. Under 0.7.x such a request left the job's or
+  command's id in place.
 
 ### From Custom Correlation Implementation
 

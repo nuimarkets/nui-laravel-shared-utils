@@ -1,12 +1,13 @@
 # ADR-001: Carry a job's trace id in its queue payload, restored per job
 
-**Status**: Proposed; partly superseded by ADR-002
+**Status**: Accepted; partly superseded by ADR-002
 **Date**: 2026-10-05
 
 ADR-002 supersedes the RemoteRepository fallback, the mint at dispatch and the
-opt-in registration below, along with three of the consequences, and corrects the
-reason given for rejecting Laravel `Context`. The payload carrier, the per-job
-restore and the command-run mint stand.
+opt-in registration below, along with three of the consequences, narrows the
+per-job restore to a valid X-Ray root, and corrects the reason given for
+rejecting Laravel `Context`. The payload carrier, the per-job restore and the
+command-run mint stand.
 
 ## Context
 
@@ -41,6 +42,8 @@ The decision rests on these premises:
   job dispatched with none runs with none.*
 - A `JobProcessing` listener restores that id into a scoped `TraceContext`, or
   mints a fresh one when the payload has none, and adds it to the log context.
+  *Narrowed by ADR-002: only a valid X-Ray root is restored, and a payload id
+  of any other shape mints a fresh one, as a missing one does.*
 - A `CommandStarting` listener gives each console command run one id for the
   whole run.
 - RemoteRepository falls back to `TraceContext` for its trace headers when
@@ -79,7 +82,8 @@ provider is auto-discovered.*
 - Every job payload carries `nui_trace_id`. A producer outside Laravel can set
   it to join an existing trace; one that does not set it gets a fresh id per
   message. *Superseded by ADR-002: only a job dispatched under a started trace
-  carries it.*
+  carries it, and a producer's id joins a trace only when it is a valid X-Ray
+  root.*
 - Minted ids are correlation ids in X-Ray shape, not X-Ray traces: nothing
   records segments for them. *No longer true under ADR-002: a minted root is
   sent as `Root=`, which API Gateway continues under its own sampling decision,

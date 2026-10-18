@@ -1,11 +1,12 @@
 # ADR-002: Decide each unit of work's trace once, and send it in X-Ray's Root= form
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-10-14
 **Supersedes**: ADR-001's RemoteRepository fallback, its mint at dispatch, its
 opt-in registration, and its "every payload carries `nui_trace_id`", "nothing
 records segments for them" and "behaves exactly as before" consequences;
-corrects its rationale for rejecting Laravel `Context`
+narrows its per-job restore to a valid root; corrects its rationale for
+rejecting Laravel `Context`
 
 ## Context
 
@@ -42,8 +43,8 @@ against a deployed API Gateway with X-Ray tracing on:
   `Root=<root>[;Parent=<parent>][;Sampled=<0|1>]`, and only those fields. A Root
   must be `1-<8 hex>-<24 hex>` and a Parent 16 hex, in lowercase with nothing
   after them, and a Sampled `0` or `1`. An
-  invalid Root starts a new trace with a minted root; an invalid Parent or
-  Sampled is dropped.
+  invalid Root, inbound or in a job's payload, starts a new trace with a minted
+  root; an invalid Parent or Sampled is dropped.
 - **Parent on the request path only.** A request forwards the Parent it
   received. A queued job starts with none.
 - **Sampling travels with jobs**, under `nui_trace_sampled` next to
@@ -105,7 +106,9 @@ log pipeline indexes.
   checkout with a stale `bootstrap/cache/packages.php` needs
   `php artisan package:discover` once.
 - Payloads are compatible both ways: `nui_trace_id` keeps its shape and
-  `nui_trace_sampled` is optional.
+  `nui_trace_sampled` is optional. A worker restores only a valid root, where
+  ADR-001's restored any non-empty id, so a payload id of any other shape starts
+  a new trace.
 - A request with no valid inbound Root mints a root for its jobs and calls, but
   its own log lines do not carry it: its log fields stay with the request
   logging middleware, which logs whatever header arrived, if any.
