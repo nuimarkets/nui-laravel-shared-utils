@@ -128,7 +128,9 @@ abstract class RemoteRepository
 
         // The current unit of work's trace, as TraceContext holds it: the
         // request's, the job's or the command run's, always in Root= form.
-        $traceHeader = app()->bound(TraceContext::class) ? app(TraceContext::class)->header() : null;
+        // Without the provider nothing starts one, and the container builds an
+        // empty context, so no header is sent.
+        $traceHeader = app(TraceContext::class)->header();
         if ($traceHeader !== null) {
             $headers[TraceContext::HEADER] = $traceHeader;
         }
