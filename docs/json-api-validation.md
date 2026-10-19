@@ -130,6 +130,9 @@ Front ends show `detail` to the user, so it never carries the model's class name
 When the user should hear what was missing, throw an exception named for that situation from the code that knows it. Extend `BaseHttpRequestException` (or a service subclass of it) and build the message in the constructor; the handler uses the message as `detail` and the status as the response code, and reports to Sentry only at 500 and above:
 
 ```php
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
+use Symfony\Component\HttpFoundation\Response;
+
 class InvoiceNotFoundException extends BaseHttpRequestException
 {
     public function __construct(string $reference)
