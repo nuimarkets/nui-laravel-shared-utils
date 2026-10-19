@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 /**
@@ -44,6 +45,17 @@ class BaseErrorHandler extends ExceptionHandler
      */
     protected function getFormattedError(Throwable $e): array
     {
+        // Laravel's own handler wraps a ModelNotFoundException in a NotFoundHttpException,
+        // carrying the model's class name in its message, before it runs a render callback.
+        // A handler reached through withExceptions() sees that wrapper, so format the original.
+        // Only that wrapper, whose message is the model's own: one thrown with its own wording keeps it.
+        $previous = $e->getPrevious();
+        if ($e instanceof NotFoundHttpException
+            && $previous instanceof ModelNotFoundException
+            && $e->getMessage() === $previous->getMessage()) {
+            $e = $previous;
+        }
+
         $title = null;
         $status = Response::HTTP_INTERNAL_SERVER_ERROR;
         $errors = [];
@@ -111,6 +123,11 @@ class BaseErrorHandler extends ExceptionHandler
             }
         } elseif ($e instanceof ModelNotFoundException) {
             $status = Response::HTTP_NOT_FOUND;            // 404
+            $errors[] = [
+                'status' => (string) $status,
+                'title' => Response::$statusTexts[$status],
+                'detail' => $this->modelNotFoundMessage(),
+            ];
         } elseif ($e instanceof AuthorizationException) {
             $status = Response::HTTP_FORBIDDEN;            // 403
         } elseif ($e instanceof BaseHttpRequestException) {
@@ -164,7 +181,7 @@ class BaseErrorHandler extends ExceptionHandler
         }
 
         //
-        // 5) ADD DEBUG INFO (STACK TRACE) IF APP IS IN DEBUG & NOT UNIT TESTING
+        // 5) ADD DEBUG INFO (STACK TRACE) IF APP IS IN DEBUG & THE ENVIRONMENT IS NOT `testing`
         //
         if ($this->shouldShowDebugInfo() && ! ($e instanceof ValidationException)) {
             $errors[] = $this->getExceptionTrace($e);
@@ -178,7 +195,18 @@ class BaseErrorHandler extends ExceptionHandler
     }
 
     /**
-     * When app.debug=true (and not in PHPUnit), show stack traces.
+     * Client-facing detail for a ModelNotFoundException. Deliberately generic:
+     * the exception carries only a class name and the ids that were looked up,
+     * neither of which reads well to a user. To say more, throw a
+     * BaseHttpRequestException subclass where the code knows what was missing.
+     */
+    protected function modelNotFoundMessage(): string
+    {
+        return "We couldn't find what you were looking for. It may have been removed, or you may not have access to it.";
+    }
+
+    /**
+     * When app.debug=true (and the environment is not `testing`), show stack traces.
      */
     protected function shouldShowDebugInfo(): bool
     {
@@ -229,6 +257,9 @@ class BaseErrorHandler extends ExceptionHandler
 
     /**
      * Render into JSON-API response.
+     *
+     * Callbacks registered with renderable() are not run; override
+     * getFormattedError() to change a response.
      */
     public function render($request, Throwable $e): Response|JsonResponse
     {

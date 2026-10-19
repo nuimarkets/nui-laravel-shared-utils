@@ -2,22 +2,29 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\RecordsNotFoundException;
+use Illuminate\Foundation\Exceptions\Handler as LaravelExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareDetectedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareScanFailedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BaseErrorHandlerTest extends TestCase
 {
+    private const MODEL_NOT_FOUND_DETAIL = "We couldn't find what you were looking for. It may have been removed, or you may not have access to it.";
+
     protected BaseErrorHandler $handler;
 
     protected function setUp(): void
@@ -371,6 +378,130 @@ class BaseErrorHandlerTest extends TestCase
 
         // Verify shouldReport returns false for ValidationException
         $this->assertFalse($this->handler->shouldReport($exception));
+    }
+
+    #[DataProvider('modelNotFoundProvider')]
+    public function test_model_not_found_returns_404_with_generic_detail(ModelNotFoundException $exception): void
+    {
+        $request = Request::create('/test', 'GET');
+
+        $response = $this->handler->render($request, $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertEquals('Not Found', $data['meta']['message']);
+        $this->assertSame([
+            ['status' => '404', 'title' => 'Not Found', 'detail' => self::MODEL_NOT_FOUND_DETAIL],
+        ], $data['errors']);
+        $this->assertStringNotContainsString('WidgetPriceType', $response->getContent());
+    }
+
+    public static function modelNotFoundProvider(): array
+    {
+        return [
+            'findOrFail, one id' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5])],
+            'findOrFail, several ids' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5, 7])],
+            'firstOrFail, no ids' => [(new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType')],
+            'hand-thrown with a message' => [new ModelNotFoundException('WidgetPriceType not found for id: 5')],
+            'no model or message' => [new ModelNotFoundException],
+        ];
+    }
+
+    public function test_model_not_found_through_a_framework_render_callback_gets_generic_detail(): void
+    {
+        // The bootstrap/app.php wiring: Laravel's handler wraps the exception in a
+        // NotFoundHttpException before it reaches this render callback.
+        $base = $this->handler;
+        $appHandler = new class($this->app) extends LaravelExceptionHandler {};
+        $appHandler->renderable(fn (\Throwable $e, $request) => $base->render($request, $e));
+
+        $exception = (new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5]);
+        $response = $appHandler->render(Request::create('/test', 'GET'), $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame([
+            ['status' => '404', 'title' => 'Not Found', 'detail' => self::MODEL_NOT_FOUND_DETAIL],
+        ], $data['errors']);
+        $this->assertStringNotContainsString('WidgetPriceType', $response->getContent());
+    }
+
+    #[DataProvider('notFoundHttpExceptionProvider')]
+    public function test_not_found_http_exception_keeps_its_own_detail(NotFoundHttpException $exception, string $expectedDetail): void
+    {
+        $response = $this->handler->render(Request::create('/test', 'GET'), $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame($expectedDetail, $data['errors'][0]['detail'] ?? null);
+    }
+
+    public static function notFoundHttpExceptionProvider(): array
+    {
+        $miss = (new ModelNotFoundException)->setModel('Fixtures\Models\Invoice', [5]);
+
+        return [
+            'no previous' => [
+                new NotFoundHttpException('The route test could not be found.'),
+                'The route test could not be found.',
+            ],
+            'own message over a model miss' => [
+                new NotFoundHttpException('That invoice does not exist.', $miss),
+                'That invoice does not exist.',
+            ],
+            'same message over a non-model miss' => [
+                new NotFoundHttpException('Not found.', new RecordsNotFoundException('Not found.')),
+                'Not found.',
+            ],
+        ];
+    }
+
+    public function test_a_5xx_wrapper_of_a_model_miss_keeps_its_status(): void
+    {
+        $miss = (new ModelNotFoundException)->setModel('Fixtures\Models\Invoice', [5]);
+
+        $response = $this->handler->render(
+            Request::create('/test', 'GET'),
+            new BaseHttpRequestException($miss->getMessage(), 500, $miss),
+        );
+
+        $this->assertEquals(500, $response->getStatusCode());
+    }
+
+    public function test_model_not_found_detail_can_be_reworded_by_a_subclass(): void
+    {
+        $handler = new class($this->app) extends BaseErrorHandler
+        {
+            protected function modelNotFoundMessage(): string
+            {
+                return 'That record is no longer available.';
+            }
+        };
+
+        $response = $handler->render(Request::create('/test', 'GET'), new ModelNotFoundException);
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('That record is no longer available.', $data['errors'][0]['detail']);
+    }
+
+    public function test_model_not_found_is_logged_at_info_and_not_reported(): void
+    {
+        Log::spy();
+        $request = Request::create('/test', 'GET');
+        $exception = (new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5]);
+
+        $this->assertFalse($this->handler->shouldReport($exception));
+
+        $this->handler->render($request, $exception);
+
+        Log::shouldHaveReceived('info')->once()->with(
+            'ModelNotFoundException',
+            \Mockery::on(fn ($context) => $context['errors'][0]['detail'] === self::MODEL_NOT_FOUND_DETAIL)
+        );
+        Log::shouldNotHaveReceived('error');
     }
 
     public function test_content_type_header_with_json_api_accept()

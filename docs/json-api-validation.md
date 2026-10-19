@@ -72,6 +72,8 @@ class Handler extends BaseErrorHandler
 }
 ```
 
+`BaseErrorHandler::render()` builds every response itself and does not run callbacks registered with `renderable()`. To change a response, override `getFormattedError()`.
+
 ### 4. Validation Errors are Now Consistent
 
 All validation failures will return this standardized format:
@@ -102,6 +104,48 @@ All validation failures will return this standardized format:
   ]
 }
 ```
+
+### 5. Missing Models Return a Generic 404
+
+A `ModelNotFoundException` that reaches the handler renders as a 404 and is logged at info, never reported. `findOrFail()` and `firstOrFail()` can propagate without a catch:
+
+```json
+{
+  "meta": {
+    "message": "Not Found",
+    "status": 404
+  },
+  "errors": [
+    {
+      "status": "404",
+      "title": "Not Found",
+      "detail": "We couldn't find what you were looking for. It may have been removed, or you may not have access to it."
+    }
+  ]
+}
+```
+
+Front ends show `detail` to the user, so it never carries the model's class name, the ids that were looked up, or a message the exception was thrown with. With `app.debug` on, in any environment other than `testing`, the handler also appends a trace object to this 404's `errors`, as it does for most errors, and that object's own `detail` is the raw message. Override `modelNotFoundMessage()` in your handler to change the wording for every model.
+
+When the user should hear what was missing, throw an exception named for that situation from the code that knows it. Extend `BaseHttpRequestException` (or a service subclass of it) and build the message in the constructor; the handler uses the message as `detail` and the status as the response code, and reports to Sentry only at 500 and above:
+
+```php
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
+use Symfony\Component\HttpFoundation\Response;
+
+class InvoiceNotFoundException extends BaseHttpRequestException
+{
+    public function __construct(string $reference)
+    {
+        parent::__construct(
+            "We couldn't find invoice {$reference}. It may have been removed, or you may not have access to it.",
+            Response::HTTP_NOT_FOUND,
+        );
+    }
+}
+```
+
+A failure that is not the user's, such as an upstream service being down, gets its own exception with a 5xx status and the original exception as `previous`, so it still reaches Sentry with its cause.
 
 ## Advanced Usage
 
