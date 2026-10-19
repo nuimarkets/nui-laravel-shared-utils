@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Logging;
 
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
@@ -191,6 +192,13 @@ class ErrorLogger
             if ($statusCode >= 400 && $statusCode < 500) {
                 return $statusCode === 404 ? 'info' : 'warning';
             }
+        }
+
+        // An Eloquent lookup miss (findOrFail, firstOrFail, sole) renders as a 404 in
+        // BaseErrorHandler, so it logs like one. Its parent, RecordsNotFoundException,
+        // is deliberately not matched: the handler renders a bare one as a 500.
+        if ($e instanceof ModelNotFoundException) {
+            return 'info';
         }
 
         // Validation exceptions are info level
