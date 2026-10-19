@@ -125,7 +125,7 @@ A `ModelNotFoundException` that reaches the handler renders as a 404 and is logg
 }
 ```
 
-Front ends show `detail` to the user, so it never carries the model's class name, the ids that were looked up, or a message the exception was thrown with. With `app.debug` on, the handler also appends a trace object to `errors` for every exception, and that object's own `detail` is the raw message. Override `modelNotFoundMessage()` in your handler to change the wording for every model.
+Front ends show `detail` to the user, so it never carries the model's class name, the ids that were looked up, or a message the exception was thrown with. With `app.debug` on, outside unit tests, the handler also appends a trace object to this 404's `errors`, as it does for most errors, and that object's own `detail` is the raw message. Override `modelNotFoundMessage()` in your handler to change the wording for every model.
 
 When the user should hear what was missing, throw an exception named for that situation from the code that knows it. Extend `BaseHttpRequestException` (or a service subclass of it) and build the message in the constructor; the handler uses the message as `detail` and the status as the response code, and reports to Sentry only at 500 and above:
 
