@@ -18,7 +18,7 @@ sends it as an X-Ray `X-Amzn-Trace-Id` header.
 - [Usage Examples](#usage-examples)
 - [Field Reference](#field-reference)
 - [Troubleshooting](#troubleshooting)
-- [Migration Guide](#migration-guide) (including [Upgrading to 0.8.0](#upgrading-to-080))
+- [Migration Guide](#migration-guide) (including [Upgrading to 0.8.1](#upgrading-to-081))
 
 ## Features
 
@@ -372,9 +372,9 @@ test starts one with `app(TraceContext::class)->startFromHeader()` or
 
 #### Issue: A Job's Downstream Calls Start a New Trace
 
-**Cause**: The calling service runs a version before 0.8.0, which sent a job's
+**Cause**: The calling service runs a version before 0.8.1, which sent a job's
 or command's id bare (`1-...`), a value API Gateway does not continue
-**Solution**: Upgrade to 0.8.0 or later, which always sends `Root=...`
+**Solution**: Upgrade to 0.8.1 or later, which always sends `Root=...`
 
 ### Debug Mode
 
@@ -422,7 +422,9 @@ $client->method('get')->willReturnCallback(function ($url, $headers) {
 
 ## Migration Guide
 
-### Upgrading to 0.8.0
+### Upgrading to 0.8.1
+
+Require `^0.8.1`, the first 0.8 release.
 
 - **The provider is auto-discovered.** An explicit `TracingServiceProvider`
   entry in `config/app.php` can stay: Laravel registers a provider class once.
@@ -530,7 +532,7 @@ class ProductRepository extends RemoteRepository
 
 Adopting the package in place of a custom correlation implementation changes no
 existing logging patterns. Upgrading from 0.7.x has the breaking changes listed
-under [Upgrading to 0.8.0](#upgrading-to-080).
+under [Upgrading to 0.8.1](#upgrading-to-081).
 
 ## Performance Considerations
 
