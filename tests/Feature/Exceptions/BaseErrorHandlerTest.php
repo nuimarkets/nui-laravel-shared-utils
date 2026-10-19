@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\RecordsNotFoundException;
 use Illuminate\Foundation\Exceptions\Handler as LaravelExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -426,15 +427,35 @@ class BaseErrorHandlerTest extends TestCase
         $this->assertStringNotContainsString('WidgetPriceType', $response->getContent());
     }
 
-    public function test_not_found_http_exception_without_a_model_keeps_its_own_detail(): void
+    #[DataProvider('notFoundHttpExceptionProvider')]
+    public function test_not_found_http_exception_keeps_its_own_detail(NotFoundHttpException $exception, string $expectedDetail): void
     {
-        $response = $this->handler->render(
-            Request::create('/test', 'GET'),
-            new NotFoundHttpException('The route test could not be found.'),
-        );
+        $response = $this->handler->render(Request::create('/test', 'GET'), $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
 
         $data = json_decode($response->getContent(), true);
-        $this->assertSame('The route test could not be found.', $data['errors'][0]['detail']);
+        $this->assertSame($expectedDetail, $data['errors'][0]['detail'] ?? null);
+    }
+
+    public static function notFoundHttpExceptionProvider(): array
+    {
+        $miss = (new ModelNotFoundException)->setModel('Fixtures\Models\Invoice', [5]);
+
+        return [
+            'no previous' => [
+                new NotFoundHttpException('The route test could not be found.'),
+                'The route test could not be found.',
+            ],
+            'own message over a model miss' => [
+                new NotFoundHttpException('That invoice does not exist.', $miss),
+                'That invoice does not exist.',
+            ],
+            'same message over a non-model miss' => [
+                new NotFoundHttpException('Not found.', new RecordsNotFoundException('Not found.')),
+                'Not found.',
+            ],
+        ];
     }
 
     public function test_model_not_found_detail_can_be_reworded_by_a_subclass(): void

@@ -48,8 +48,12 @@ class BaseErrorHandler extends ExceptionHandler
         // Laravel's own handler wraps a ModelNotFoundException in a NotFoundHttpException,
         // carrying the model's class name in its message, before it runs a render callback.
         // A handler reached through withExceptions() sees that wrapper, so format the original.
-        if ($e instanceof NotFoundHttpException && $e->getPrevious() instanceof ModelNotFoundException) {
-            $e = $e->getPrevious();
+        // Only that wrapper, whose message is the model's own: one thrown with its own wording keeps it.
+        $previous = $e->getPrevious();
+        if ($e instanceof NotFoundHttpException
+            && $previous instanceof ModelNotFoundException
+            && $e->getMessage() === $previous->getMessage()) {
+            $e = $previous;
         }
 
         $title = null;
