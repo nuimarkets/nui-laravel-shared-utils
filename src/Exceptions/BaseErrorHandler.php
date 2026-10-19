@@ -181,7 +181,7 @@ class BaseErrorHandler extends ExceptionHandler
         }
 
         //
-        // 5) ADD DEBUG INFO (STACK TRACE) IF APP IS IN DEBUG & NOT UNIT TESTING
+        // 5) ADD DEBUG INFO (STACK TRACE) IF APP IS IN DEBUG & THE ENVIRONMENT IS NOT `testing`
         //
         if ($this->shouldShowDebugInfo() && ! ($e instanceof ValidationException)) {
             $errors[] = $this->getExceptionTrace($e);
@@ -206,7 +206,7 @@ class BaseErrorHandler extends ExceptionHandler
     }
 
     /**
-     * When app.debug=true (and not in PHPUnit), show stack traces.
+     * When app.debug=true (and the environment is not `testing`), show stack traces.
      */
     protected function shouldShowDebugInfo(): bool
     {
