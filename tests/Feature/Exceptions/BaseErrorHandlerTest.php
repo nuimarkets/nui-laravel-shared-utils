@@ -4,6 +4,7 @@ namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Exceptions;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Exceptions\Handler as LaravelExceptionHandler;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +17,7 @@ use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BaseErrorHandlerTest extends TestCase
 {
@@ -402,6 +404,37 @@ class BaseErrorHandlerTest extends TestCase
             'hand-thrown with a message' => [new ModelNotFoundException('WidgetPriceType not found for id: 5')],
             'no model or message' => [new ModelNotFoundException],
         ];
+    }
+
+    public function test_model_not_found_through_a_framework_render_callback_gets_generic_detail(): void
+    {
+        // The bootstrap/app.php wiring: Laravel's handler wraps the exception in a
+        // NotFoundHttpException before it reaches this render callback.
+        $base = $this->handler;
+        $appHandler = new class($this->app) extends LaravelExceptionHandler {};
+        $appHandler->renderable(fn (\Throwable $e, $request) => $base->render($request, $e));
+
+        $exception = (new ModelNotFoundException)->setModel('Fixtures\Models\WidgetPriceType', [5]);
+        $response = $appHandler->render(Request::create('/test', 'GET'), $exception);
+
+        $this->assertEquals(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame([
+            ['status' => '404', 'title' => 'Not Found', 'detail' => self::MODEL_NOT_FOUND_DETAIL],
+        ], $data['errors']);
+        $this->assertStringNotContainsString('WidgetPriceType', $response->getContent());
+    }
+
+    public function test_not_found_http_exception_without_a_model_keeps_its_own_detail(): void
+    {
+        $response = $this->handler->render(
+            Request::create('/test', 'GET'),
+            new NotFoundHttpException('The route test could not be found.'),
+        );
+
+        $data = json_decode($response->getContent(), true);
+        $this->assertSame('The route test could not be found.', $data['errors'][0]['detail']);
     }
 
     public function test_model_not_found_detail_can_be_reworded_by_a_subclass(): void

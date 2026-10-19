@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 /**
@@ -44,6 +45,13 @@ class BaseErrorHandler extends ExceptionHandler
      */
     protected function getFormattedError(Throwable $e): array
     {
+        // Laravel's own handler wraps a ModelNotFoundException in a NotFoundHttpException,
+        // carrying the model's class name in its message, before it runs a render callback.
+        // A handler reached through withExceptions() sees that wrapper, so format the original.
+        if ($e instanceof NotFoundHttpException && $e->getPrevious() instanceof ModelNotFoundException) {
+            $e = $e->getPrevious();
+        }
+
         $title = null;
         $status = Response::HTTP_INTERNAL_SERVER_ERROR;
         $errors = [];
