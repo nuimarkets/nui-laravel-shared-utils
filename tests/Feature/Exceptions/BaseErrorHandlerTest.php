@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\BaseErrorHandler;
+use NuiMarkets\LaravelSharedUtils\Exceptions\BaseHttpRequestException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareDetectedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\MalwareScanFailedException;
 use NuiMarkets\LaravelSharedUtils\Exceptions\RemoteServiceException;
@@ -456,6 +457,18 @@ class BaseErrorHandlerTest extends TestCase
                 'Not found.',
             ],
         ];
+    }
+
+    public function test_a_5xx_wrapper_of_a_model_miss_keeps_its_status(): void
+    {
+        $miss = (new ModelNotFoundException)->setModel('Fixtures\Models\Invoice', [5]);
+
+        $response = $this->handler->render(
+            Request::create('/test', 'GET'),
+            new BaseHttpRequestException($miss->getMessage(), 500, $miss),
+        );
+
+        $this->assertEquals(500, $response->getStatusCode());
     }
 
     public function test_model_not_found_detail_can_be_reworded_by_a_subclass(): void
