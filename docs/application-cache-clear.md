@@ -233,8 +233,9 @@ Require `^0.9.0`. The user path is additive, so most consumers need no change:
   gate keeps the token-only behaviour of earlier releases: the package does
   not resolve a user, so a request carrying a bearer gets the same 401 as
   before. When you define the gate, check any `Gate::before()` or
-  `Gate::after()` callback first: one that returns `true` for a user lets that
-  user clear caches whatever the definition says.
+  `Gate::after()` callback first: a `before()` that returns `true` for a user
+  lets that user clear caches whatever the definition says, and an `after()`
+  that returns `true` does so whenever the definition returns `null`.
 - **Overriding the rule.** A subclass that overrides
   `isAuthorizedForDetailedInfo()` moves the override to
   `cacheOperationAuthorization()`; the controllers no longer call the former.
