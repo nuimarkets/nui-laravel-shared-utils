@@ -52,7 +52,7 @@ no token configured, and the token works for a request with no signed-in user.
 
 | Path | Passes when | For |
 |------|-------------|-----|
-| User | `request()->user()` resolves and `Gate::forUser($user)->allows(CacheAbility::MANAGE)` | An admin frontend calling as its signed-in user |
+| User | The request carries `Authorization: Bearer`, `request()->user()` resolves to an object, and `Gate::forUser($user)->allows(CacheAbility::MANAGE)` | An admin frontend calling as its signed-in user |
 | Token | `?token=` matches `config('app.clear_cache_token')`, compared with `hash_equals()` | Operators and scripts |
 
 The token is checked first, so a request with a valid token never touches the
@@ -68,6 +68,13 @@ The caller sends its user's bearer token instead of a shared secret:
 curl -H 'Authorization: Bearer <user token>' \
   'https://service.example.com/?action=forget&key=lookup:countries:all'
 ```
+
+The bearer header is required. A request without one never passes the user
+path, even when `request()->user()` resolves from a session or cookie: both
+endpoints are GETs, Laravel's CSRF check skips GETs, and a browser attaches
+cookies to a cross-site GET (a link or an `<img>`) but never an
+`Authorization` header. A guard that resolves null or a non-object is denied
+without the gate being asked.
 
 Wire-up per consumer:
 
@@ -86,14 +93,22 @@ Wire-up per consumer:
    typed as a class the guard does not return throws a `TypeError` (a 500).
    Type it as the class your guard actually returns, or leave it untyped.
 
-2. Authenticate bearer requests on the route, so `request()->user()` resolves
-   by the time the controller runs. The package does not authenticate: on an
-   unauthenticated route (a typical `/` home route) `request()->user()` is
-   null and only the token can pass. Run the service's existing API
-   authentication for the cache actions when the request carries a bearer
-   token, and pass every other request through untouched so health checks and
-   token-only calls behave as before. A bearer that fails authentication
-   should get the auth layer's own 401 as JSON, not a redirect.
+2. Authenticate the bearer on the route with a stateless guard, and make
+   sure `request()->user()` reads that guard by the time the controller runs.
+   The package does not authenticate. `request()->user()` reads the default
+   guard, or a resolver set with `$request->setUserResolver()`. Laravel's
+   `auth:<guard>` middleware makes its guard the default (`Auth::shouldUse()`);
+   a hand-rolled check has to do the same, or `request()->user()` keeps
+   reading the old default and the user path denies. Never leave a session
+   guard as the default here: on a route in the `web` group it resolves the
+   signed-in user from the cookie, and the package checks only that a bearer
+   header is present, not which guard produced the user.
+
+   Run the service's existing API authentication for the cache actions when
+   the request carries a bearer token, and pass every other request through
+   untouched so health checks and token-only calls behave as before. A bearer
+   that fails authentication should get the auth layer's own 401 as JSON, not
+   a redirect.
 
 3. If a gateway or proxy sits in front of the service, make sure it forwards
    the `Authorization` header on that route.
@@ -214,8 +229,8 @@ Require `^0.9.0`. The user path is additive, so most consumers need no change:
   gate keeps the token-only behaviour of earlier releases, unless it has a
   `Gate::before()` or `Gate::after()` callback that returns `true` for some
   users (see [User path](#user-path)). Check those callbacks before upgrading:
-  on a route where `request()->user()` resolves, those users can now clear
-  caches.
+  on a request that carries a bearer and where `request()->user()` resolves,
+  those users can now clear caches.
 - **Overriding the rule.** A subclass that overrides
   `isAuthorizedForDetailedInfo()` moves the override to
   `cacheOperationAuthorization()`; the controllers no longer call the former.

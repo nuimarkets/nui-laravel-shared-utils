@@ -16,10 +16,14 @@ use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
  *    a string. Consumers wire it in `config/app.php` as
  *    `'clear_cache_token' => env('CLEAR_CACHE_TOKEN')` so the value survives
  *    `php artisan config:cache`.
- *  - User: `request()->user()` resolves to an object and the gate allows that
- *    user CacheAbility::MANAGE. Independent of the token config. A guard that
- *    resolves null or a non-object (some return false) is denied without
- *    asking the gate, so a gate closure never sees one. A consumer that
+ *  - User: the request carries an `Authorization: Bearer` header,
+ *    `request()->user()` resolves to an object, and the gate allows that user
+ *    CacheAbility::MANAGE. Independent of the token config. A session or
+ *    cookie alone never passes: both endpoints are GETs, which CSRF
+ *    protection does not cover, and a browser attaches cookies to a
+ *    cross-site GET but never an Authorization header. A guard that resolves
+ *    null or a non-object (some return false) is denied without asking the
+ *    gate, so a gate closure never sees one. A consumer that
  *    defines no such gate gets a denial here, so only the token can pass,
  *    unless a Gate::before() or Gate::after() callback grants the user every
  *    ability.
@@ -49,6 +53,10 @@ trait AuthorizesCacheOperations
             return ['authorized_by' => 'token'];
         }
 
+        if (! $this->requestCarriesBearer()) {
+            return null;
+        }
+
         $user = request()->user();
 
         if (! is_object($user) || ! Gate::forUser($user)->allows(CacheAbility::MANAGE)) {
@@ -75,6 +83,18 @@ trait AuthorizesCacheOperations
         }
 
         return hash_equals($configured, (string) request()->get('token', ''));
+    }
+
+    /**
+     * Whether the request sent a non-empty bearer credential. The user path
+     * requires one, so a user resolved from a session or cookie, which any
+     * cross-site GET carries, never passes on its own.
+     */
+    private function requestCarriesBearer(): bool
+    {
+        $bearer = request()->bearerToken();
+
+        return is_string($bearer) && $bearer !== '';
     }
 
     /**

@@ -220,6 +220,17 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function it_restricts_a_session_user_the_gate_allows_without_a_bearer()
+    {
+        $this->allowCacheGate(true);
+        $this->actingAs(new GenericUser(['id' => 42]), 'web');
+
+        $this->get('/clear-cache')->assertStatus(401);
+        $this->withToken('')->get('/clear-cache')->assertStatus(401);
+        $this->get('/clear-cache?token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
     public function it_allows_a_user_the_gate_denies_with_a_valid_token()
     {
         $this->allowCacheGate(false);
@@ -382,11 +393,12 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     }
 
     /**
-     * Resolve request()->user() to $user through a request guard, the way a
-     * consumer's bearer-token guard would.
+     * Resolve request()->user() to $user through a request guard and send a
+     * bearer header, the way a consumer's bearer-token guard would.
      */
     private function signIn(object $user): void
     {
+        $this->withToken('cache-test-bearer');
         Auth::viaRequest('cache-test', fn () => $user);
         config()->set('auth.guards.cache-test', ['driver' => 'cache-test']);
         Auth::shouldUse('cache-test');

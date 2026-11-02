@@ -224,6 +224,20 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function forget_returns_401_for_a_session_user_the_gate_allows_without_a_bearer()
+    {
+        Cache::put('lookup:countries:all', ['NZ'], 600);
+        $this->allowCacheGate(true);
+        $this->actingAs(new GenericUser(['id' => 42]), 'web');
+
+        $this->get('/forget?key=lookup:countries:all')->assertStatus(401);
+        $this->withToken('')->get('/forget?key=lookup:countries:all')->assertStatus(401);
+        $this->assertTrue(Cache::has('lookup:countries:all'));
+
+        $this->get('/forget?key=anything&token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
     public function forget_returns_401_without_asking_the_gate_when_the_guard_resolves_a_non_object()
     {
         Gate::define(CacheAbility::MANAGE, fn ($user) => $user->isAllowed());
@@ -368,13 +382,14 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     /**
-     * Resolve request()->user() to $user through a request guard, the way a
-     * consumer's bearer-token guard would. A guard may resolve a user that is
-     * not Authenticatable (a token-decoded user object), or a non-object such
-     * as false, which actingAs() would refuse.
+     * Resolve request()->user() to $user through a request guard and send a
+     * bearer header, the way a consumer's bearer-token guard would. A guard
+     * may resolve a user that is not Authenticatable (a token-decoded user
+     * object), or a non-object such as false, which actingAs() would refuse.
      */
     private function signIn(mixed $user): void
     {
+        $this->withToken('cache-test-bearer');
         Auth::viaRequest('cache-test', fn () => $user);
         config()->set('auth.guards.cache-test', ['driver' => 'cache-test']);
         Auth::shouldUse('cache-test');
