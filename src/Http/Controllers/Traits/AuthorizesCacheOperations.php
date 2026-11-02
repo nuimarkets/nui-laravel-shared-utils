@@ -16,17 +16,19 @@ use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
  *    a string. Consumers wire it in `config/app.php` as
  *    `'clear_cache_token' => env('CLEAR_CACHE_TOKEN')` so the value survives
  *    `php artisan config:cache`.
- *  - User: the request carries an `Authorization: Bearer` header,
- *    `request()->user()` resolves to an object, and the gate allows that user
- *    CacheAbility::MANAGE. Independent of the token config. A session or
+ *  - User: the consumer has defined CacheAbility::MANAGE, the request
+ *    carries an `Authorization: Bearer` header, `request()->user()` resolves
+ *    to an object, and the gate allows that user the ability. Independent of
+ *    the token config. A session or
  *    cookie alone never passes: both endpoints are GETs, which CSRF
  *    protection does not cover, and a browser attaches cookies to a
  *    cross-site GET but never an Authorization header. A guard that resolves
  *    null or a non-object (some return false) is denied without asking the
- *    gate, so a gate closure never sees one. A consumer that
- *    defines no such gate gets a denial here, so only the token can pass,
- *    unless a Gate::before() or Gate::after() callback grants the user every
- *    ability.
+ *    gate, so a gate closure never sees one. A consumer that defines no
+ *    such gate never reaches the user path: no user is resolved, so only the
+ *    token can pass, a service with no auth guard configured still gets a
+ *    401, and a Gate::before() or Gate::after() callback that grants every
+ *    ability does not open it.
  *
  * The token is checked first, so a valid token is honoured without touching
  * the auth guard and a request carrying both is recorded as `token`.
@@ -53,7 +55,7 @@ trait AuthorizesCacheOperations
             return ['authorized_by' => 'token'];
         }
 
-        if (! $this->requestCarriesBearer()) {
+        if (! Gate::has(CacheAbility::MANAGE) || ! $this->requestCarriesBearer()) {
             return null;
         }
 

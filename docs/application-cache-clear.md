@@ -52,7 +52,7 @@ no token configured, and the token works for a request with no signed-in user.
 
 | Path | Passes when | For |
 |------|-------------|-----|
-| User | The request carries `Authorization: Bearer`, `request()->user()` resolves to an object, and `Gate::forUser($user)->allows(CacheAbility::MANAGE)` | An admin frontend calling as its signed-in user |
+| User | `CacheAbility::MANAGE` is defined, the request carries `Authorization: Bearer`, `request()->user()` resolves to an object, and `Gate::forUser($user)->allows(CacheAbility::MANAGE)` | An admin frontend calling as its signed-in user |
 | Token | `?token=` matches `config('app.clear_cache_token')`, compared with `hash_equals()` | Operators and scripts |
 
 The token is checked first, so a request with a valid token never touches the
@@ -113,11 +113,12 @@ Wire-up per consumer:
 3. If a gateway or proxy sits in front of the service, make sure it forwards
    the `Authorization` header on that route.
 
-Without a `CacheAbility::MANAGE` definition the ability is undefined, Laravel
-denies it, and only the token can pass. The exception is a `Gate::before()` or
-`Gate::after()` callback that returns `true` for a user: Laravel consults it
-for every ability, defined or not, so that user passes the user path with no
-definition at all.
+Without a `CacheAbility::MANAGE` definition the package never takes the user
+path. It does not resolve a user, so only the token can pass, a service with
+no auth guard configured still answers 401 rather than failing to resolve one,
+and a `Gate::before()` or `Gate::after()` callback that grants every ability
+does not open it. Once the ability is defined, such a callback applies to it
+as it does to any ability.
 
 ### Token path
 
@@ -219,25 +220,30 @@ in place of the raw key) plus:
 The token is never logged. The audit fields go to the log only; the response
 bodies are unchanged. `user_id` is on `SensitiveDataProcessor`'s default PII
 list, so a consumer that logs with PII redaction on records it as
-`[REDACTED]`; `authorized_by` matches neither default list.
+`[REDACTED]`; `authorized_by` matches neither default list. To keep the
+identifier, add `user_id` to `processors.sensitive_data.preserve_fields` in
+`config/logging-utils.php`. That list applies to every log the service
+writes, so it is a decision about the service's own logging policy.
 
 ## Upgrading to 0.9.0
 
 Require `^0.9.0`. The user path is additive, so most consumers need no change:
 
 - **No gate, no change.** A consumer that defines no `CacheAbility::MANAGE`
-  gate keeps the token-only behaviour of earlier releases, unless it has a
-  `Gate::before()` or `Gate::after()` callback that returns `true` for some
-  users (see [User path](#user-path)). Check those callbacks before upgrading:
-  on a request that carries a bearer and where `request()->user()` resolves,
-  those users can now clear caches.
+  gate keeps the token-only behaviour of earlier releases: the package does
+  not resolve a user, so a request carrying a bearer gets the same 401 as
+  before. When you define the gate, check any `Gate::before()` or
+  `Gate::after()` callback first: one that returns `true` for a user lets that
+  user clear caches whatever the definition says.
 - **Overriding the rule.** A subclass that overrides
   `isAuthorizedForDetailedInfo()` moves the override to
   `cacheOperationAuthorization()`; the controllers no longer call the former.
 - **Logs.** The success logs gain `authorized_by` and, on the user path,
   `user_id` (see [Auditing](#auditing)).
 - **`flushAppCache()`** takes an optional `$authorization` array, merged into
-  its log only. Existing calls are unchanged.
+  its log only. Existing calls are unchanged; a subclass that overrides it
+  adds the same `array $authorization = []` parameter, or PHP refuses to load
+  the class.
 
 ## See also
 

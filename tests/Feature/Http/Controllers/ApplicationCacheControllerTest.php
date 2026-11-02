@@ -3,6 +3,7 @@
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 
 use Illuminate\Auth\GenericUser;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
@@ -184,6 +185,8 @@ class ApplicationCacheControllerTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('detail.forgotten', true);
         $this->assertFalse(Cache::has('lookup:countries:all'));
+        $this->assertArrayNotHasKey('authorized_by', $response->json('detail'));
+        $this->assertArrayNotHasKey('user_id', $response->json('detail'));
     }
 
     #[Test]
@@ -248,6 +251,38 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function forget_returns_401_for_a_bearer_when_the_service_has_no_gate_or_guard()
+    {
+        config()->set('auth.defaults.guard', null);
+        config()->set('auth.guards', []);
+
+        $this->withToken('anything')->get('/forget?key=anything')->assertStatus(401);
+    }
+
+    #[Test]
+    public function forget_ignores_a_grant_all_before_callback_when_no_gate_is_defined()
+    {
+        Gate::before(fn () => true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $this->get('/forget?key=anything')->assertStatus(401);
+    }
+
+    #[Test]
+    public function forget_records_a_token_call_without_resolving_the_user()
+    {
+        $this->allowCacheGate(true);
+        $this->withToken('cache-test-bearer');
+        Auth::viaRequest('cache-test', fn () => throw new \RuntimeException('guard resolved on a token call'));
+        config()->set('auth.guards.cache-test', ['driver' => 'cache-test']);
+        Auth::shouldUse('cache-test');
+
+        $this->get('/forget?key=anything&token='.self::VALID_TOKEN)->assertStatus(200);
+
+        $this->assertForgetLogged(['authorized_by' => 'token']);
+    }
+
+    #[Test]
     public function forget_allows_a_user_the_gate_allows_when_the_token_is_unconfigured()
     {
         config()->set('app.clear_cache_token', null);
@@ -262,12 +297,22 @@ class ApplicationCacheControllerTest extends TestCase
     #[Test]
     public function forget_logs_the_auth_identifier_of_an_authenticatable_user()
     {
+        // An identifier that is not `id`, so the public-`id` fallback cannot
+        // stand in for getAuthIdentifier().
+        $user = new class(['id' => 42, 'uuid' => 'auth-7']) extends GenericUser
+        {
+            public function getAuthIdentifierName()
+            {
+                return 'uuid';
+            }
+        };
+        $this->assertInstanceOf(Authenticatable::class, $user);
         $this->allowCacheGate(true);
-        $this->signIn(new GenericUser(['id' => 42]));
+        $this->signIn($user);
 
         $this->get('/forget?key=anything')->assertStatus(200);
 
-        $this->assertForgetLogged(['authorized_by' => 'user', 'user_id' => 42]);
+        $this->assertForgetLogged(['authorized_by' => 'user', 'user_id' => 'auth-7']);
     }
 
     #[Test]
