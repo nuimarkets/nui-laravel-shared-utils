@@ -29,8 +29,9 @@ class ClearLadaAndResponseCacheController extends Controller
      */
     public function clearCache(Request $request): JsonResponse
     {
+        $authorization = $this->cacheOperationAuthorization();
 
-        if (! $this->isAuthorizedForDetailedInfo()) {
+        if ($authorization === null) {
             return new JsonResponse([
                 'status' => 'restricted',
                 'message' => 'Not available',
@@ -121,10 +122,11 @@ class ClearLadaAndResponseCacheController extends Controller
 
         if ($request->query('include') === 'app') {
             $detail['app_cache'] = app(ApplicationCacheController::class)
-                ->flushAppCache();
+                ->flushAppCache($authorization);
         }
 
-        Log::info($msg, $detail);
+        // The audit fields go to the log only; the response detail is unchanged.
+        Log::info($msg, $detail + $authorization);
 
         return new JsonResponse([
             'message' => $msg,

@@ -34,7 +34,9 @@ class ApplicationCacheController extends Controller
      */
     public function forget(Request $request): JsonResponse
     {
-        if (! $this->isAuthorizedForDetailedInfo()) {
+        $authorization = $this->cacheOperationAuthorization();
+
+        if ($authorization === null) {
             return new JsonResponse([
                 'status' => 'restricted',
                 'message' => 'Not available',
@@ -73,7 +75,7 @@ class ApplicationCacheController extends Controller
         // user identifiers or tokens and the audit log may ship to wider
         // log surfaces than the immediate operator. The raw key stays in
         // the HTTP response for the caller's own correlation.
-        $logContext = $detail;
+        $logContext = $detail + $authorization;
         $logContext['key_hash'] = hash('sha256', $key);
         unset($logContext['key']);
 
@@ -92,9 +94,13 @@ class ApplicationCacheController extends Controller
      *
      * Returns the detail block so the caller can merge it into its own response.
      *
+     * @param  array<string, mixed>  $authorization  the caller's audit fields
+     *                                               (`authorized_by`, `user_id`), added to
+     *                                               this method's log but not to the
+     *                                               returned detail
      * @return array<string, mixed>
      */
-    public function flushAppCache(): array
+    public function flushAppCache(array $authorization = []): array
     {
         $start = microtime(true);
         $store = Cache::store();
@@ -109,9 +115,9 @@ class ApplicationCacheController extends Controller
         ];
 
         if ($flushed) {
-            Log::info('Application cache flushed', $detail);
+            Log::info('Application cache flushed', $detail + $authorization);
         } else {
-            Log::warning('Application cache flush failed', $detail);
+            Log::warning('Application cache flush failed', $detail + $authorization);
         }
 
         return $detail;

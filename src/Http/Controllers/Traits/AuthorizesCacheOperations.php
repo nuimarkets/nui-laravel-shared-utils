@@ -2,14 +2,30 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Http\Controllers\Traits;
 
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Gate;
+use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
+
 /**
- * Shared authorization gate for cache-management endpoints.
+ * Shared authorization for the cache-management endpoints.
  *
- * Token-only: the request must carry `?token=` matching
- * `config('app.clear_cache_token')`. Consumers wire this in their
- * `config/app.php` as `'clear_cache_token' => env('CLEAR_CACHE_TOKEN')`
- * so the value survives `php artisan config:cache`. Set the env var in
- * every environment the endpoint is reachable from (including local `.env`).
+ * A request is authorized by either of two paths:
+ *
+ *  - Token: `?token=` matches `config('app.clear_cache_token')`, compared in
+ *    constant time. Fails closed when the config value is unset, empty or not
+ *    a string. Consumers wire it in `config/app.php` as
+ *    `'clear_cache_token' => env('CLEAR_CACHE_TOKEN')` so the value survives
+ *    `php artisan config:cache`.
+ *  - User: `request()->user()` resolves to an object and the gate allows that
+ *    user CacheAbility::MANAGE. Independent of the token config. A guard that
+ *    resolves null or a non-object (some return false) is denied without
+ *    asking the gate, so a gate closure never sees one. A consumer that
+ *    defines no such gate gets a denial here, so only the token can pass,
+ *    unless a Gate::before() or Gate::after() callback grants the user every
+ *    ability.
+ *
+ * The token is checked first, so a valid token is honoured without touching
+ * the auth guard and a request carrying both is recorded as `token`.
  *
  * Used by ClearLadaAndResponseCacheController and ApplicationCacheController
  * so both endpoints share one auth contract.
@@ -18,6 +34,40 @@ trait AuthorizesCacheOperations
 {
     protected function isAuthorizedForDetailedInfo(): bool
     {
+        return $this->cacheOperationAuthorization() !== null;
+    }
+
+    /**
+     * Which path authorized the request, for the audit log, or null when
+     * neither did. Never carries the token.
+     *
+     * @return array{authorized_by: 'token'}|array{authorized_by: 'user', user_id?: int|string}|null
+     */
+    protected function cacheOperationAuthorization(): ?array
+    {
+        if ($this->cacheTokenMatches()) {
+            return ['authorized_by' => 'token'];
+        }
+
+        $user = request()->user();
+
+        if (! is_object($user) || ! Gate::forUser($user)->allows(CacheAbility::MANAGE)) {
+            return null;
+        }
+
+        $authorization = ['authorized_by' => 'user'];
+
+        $userId = $this->cacheOperationUserId($user);
+
+        if ($userId !== null) {
+            $authorization['user_id'] = $userId;
+        }
+
+        return $authorization;
+    }
+
+    private function cacheTokenMatches(): bool
+    {
         $configured = config('app.clear_cache_token');
 
         if (! is_string($configured) || $configured === '') {
@@ -25,5 +75,20 @@ trait AuthorizesCacheOperations
         }
 
         return hash_equals($configured, (string) request()->get('token', ''));
+    }
+
+    /**
+     * The user's identifier: the auth identifier for an Authenticatable, else
+     * a public `id` property (a token-decoded user object), else null.
+     */
+    private function cacheOperationUserId(mixed $user): int|string|null
+    {
+        $id = match (true) {
+            $user instanceof Authenticatable => $user->getAuthIdentifier(),
+            is_object($user) && isset($user->id) => $user->id,
+            default => null,
+        };
+
+        return is_int($id) || is_string($id) ? $id : null;
     }
 }

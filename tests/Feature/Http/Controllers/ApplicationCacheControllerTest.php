@@ -2,9 +2,14 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 
+use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
+use NuiMarkets\LaravelSharedUtils\Auth\JWTUser;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ApplicationCacheController;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ClearLadaAndResponseCacheController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
@@ -14,9 +19,9 @@ use PHPUnit\Framework\Attributes\Test;
  * Tests for ApplicationCacheController + the ?include=app delegation
  * from ClearLadaAndResponseCacheController.
  *
- * Auth contract is token-only via AuthorizesCacheOperations: every
- * authorized request carries ?token=$VALID_TOKEN, every unauthorized
- * request omits it.
+ * Auth contract via AuthorizesCacheOperations: a request passes with
+ * ?token=$VALID_TOKEN, or as a signed-in user the CacheAbility::MANAGE gate
+ * allows. Tests without a signed-in user exercise the token path alone.
  *
  * Uses the array cache driver so tests don't depend on Redis being up.
  * The driver class name is verified in the response payload as a regression
@@ -65,7 +70,7 @@ class ApplicationCacheControllerTest extends TestCase
     {
         parent::setUp();
 
-        // Token-only auth: configure once, every authorized test passes ?token=.
+        // Configure the token once; token-path tests pass ?token=.
         config()->set('app.clear_cache_token', self::VALID_TOKEN);
 
         // Spy logs so the controller's Log::info() calls don't try to write
@@ -168,6 +173,140 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function forget_allows_a_user_the_gate_allows_without_a_token()
+    {
+        Cache::put('lookup:countries:all', ['NZ'], 600);
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/forget?key=lookup:countries:all');
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('detail.forgotten', true);
+        $this->assertFalse(Cache::has('lookup:countries:all'));
+    }
+
+    #[Test]
+    public function forget_returns_401_for_a_user_the_gate_denies_without_a_token()
+    {
+        Cache::put('lookup:countries:all', ['NZ'], 600);
+        $this->allowCacheGate(false);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/forget?key=lookup:countries:all');
+
+        $response->assertStatus(401);
+        $response->assertJson([
+            'status' => 'restricted',
+            'message' => 'Not available',
+        ]);
+        $this->assertTrue(Cache::has('lookup:countries:all'));
+    }
+
+    #[Test]
+    public function forget_allows_a_user_the_gate_denies_with_a_valid_token()
+    {
+        $this->allowCacheGate(false);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/forget?key=anything&token='.self::VALID_TOKEN);
+
+        $response->assertStatus(200);
+    }
+
+    #[Test]
+    public function forget_leaves_a_user_to_the_token_when_no_gate_is_defined()
+    {
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $this->get('/forget?key=anything')->assertStatus(401);
+        $this->get('/forget?key=anything&token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
+    public function forget_returns_401_without_asking_the_gate_when_the_guard_resolves_a_non_object()
+    {
+        Gate::define(CacheAbility::MANAGE, fn ($user) => $user->isAllowed());
+        $this->signIn(false);
+
+        $this->get('/forget?key=anything')->assertStatus(401);
+        $this->get('/forget?key=anything&token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
+    public function forget_allows_a_user_the_gate_allows_when_the_token_is_unconfigured()
+    {
+        config()->set('app.clear_cache_token', null);
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/forget?key=anything');
+
+        $response->assertStatus(200);
+    }
+
+    #[Test]
+    public function forget_logs_the_auth_identifier_of_an_authenticatable_user()
+    {
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $this->get('/forget?key=anything')->assertStatus(200);
+
+        $this->assertForgetLogged(['authorized_by' => 'user', 'user_id' => 42]);
+    }
+
+    #[Test]
+    public function forget_logs_the_public_id_of_a_token_decoded_user()
+    {
+        $this->allowCacheGate(true);
+        $this->signIn(new JWTUser(id: 'user-7', org_id: 'org-1', role: 'admin'));
+
+        $this->get('/forget?key=anything')->assertStatus(200);
+
+        $this->assertForgetLogged(['authorized_by' => 'user', 'user_id' => 'user-7']);
+    }
+
+    #[Test]
+    public function forget_logs_a_user_with_no_identifier_without_one()
+    {
+        $this->allowCacheGate(true);
+        $this->signIn(new \stdClass);
+
+        $this->get('/forget?key=anything')->assertStatus(200);
+
+        $this->assertForgetLogged(['authorized_by' => 'user']);
+    }
+
+    #[Test]
+    public function forget_logs_a_token_call_without_the_token()
+    {
+        $this->get('/forget?key=anything&token='.self::VALID_TOKEN)->assertStatus(200);
+
+        $this->assertForgetLogged(['authorized_by' => 'token']);
+    }
+
+    #[Test]
+    public function clear_cache_with_include_app_logs_the_user_on_the_flush()
+    {
+        $this->skipIfNoRedis();
+
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache?include=app');
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('detail.app_cache.flushed', true);
+        $this->assertArrayNotHasKey('authorized_by', $response->json('detail.app_cache'));
+        Log::shouldHaveReceived('info')
+            ->withArgs(fn ($message, $context = []) => $message === 'Application cache flushed'
+                && ($context['authorized_by'] ?? null) === 'user'
+                && ($context['user_id'] ?? null) === 42)
+            ->once();
+    }
+
+    #[Test]
     public function clear_cache_with_include_app_flushes_application_cache()
     {
         $this->skipIfNoRedis();
@@ -221,5 +360,42 @@ class ApplicationCacheControllerTest extends TestCase
             Cache::has('lookup:countries:all'),
             'Application cache must not be touched on a 401 response.'
         );
+    }
+
+    private function allowCacheGate(bool $allow): void
+    {
+        Gate::define(CacheAbility::MANAGE, fn ($user) => $allow);
+    }
+
+    /**
+     * Resolve request()->user() to $user through a request guard, the way a
+     * consumer's bearer-token guard would. A guard may resolve a user that is
+     * not Authenticatable (a token-decoded user object), or a non-object such
+     * as false, which actingAs() would refuse.
+     */
+    private function signIn(mixed $user): void
+    {
+        Auth::viaRequest('cache-test', fn () => $user);
+        config()->set('auth.guards.cache-test', ['driver' => 'cache-test']);
+        Auth::shouldUse('cache-test');
+    }
+
+    /**
+     * Exactly one forget success log, whose audit fields are exactly
+     * $expected (so a missing or extra user_id fails), with no token value.
+     *
+     * @param  array<string, mixed>  $expected
+     */
+    private function assertForgetLogged(array $expected): void
+    {
+        Log::shouldHaveReceived('info')
+            ->withArgs(function ($message, $context = []) use ($expected) {
+                $audit = array_intersect_key($context, array_flip(['authorized_by', 'user_id']));
+
+                return str_starts_with($message, 'Application cache key')
+                    && $audit === $expected
+                    && ! str_contains(json_encode($context), self::VALID_TOKEN);
+            })
+            ->once();
     }
 }
