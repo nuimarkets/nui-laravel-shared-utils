@@ -360,6 +360,21 @@ class ApplicationCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function clear_cache_returns_401_for_a_session_user_the_gate_allows_without_a_bearer()
+    {
+        // No skipIfNoRedis() here, for the reason the next test gives: the
+        // denial happens before clearCache() touches Redis, so this guard on
+        // the bulk clear runs wherever the suite does.
+        Cache::put('lookup:countries:all', ['NZ'], 600);
+        $this->allowCacheGate(true);
+        $this->actingAs(new GenericUser(['id' => 42]), 'web');
+
+        $this->get('/clear-cache?include=app')->assertStatus(401);
+        $this->withToken('')->get('/clear-cache?include=app')->assertStatus(401);
+        $this->assertTrue(Cache::has('lookup:countries:all'));
+    }
+
+    #[Test]
     public function clear_cache_with_include_app_returns_401_without_token()
     {
         // No skipIfNoRedis() here: the auth gate returns 401 before
