@@ -5,8 +5,8 @@ namespace NuiMarkets\LaravelSharedUtils\Auth;
 /**
  * Gate ability names for the cache-management endpoints.
  *
- * A consuming service grants a signed-in user the cache actions by defining
- * this ability, for example in a service provider's boot():
+ * A consuming service grants a user who calls with a bearer token the cache
+ * actions by defining this ability, for example in a service provider's boot():
  *
  *     Gate::define(CacheAbility::MANAGE, fn ($user) => $user->isSuperAdmin());
  *

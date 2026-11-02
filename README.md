@@ -327,7 +327,7 @@ This package ships multiple release lines, selected via your `composer.json` con
 | Constraint | Laravel | PHP | PHPUnit | Status |
 | --- | --- | --- | --- | --- |
 | `^0.9.x` | 11.x / 12.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
-| `^0.8.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.9.x`, which lets a signed-in user the `CacheAbility::MANAGE` gate allows call the cache-management endpoints (see [Upgrading to 0.9.0](docs/application-cache-clear.md#upgrading-to-090)). No new features. |
+| `^0.8.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.9.x`, which lets a user the `CacheAbility::MANAGE` gate allows call the cache-management endpoints with their bearer token (see [Upgrading to 0.9.0](docs/application-cache-clear.md#upgrading-to-090)). No new features. |
 | `^0.7.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.8.x`, which changes the outbound trace header (see [Upgrading to 0.8.1](docs/distributed-tracing.md#upgrading-to-081)). No new features. |
 | `^0.6.x` | 10.15+ / 11.x | 8.3+ | 10.5+ | Maintenance pin for Laravel 10 consumers. No new features. |
 | `^0.5.x` | 8.x / 9.x | 8.0+ | 9.x | Maintenance pin for legacy consumers. No new features. |
