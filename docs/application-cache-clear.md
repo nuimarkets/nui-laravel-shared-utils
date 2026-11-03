@@ -46,12 +46,81 @@ The `?include=app` flag is read from the query string by
 
 ## Authorization
 
-Both endpoints share `AuthorizesCacheOperations::isAuthorizedForDetailedInfo()`,
-which is **token-only**: the request must carry `?token=` matching
-`config('app.clear_cache_token')`. Comparison is constant-time via
-`hash_equals()`.
+Both endpoints share `AuthorizesCacheOperations`, which authorizes a request
+by either of two paths. Neither depends on the other: the user path works with
+no token configured, and the token works for a request with no signed-in user.
+
+| Path | Passes when | For |
+|------|-------------|-----|
+| User | `CacheAbility::MANAGE` is defined, the request carries `Authorization: Bearer`, `request()->user()` resolves to an object, and `Gate::forUser($user)->allows(CacheAbility::MANAGE)` | An admin frontend calling as its signed-in user |
+| Token | `?token=` matches `config('app.clear_cache_token')`, compared with `hash_equals()` | Operators and scripts |
+
+The token is checked first, so a request with a valid token never touches the
+auth guard, and a request that carries both is recorded as `token`. Anything
+else gets `401 { "status": "restricted", "message": "Not available" }`,
+whichever path it tried.
+
+### User path
+
+The caller sends its user's bearer token instead of a shared secret:
+
+```bash
+curl -H 'Authorization: Bearer <user token>' \
+  'https://service.example.com/?action=forget&key=lookup:countries:all'
+```
+
+The bearer header is required. A request without one never passes the user
+path, even when `request()->user()` resolves from a session or cookie: both
+endpoints are GETs, Laravel's CSRF check skips GETs, and a browser attaches
+cookies to a cross-site GET (a link or an `<img>`) but never an
+`Authorization` header. A guard that resolves null or a non-object is denied
+without the gate being asked.
 
 Wire-up per consumer:
+
+1. Define the gate where the service registers gates (its
+   `AuthServiceProvider`, else `AppServiceProvider::boot()`), returning true
+   only for the users who may clear caches:
+
+   ```php
+   use Illuminate\Support\Facades\Gate;
+   use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
+
+   Gate::define(CacheAbility::MANAGE, fn ($user) => $user->isSuperAdmin());
+   ```
+
+   Laravel passes the resolved user straight to the callback, so a parameter
+   typed as a class the guard does not return throws a `TypeError` (a 500).
+   Type it as the class your guard actually returns, or leave it untyped.
+
+2. Authenticate the bearer on the route with a stateless guard, and make
+   sure `request()->user()` reads that guard by the time the controller runs.
+   The package does not authenticate. `request()->user()` reads the default
+   guard, or a resolver set with `$request->setUserResolver()`. Laravel's
+   `auth:<guard>` middleware makes its guard the default (`Auth::shouldUse()`);
+   a hand-rolled check has to do the same, or `request()->user()` keeps
+   reading the old default and the user path denies. Never leave a session
+   guard as the default here: on a route in the `web` group it resolves the
+   signed-in user from the cookie, and the package checks only that a bearer
+   header is present, not which guard produced the user.
+
+   Run the service's existing API authentication for the cache actions when
+   the request carries a bearer token, and pass every other request through
+   untouched so health checks and token-only calls behave as before. A bearer
+   that fails authentication should get the auth layer's own 401 as JSON, not
+   a redirect.
+
+3. If a gateway or proxy sits in front of the service, make sure it forwards
+   the `Authorization` header on that route.
+
+Without a `CacheAbility::MANAGE` definition the package never takes the user
+path. It does not resolve a user, so only the token can pass, a service with
+no auth guard configured still answers 401 rather than failing to resolve one,
+and a `Gate::before()` or `Gate::after()` callback that grants every ability
+does not open it. Once the ability is defined, such a callback applies to it
+as it does to any ability.
+
+### Token path
 
 1. Add to your `config/app.php`:
 
@@ -59,14 +128,23 @@ Wire-up per consumer:
    'clear_cache_token' => env('CLEAR_CACHE_TOKEN'),
    ```
 
-2. Set `CLEAR_CACHE_TOKEN` in every environment the endpoint is reachable from
-   (production, staging, dev) and in your local `.env`.
+2. Set `CLEAR_CACHE_TOKEN` in each environment where operators or scripts
+   call the endpoint with a token, including your local `.env` if you do.
 
 The config indirection means the value survives `php artisan config:cache`.
+If `config('app.clear_cache_token')` is unset, empty or not a string, the token
+path fails closed and refuses every token; the user path still works.
 
-If `config('app.clear_cache_token')` is unset or empty, every request returns
-401 (fail-closed). Unauthorized requests get
-`401 { "status": "restricted", "message": "Not available" }`.
+The token travels in the query string, where access logs and browser history
+can record it. Keep it for server-side callers; a frontend uses the user path.
+
+### Customising the rule
+
+The controllers call `cacheOperationAuthorization()`, which returns the audit
+fields for the path that passed, or `null`. A subclass that changes the rule
+overrides that method. `isAuthorizedForDetailedInfo()` remains as a boolean
+wrapper around it, and overriding the wrapper alone does not change what the
+controllers allow.
 
 ## Surgical: `?action=forget&key=X`
 
@@ -127,9 +205,46 @@ the pre-`0.6.0` behaviour. Existing callers that don't opt in see no change.
 
 ## Auditing
 
-Both `forget` and `flushAppCache` emit a `Log::info` with the full detail
-block. Search logs for `"Application cache key forgotten"` or
-`"Application cache flushed"` to see who called what and when.
+Every success writes a `Log::info`: `clearCache` under its result message
+(for example `"Lada cache and response cache cleared"`), `forget` under
+`"Application cache key forgotten"` or `"Application cache key was already
+absent"`, and the `include=app` flush under `"Application cache flushed"`.
+Each carries the detail block (`forget` logs the key's SHA-256 as `key_hash`
+in place of the raw key) plus:
+
+| Field | Value |
+|-------|-------|
+| `authorized_by` | `user` or `token` |
+| `user_id` | User path only: the auth identifier when the user implements `Authenticatable`, else its public `id` property. Omitted when it has neither. |
+
+The token is never logged. The audit fields go to the log only; the response
+bodies are unchanged. `user_id` is on `SensitiveDataProcessor`'s default PII
+list, so a consumer that logs with PII redaction on records it as
+`[REDACTED]`; `authorized_by` matches neither default list. To keep the
+identifier, add `user_id` to `processors.sensitive_data.preserve_fields` in
+`config/logging-utils.php`. That list applies to every log the service
+writes, so it is a decision about the service's own logging policy.
+
+## Upgrading to 0.9.0
+
+Require `^0.9.0`. The user path is additive, so most consumers need no change:
+
+- **No gate, no change.** A consumer that defines no `CacheAbility::MANAGE`
+  gate keeps the token-only behaviour of earlier releases: the package does
+  not resolve a user, so a request carrying a bearer gets the same 401 as
+  before. When you define the gate, check any `Gate::before()` or
+  `Gate::after()` callback first: a `before()` that returns `true` for a user
+  lets that user clear caches whatever the definition says, and an `after()`
+  that returns `true` does so whenever the definition returns `null`.
+- **Overriding the rule.** A subclass that overrides
+  `isAuthorizedForDetailedInfo()` moves the override to
+  `cacheOperationAuthorization()`; the controllers no longer call the former.
+- **Logs.** The success logs gain `authorized_by` and, on the user path,
+  `user_id` (see [Auditing](#auditing)).
+- **`flushAppCache()`** takes an optional `$authorization` array, merged into
+  its log only. Existing calls are unchanged; a subclass that overrides it
+  adds the same `array $authorization = []` parameter, or PHP refuses to load
+  the class.
 
 ## See also
 

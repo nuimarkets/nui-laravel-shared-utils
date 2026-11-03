@@ -2,7 +2,12 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature\Http\Controllers;
 
+use Illuminate\Auth\GenericUser;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use NuiMarkets\LaravelSharedUtils\Auth\CacheAbility;
 use NuiMarkets\LaravelSharedUtils\Http\Controllers\ClearLadaAndResponseCacheController;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
@@ -10,9 +15,9 @@ use PHPUnit\Framework\Attributes\Test;
 /**
  * Tests for ClearLadaAndResponseCacheController.
  *
- * Auth contract is token-only via AuthorizesCacheOperations: every
- * authorized request carries ?token=$VALID_TOKEN, every unauthorized
- * request omits it (or sends a wrong value).
+ * Auth contract via AuthorizesCacheOperations: a request passes with
+ * ?token=$VALID_TOKEN, or as a signed-in user the CacheAbility::MANAGE gate
+ * allows. Tests without a signed-in user exercise the token path alone.
  *
  * NOTE: Full integration tests with actual Lada cache counting were performed manually
  * in connect-order (Laravel 8) and connect-product (Laravel 9) and verified to work correctly.
@@ -52,8 +57,14 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     {
         parent::setUp();
 
-        // Token-only auth: configure once, every authorized test passes ?token=.
+        // Configure the token once; token-path tests pass ?token=.
         config()->set('app.clear_cache_token', self::VALID_TOKEN);
+
+        // Spy logs so the audit-field tests can read the success log. Stub
+        // channel() to return the spy: deprecations raised mid-request are
+        // routed through $logger->channel('deprecations'), which would
+        // otherwise hit the spy's null channel() and 500.
+        Log::spy()->shouldReceive('channel')->andReturnSelf();
 
         // Clear Redis test database before each test
         try {
@@ -183,6 +194,108 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
     }
 
     #[Test]
+    public function it_allows_a_user_the_gate_allows_without_a_token()
+    {
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache');
+
+        $response->assertStatus(200);
+    }
+
+    #[Test]
+    public function it_restricts_a_user_the_gate_denies_without_a_token()
+    {
+        $this->allowCacheGate(false);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache');
+
+        $response->assertStatus(401);
+        $response->assertJson([
+            'status' => 'restricted',
+            'message' => 'Not available',
+        ]);
+    }
+
+    #[Test]
+    public function it_restricts_a_session_user_the_gate_allows_without_a_bearer()
+    {
+        $this->allowCacheGate(true);
+        $this->actingAs(new GenericUser(['id' => 42]), 'web');
+
+        $this->get('/clear-cache')->assertStatus(401);
+        $this->withToken('')->get('/clear-cache')->assertStatus(401);
+        $this->get('/clear-cache?token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
+    public function it_allows_a_user_the_gate_denies_with_a_valid_token()
+    {
+        $this->allowCacheGate(false);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
+
+        $response->assertStatus(200);
+    }
+
+    #[Test]
+    public function it_leaves_a_user_to_the_token_when_no_gate_is_defined()
+    {
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $this->get('/clear-cache')->assertStatus(401);
+        $this->get('/clear-cache?token='.self::VALID_TOKEN)->assertStatus(200);
+    }
+
+    #[Test]
+    public function it_allows_a_user_the_gate_allows_when_the_token_is_unconfigured()
+    {
+        config()->set('app.clear_cache_token', '');
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache');
+
+        $response->assertStatus(200);
+    }
+
+    #[Test]
+    public function it_logs_the_user_who_cleared_the_cache()
+    {
+        $this->allowCacheGate(true);
+        $this->signIn(new GenericUser(['id' => 42]));
+
+        $response = $this->get('/clear-cache');
+
+        $response->assertStatus(200);
+        Log::shouldHaveReceived('info')
+            ->withArgs(fn ($message, $context = []) => $message === 'Cache clearing skipped. Lada and response caching not found'
+                && ($context['authorized_by'] ?? null) === 'user'
+                && ($context['user_id'] ?? null) === 42)
+            ->once();
+        $this->assertArrayNotHasKey(
+            'authorized_by',
+            $response->json('detail'),
+            'The audit fields belong in the log, not the response.'
+        );
+    }
+
+    #[Test]
+    public function it_logs_a_token_clear_without_the_token()
+    {
+        $this->get('/clear-cache?token='.self::VALID_TOKEN)->assertStatus(200);
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(fn ($message, $context = []) => ($context['authorized_by'] ?? null) === 'token'
+                && ! array_key_exists('user_id', $context)
+                && ! str_contains(json_encode($context), self::VALID_TOKEN))
+            ->once();
+    }
+
+    #[Test]
     public function it_returns_response_cache_status()
     {
         $response = $this->get('/clear-cache?token='.self::VALID_TOKEN);
@@ -272,5 +385,22 @@ class ClearLadaAndResponseCacheControllerTest extends TestCase
 
         // Nothing matching the lada pattern survives the multi-batch sweep.
         $this->assertSame([], $connection->keys('lada:*'));
+    }
+
+    private function allowCacheGate(bool $allow): void
+    {
+        Gate::define(CacheAbility::MANAGE, fn ($user) => $allow);
+    }
+
+    /**
+     * Resolve request()->user() to $user through a request guard and send a
+     * bearer header, the way a consumer's bearer-token guard would.
+     */
+    private function signIn(object $user): void
+    {
+        $this->withToken('cache-test-bearer');
+        Auth::viaRequest('cache-test', fn () => $user);
+        config()->set('auth.guards.cache-test', ['driver' => 'cache-test']);
+        Auth::shouldUse('cache-test');
     }
 }
