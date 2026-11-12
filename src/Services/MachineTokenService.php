@@ -8,21 +8,39 @@ use Illuminate\Support\Facades\Http;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Logging\ErrorLogger;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
+use Throwable;
 
 use function config;
 
 class MachineTokenService implements MachineTokenServiceInterface
 {
+    /**
+     * A budget shorter than this is treated as spent. Guzzle turns a timeout
+     * under a millisecond into curl's 0, which means no timeout at all.
+     */
+    private const MIN_TIMEOUT_SECONDS = 0.01;
+
     /** Cache token for any subsequent calls to get within this request. */
     private string $tokenString = '';
 
     private ?array $oldToken = null;
 
-    public function getToken(): string
+    /**
+     * Set by invalidate(): the next fetch goes to the auth endpoint even if the
+     * cache still holds the refused token, for example because forget() failed.
+     */
+    private bool $skipCacheRead = false;
+
+    /**
+     * @param  float|null  $timeout  Seconds the caller can still spend. When given,
+     *                               a fetch from the auth endpoint is bounded by it.
+     *                               Null keeps the HTTP client's defaults.
+     */
+    public function getToken(?float $timeout = null): string
     {
         if ($this->tokenString === '') {
-            /** Try redis */
-            $token = Cache::get(config('machine_token.redis_key'));
+            /** Try redis, unless invalidate() said its copy was refused */
+            $token = $this->skipCacheRead ? null : $this->readCachedToken();
 
             /** Check expiry, throw it away if too old */
             if ($token) {
@@ -42,8 +60,9 @@ class MachineTokenService implements MachineTokenServiceInterface
 
             if (! $token) {
                 /** Retrieve new token and store in redis */
-                $token = $this->retrieveFromAuth();
-                Cache::put(config('machine_token.redis_key'), $token);
+                $token = $this->retrieveFromAuth($timeout);
+                $this->skipCacheRead = false;
+                $this->writeCachedToken($token);
             }
 
             /** Cache in RAM for any other calls THIS request. */
@@ -53,7 +72,59 @@ class MachineTokenService implements MachineTokenServiceInterface
         return $this->tokenString;
     }
 
-    private function retrieveFromAuth(): array
+    /**
+     * Drop every copy of the current token, in memory and in the cache, so the
+     * next getToken() fetches a new one. For a caller whose request was refused
+     * with this token (revoked or rotated at the issuer). Never throws.
+     */
+    public function invalidate(): void
+    {
+        $this->tokenString = '';
+        $this->oldToken = null;
+        $this->skipCacheRead = true;
+
+        try {
+            Cache::forget(config('machine_token.redis_key'));
+        } catch (Throwable $e) {
+            ErrorLogger::logWarning('machine_token_cache_failed', 'Machine token cache forget failed: '.$e->getMessage(), [
+                LogFields::FEATURE => 'machine_token',
+                LogFields::ACTION => 'cache_forget_failed',
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** A cache read failure is a miss: the token is fetched from the auth endpoint. */
+    private function readCachedToken(): mixed
+    {
+        try {
+            return Cache::get(config('machine_token.redis_key'));
+        } catch (Throwable $e) {
+            ErrorLogger::logWarning('machine_token_cache_failed', 'Machine token cache read failed: '.$e->getMessage(), [
+                LogFields::FEATURE => 'machine_token',
+                LogFields::ACTION => 'cache_read_failed',
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /** A cache write failure keeps the fresh token in memory for this process. */
+    private function writeCachedToken(array $token): void
+    {
+        try {
+            Cache::put(config('machine_token.redis_key'), $token);
+        } catch (Throwable $e) {
+            ErrorLogger::logWarning('machine_token_cache_failed', 'Machine token cache write failed: '.$e->getMessage(), [
+                LogFields::FEATURE => 'machine_token',
+                LogFields::ACTION => 'cache_write_failed',
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function retrieveFromAuth(?float $timeout = null): array
     {
         $url = config('machine_token.url');
         $clientId = config('machine_token.client_id');
@@ -72,14 +143,33 @@ class MachineTokenService implements MachineTokenServiceInterface
             return $this->panic();
         }
 
+        if ($timeout !== null && $timeout < self::MIN_TIMEOUT_SECONDS) {
+            ErrorLogger::logWarning('machine_token_budget_spent', 'Machine token fetch skipped: the caller\'s time budget is spent', [
+                LogFields::FEATURE => 'machine_token',
+                LogFields::ACTION => 'budget_spent',
+                'budget_seconds' => $timeout,
+            ]);
+
+            return $this->panic();
+        }
+
         try {
-            $response = Http::accept('application/json')
-                ->post($url, [
-                    'grant_type' => 'client_credentials',
-                    'client_id' => $clientId,
-                    'client_secret' => $clientSecret,
-                    'scopes' => '',
+            $request = Http::accept('application/json');
+
+            if ($timeout !== null) {
+                // The total timeout covers the connection, so both share the budget.
+                $request = $request->withOptions([
+                    'connect_timeout' => $timeout,
+                    'timeout' => $timeout,
                 ]);
+            }
+
+            $response = $request->post($url, [
+                'grant_type' => 'client_credentials',
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'scopes' => '',
+            ]);
 
             if ($response->failed()) {
                 return $this->panic();

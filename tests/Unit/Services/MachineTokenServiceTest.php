@@ -207,4 +207,135 @@ class MachineTokenServiceTest extends TestCase
 
         $this->service->getToken();
     }
+
+    private function fakeTokenEndpoint(string ...$tokens): void
+    {
+        $sequence = Http::fakeSequence('https://auth.test.com/token');
+
+        foreach ($tokens as $token) {
+            $sequence->push(['access_token' => $token, 'expires_in' => 3600]);
+        }
+    }
+
+    public function test_cache_read_failure_fetches_a_token_directly()
+    {
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andThrow(new RuntimeException('Connection refused'));
+        Cache::shouldReceive('put')->once();
+        $this->fakeTokenEndpoint('direct_token');
+
+        $this->assertSame('direct_token', $this->service->getToken());
+    }
+
+    public function test_cache_write_failure_keeps_the_fresh_token_in_memory()
+    {
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturn(null);
+        Cache::shouldReceive('put')->once()->andThrow(new RuntimeException('Connection refused'));
+        $this->fakeTokenEndpoint('fresh_token', 'second_token');
+
+        $this->assertSame('fresh_token', $this->service->getToken());
+        $this->assertSame('fresh_token', $this->service->getToken());
+        Http::assertSentCount(1);
+    }
+
+    public function test_invalidate_drops_the_memory_and_cache_copies()
+    {
+        $this->fakeTokenEndpoint('first_token', 'second_token');
+
+        $this->assertSame('first_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        $this->assertNull(Cache::get('test_machine_token'));
+        $this->assertSame('second_token', $this->service->getToken());
+        $this->assertSame('second_token', Cache::get('test_machine_token')['token']);
+    }
+
+    public function test_invalidate_skips_a_cache_copy_it_could_not_forget()
+    {
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->andReturn([
+            'token' => 'refused_token',
+            'expiry' => Carbon::now()->addDays(30)->toIso8601String(),
+        ]);
+        Cache::shouldReceive('forget')->once()->andThrow(new RuntimeException('Connection refused'));
+        Cache::shouldReceive('put')->once();
+        $this->fakeTokenEndpoint('replacement_token');
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        $this->assertSame('replacement_token', $this->service->getToken());
+    }
+
+    public function test_invalidate_drops_the_old_token_fallback()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'refused_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'unavailable'], 500)]);
+
+        // Inside the refresh window a failed refresh falls back to the old token...
+        $this->assertSame('refused_token', $this->service->getToken());
+
+        // ...but not once the caller has said that token was refused.
+        $this->service->invalidate();
+        $this->expectException(RuntimeException::class);
+        $this->service->getToken();
+    }
+
+    public function test_budget_bounds_the_token_fetch()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'bounded_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('bounded_token', $this->service->getToken(1.25));
+        $this->assertSame(1.25, $options['timeout']);
+        $this->assertSame(1.25, $options['connect_timeout']);
+    }
+
+    public function test_without_a_budget_the_fetch_keeps_the_client_defaults()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'default_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->service->getToken();
+
+        $this->assertSame(30, $options['timeout']);
+    }
+
+    public function test_spent_budget_makes_no_fetch()
+    {
+        Http::fake();
+
+        try {
+            $this->service->getToken(0.001);
+            $this->fail('Expected a spent budget without an old token to throw.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Could not get new machine token.', $e->getMessage());
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_budget_does_not_apply_to_a_cached_token()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'cached_token',
+            'expiry' => Carbon::now()->addDays(30)->toIso8601String(),
+        ]);
+        Http::fake();
+
+        $this->assertSame('cached_token', $this->service->getToken(0.001));
+        Http::assertNothingSent();
+    }
 }

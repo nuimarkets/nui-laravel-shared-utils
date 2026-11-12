@@ -43,4 +43,13 @@ class MocksMachineTokenServiceTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_trait_allows_invalidate()
+    {
+        $this->mockMachineTokenService('reusable-token');
+
+        app(MachineTokenService::class)->invalidate();
+
+        $this->assertEquals('reusable-token', app(MachineTokenService::class)->getToken());
+    }
 }

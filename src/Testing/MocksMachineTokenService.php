@@ -13,6 +13,8 @@ trait MocksMachineTokenService
     {
         $mockMachineTokenService = Mockery::mock(MachineTokenService::class);
         $mockMachineTokenService->shouldReceive('getToken')->andReturn($token)->byDefault();
+        // TokenStatusClient calls this when the status route refuses the token.
+        $mockMachineTokenService->shouldReceive('invalidate')->byDefault();
 
         // Bind to both the interface and the concrete so consumers that resolve
         // either get the mock. The shared provider exposes both bindings.
