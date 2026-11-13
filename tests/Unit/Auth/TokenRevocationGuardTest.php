@@ -334,6 +334,20 @@ class TokenRevocationGuardTest extends TestCase
         $this->assertSame([], $this->lines('startup'));
     }
 
+    public function test_store_the_client_found_down_is_not_tried_again()
+    {
+        Config::set('token_revocation.mode', 'enforce');
+        ThrowingCacheStore::register();
+        Config::set('cache.stores.token_status', ['driver' => 'throwing']);
+
+        $this->guard($this->clientReturning(TokenStatus::Unavailable, 'http_503', cacheError: true))
+            ->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $this->assertSame(0, ThrowingCacheStore::$calls);
+        $this->assertCount(1, $this->lines('startup'));
+        $this->assertCount(1, $this->lines('unavailable'));
+    }
+
     public function test_startup_line_logs_again_after_a_settings_change()
     {
         Config::set('token_revocation.mode', 'shadow');

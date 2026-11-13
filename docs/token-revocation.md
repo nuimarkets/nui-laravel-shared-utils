@@ -86,7 +86,7 @@ The check reads the cache on every request, so define a dedicated Redis connecti
 ],
 ```
 
-A cache failure (refused, timed out, or the store not defined) skips the cache and the breaker and still makes the call, so the check keeps working without Redis, at the cost of one call per request. The startup log line reports whether the configured store is defined.
+A cache failure (refused, timed out, or the store not defined) skips the cache and the breaker and still makes the call, so the check keeps working without Redis, at the cost of one call per request. When the token status store shares a host with the default cache, as the connection above does, an outage takes both down, and `MachineTokenService` then fetches a token on each request as well (see [Machine Token](machine-token.md)), so the issuer takes two calls per request until the cache recovers. The startup log line reports whether the configured store is defined.
 
 ### Calling the guard
 
@@ -137,7 +137,7 @@ The check expects an endpoint that:
 - answers `200` with `{"active": true}` or `{"active": false}`, and nothing else counts as an answer;
 - does not evaluate expiry, since each validator owns expiry and its own leeway;
 - answers a database or other infrastructure error with a 5xx, never `"active": false`;
-- answers 401 or 403 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget.
+- answers 401 or 403 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget. A route that keeps answering 401 or 403 for another reason (a gateway that does not know the path, a firewall) therefore costs one new machine token per `breaker_seconds` per service while the cache works, and one per request while it does not.
 
 ## Logging
 
@@ -153,7 +153,7 @@ Every line carries `feature: token_revocation` and an `action`.
 | `Token revocation: check` | info | `check` | A `sample_rate` fraction of checks | `result`, `reason`, `cache.hit` (boolean), `cache_error`, `duration_ms` (the client's check), `mode`, `fail` |
 | `Token revocation: unrecognised setting, using the default` | warning | `invalid_setting` | `mode` or `fail` not recognised, at most once a minute per process | `mode_setting`, `fail_setting` |
 
-A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) keeps no memory between requests, so the once-per-process and once-a-minute limits are held in the token status store, under keys naming the host and process ID. Checking a limit is a cache write, which is why the startup line waits for a check that missed the cache: a hit costs the one read and nothing more. If that store fails, each of these lines is logged at most once per request.
+A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) keeps no memory between requests, so the once-per-process and once-a-minute limits are held in the token status store, under keys naming the host and process ID. Checking a limit is a cache write, which is why the startup line waits for a check that missed the cache: a hit costs the one read and nothing more. If that store fails, or the client has just found it down, the guard does not try it again for these limits, and each line is logged at most once per request.
 
 The package's default `SensitiveDataProcessor` redacts `user_id` when PII redaction is on (the default), so `would reject` and `rejected` lines show `user_id` as `[REDACTED]` unless `logging-utils.processors.sensitive_data.preserve_fields` lists it. `sub` and `jti` are not redacted.
 

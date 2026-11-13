@@ -78,10 +78,10 @@ class TokenRevocationGuard
             $check = new TokenStatusCheck(TokenStatus::Unavailable, false, 'unexpected', 0.0);
         }
 
-        // Only after a miss, which has already paid for a call: the window check
-        // is a cache write, and a hit must cost no more than the client's read.
+        // Not on a hit: the window check is a cache write, and a hit must cost
+        // no more than the client's one read.
         if (! $check->cacheHit) {
-            $this->announce($mode, $fail);
+            $this->announce($mode, $fail, $check->cacheError);
         }
 
         $reject = match ($check->status) {
@@ -119,7 +119,7 @@ class TokenRevocationGuard
         if ($check->status === TokenStatus::Unavailable) {
             $breakerOpen = $check->reason === 'breaker_open';
 
-            if ($this->firstInWindow($breakerOpen ? 'breaker_open' : 'unavailable', self::WARNING_INTERVAL)) {
+            if ($this->firstInWindow($breakerOpen ? 'breaker_open' : 'unavailable', self::WARNING_INTERVAL, $check->cacheError)) {
                 $this->log('warning', $breakerOpen
                     ? 'Token revocation: breaker open, status not checked'
                     : 'Token revocation: status unavailable', [
@@ -146,9 +146,9 @@ class TokenRevocationGuard
      * first check that misses the cache. Keyed by the settings too, so a
      * process that reuses a host and pid after a settings change logs again.
      */
-    private function announce(string $mode, string $fail): void
+    private function announce(string $mode, string $fail, bool $storeDown): void
     {
-        if (! $this->firstInWindow("startup:{$mode}:{$fail}", self::STARTUP_INTERVAL)) {
+        if (! $this->firstInWindow("startup:{$mode}:{$fail}", self::STARTUP_INTERVAL, $storeDown)) {
             return;
         }
 
@@ -228,9 +228,10 @@ class TokenRevocationGuard
      * runtime that resets state per request (PHP-FPM, FrankenPHP without
      * workers) the in-memory note lasts one request, so the window is held in
      * the token status store under a key naming this host and process. If the
-     * store fails, the line is logged at most once per request.
+     * store fails, or the client has just found it down ($storeDown), the line
+     * is logged at most once per request.
      */
-    private function firstInWindow(string $name, int $seconds): bool
+    private function firstInWindow(string $name, int $seconds, bool $storeDown = false): bool
     {
         $now = Carbon::now()->getTimestamp();
         $last = $this->lastLogged[$name] ?? null;
@@ -240,6 +241,12 @@ class TokenRevocationGuard
         }
 
         $this->lastLogged[$name] = $now;
+
+        // Another attempt on a store the client could not read would cost
+        // another connection timeout on the request.
+        if ($storeDown) {
+            return true;
+        }
 
         try {
             return (bool) Cache::store(config('token_revocation.store') ?: null)->add(
