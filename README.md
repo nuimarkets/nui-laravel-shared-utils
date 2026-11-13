@@ -69,6 +69,10 @@ for different request content.
 
 Opt-in YARA-X scanning of every upload processed by AttachmentService, before anything touches S3 or the database. Fail-closed by default, config-gated, and inert until a service ships the scanner binary and enables it.
 
+### **Token Revocation Check**
+
+Opt-in check that a resource server runs after verifying a JWT's signature and expiry: it asks the token issuer whether the token is still active and trusts an `active` answer for 30 seconds, so while the issuer answers, a revocation takes effect within 30 seconds at every service that runs the check. `off`, `shadow` and `enforce` modes, a breaker for issuer outages, and a fail-open or fail-closed setting for when the issuer cannot answer (see the [guide](docs/token-revocation.md)).
+
 ### **Failure Caching**
 
 Intelligent caching of remote service failures to prevent cascading timeouts during outages. HTTP status-aware TTLs cache 404s longer than transient errors like timeouts. Includes failure classification, configurable per-category TTLs, and convenience methods for handling cached failures gracefully.
@@ -112,6 +116,7 @@ php artisan vendor:publish --tag=logging-utils-config
 php artisan vendor:publish --tag=intercom-config
 php artisan vendor:publish --tag=idempotency-config
 php artisan vendor:publish --tag=attachments-config
+php artisan vendor:publish --tag=token-revocation-config
 ```
 
 ## Documentation
@@ -131,6 +136,7 @@ php artisan vendor:publish --tag=attachments-config
 | **IncludesParser** | API response optimization utility | [Guide](docs/includes-parser.md) |
 | **IAM RDS Connector** | Short-lived IAM tokens for RDS / RDS Proxy | [Guide](docs/iam-rds-connector.md) |
 | **Machine Token** | Client-credentials token retrieval and caching for service-to-service auth | [Guide](docs/machine-token.md) |
+| **Token Revocation Check** | Ask the token issuer whether a verified JWT is still active, cached briefly | [Guide](docs/token-revocation.md) |
 | **Malware Scanning** | Opt-in YARA-X scan of uploads in AttachmentService | [Guide](docs/malware-scanning.md) |
 
 ### Quick Examples
@@ -326,19 +332,20 @@ This package ships multiple release lines, selected via your `composer.json` con
 
 | Constraint | Laravel | PHP | PHPUnit | Status |
 | --- | --- | --- | --- | --- |
-| `^0.9.x` | 11.x / 12.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
+| `^0.10.x` | 11.x / 12.x | 8.3+ | 10.5+ | **Actively developed.** All new work lands here. |
+| `^0.9.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.10.x`, which adds the [token revocation check](docs/token-revocation.md) and lets `MachineTokenService` get a token through a cache outage instead of throwing. No new features. |
 | `^0.8.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.9.x`, which lets a user the `CacheAbility::MANAGE` gate allows call the cache-management endpoints with their bearer token (see [Upgrading to 0.9.0](docs/application-cache-clear.md#upgrading-to-090)). No new features. |
 | `^0.7.x` | 11.x / 12.x | 8.3+ | 10.5+ | Superseded by `^0.8.x`, which changes the outbound trace header (see [Upgrading to 0.8.1](docs/distributed-tracing.md#upgrading-to-081)). No new features. |
 | `^0.6.x` | 10.15+ / 11.x | 8.3+ | 10.5+ | Maintenance pin for Laravel 10 consumers. No new features. |
 | `^0.5.x` | 8.x / 9.x | 8.0+ | 9.x | Maintenance pin for legacy consumers. No new features. |
 
-Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades: `composer update` will not pull `0.9.x` over a `^0.8.x` pin. To move to the new line, change the constraint explicitly:
+Caret constraints (`^0.5.0` etc.) protect you from accidental cross-line upgrades: `composer update` will not pull `0.10.x` over a `^0.9.x` pin. To move to the new line, change the constraint explicitly:
 
 ```bash
-composer require nuimarkets/laravel-shared-utils:^0.9.0
+composer require nuimarkets/laravel-shared-utils:^0.10.0
 ```
 
-If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x`, `0.8.x` and `0.9.x` lines require `laravel/framework: ^11.0|^12.0` and declare `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
+If you do this on a host still running Laravel 10 or older (or PHPUnit 9), Composer will refuse the install: the `0.7.x` through `0.10.x` lines require `laravel/framework: ^11.0|^12.0` and declare `conflict` against PHPUnit `<10.5`. (Laravel 9 also transitively requires Monolog 2, which conflicts with our `monolog: ^3.0` requirement.) Upgrade Laravel + PHPUnit in the same PR as the bump. See *Upgrading consumers to PHPUnit 10+* below for the specific changes required.
 
 ### Cross-Version Compatibility
 
@@ -417,6 +424,11 @@ REMOTE_REPOSITORY_LOG_REQUESTS=true
 INTERCOM_ENABLED=true
 INTERCOM_TOKEN=your_token
 INTERCOM_SERVICE_NAME=my-service
+
+# Token Revocation Check (off by default; see docs/token-revocation.md)
+TOKEN_STATUS_URL=https://issuer.example.com/api/tokens/status
+TOKEN_REVOCATION_MODE=shadow
+TOKEN_REVOCATION_FAIL=open
 
 # Attachment Malware Scanning (off by default; needs the yr binary in the image)
 ATTACHMENTS_MALWARE_SCAN_ENABLED=true
