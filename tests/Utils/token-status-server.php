@@ -28,6 +28,19 @@ switch ($path) {
         echo $body;
         break;
 
+    case '/status/large-then-stall':
+        // More than the cap at once, then nothing for longer than the budget:
+        // only an aborted transfer returns before the stall ends.
+        header('Content-Type: application/json');
+        echo '{"active":false,"pad":"'.str_repeat('x', 4000);
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+        sleep(3);
+        echo '"}';
+        break;
+
     case '/status/stall':
         sleep(5);
         header('Content-Type: application/json');

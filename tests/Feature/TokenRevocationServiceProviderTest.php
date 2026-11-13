@@ -2,14 +2,19 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\ServiceProvider;
 use NuiMarkets\LaravelSharedUtils\Auth\TokenRevocationGuard;
 use NuiMarkets\LaravelSharedUtils\Auth\TokenStatusClient;
 use NuiMarkets\LaravelSharedUtils\Providers\TokenRevocationServiceProvider;
 use NuiMarkets\LaravelSharedUtils\Services\MachineTokenService;
+use NuiMarkets\LaravelSharedUtils\Testing\MocksMachineTokenService;
 use NuiMarkets\LaravelSharedUtils\Tests\TestCase;
 
 class TokenRevocationServiceProviderTest extends TestCase
 {
+    use MocksMachineTokenService;
+
     protected function getPackageProviders($app)
     {
         return [
@@ -42,5 +47,28 @@ class TokenRevocationServiceProviderTest extends TestCase
     public function test_default_guard_is_off()
     {
         $this->assertFalse(app(TokenRevocationGuard::class)->shouldReject('jti', time() + 60, []));
+    }
+
+    public function test_provider_publishes_the_config()
+    {
+        $paths = ServiceProvider::pathsToPublish(TokenRevocationServiceProvider::class, 'token-revocation-config');
+
+        $this->assertCount(1, $paths);
+        $this->assertSame('token_revocation.php', basename(array_key_first($paths)));
+        $this->assertSame(config_path('token_revocation.php'), reset($paths));
+    }
+
+    public function test_consumer_test_setup_from_the_guide_enforces_a_revocation()
+    {
+        config([
+            'cache.stores.token_status' => ['driver' => 'array'],
+            'token_revocation.url' => 'https://issuer.test/status',
+            'token_revocation.mode' => 'enforce',
+        ]);
+        $this->mockMachineTokenService();
+        Http::fake(['https://issuer.test/status' => Http::response(['active' => false])]);
+
+        $this->assertTrue(app(TokenRevocationGuard::class)->shouldReject('jti-1', time() + 60, []));
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer fake-token'));
     }
 }

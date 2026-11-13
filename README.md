@@ -71,7 +71,7 @@ Opt-in YARA-X scanning of every upload processed by AttachmentService, before an
 
 ### **Token Revocation Check**
 
-Opt-in check that a resource server runs after verifying a JWT's signature and expiry: it asks the token issuer whether the token is still active and caches the answer for 30 seconds, so a revocation at the issuer takes effect everywhere within 30 seconds. `off`, `shadow` and `enforce` modes, a breaker for issuer outages, and a fail-open or fail-closed setting for when the issuer cannot answer (see the [guide](docs/token-revocation.md)).
+Opt-in check that a resource server runs after verifying a JWT's signature and expiry: it asks the token issuer whether the token is still active and trusts an `active` answer for 30 seconds, so while the issuer answers, a revocation takes effect within 30 seconds at every service that runs the check. `off`, `shadow` and `enforce` modes, a breaker for issuer outages, and a fail-open or fail-closed setting for when the issuer cannot answer (see the [guide](docs/token-revocation.md)).
 
 ### **Failure Caching**
 

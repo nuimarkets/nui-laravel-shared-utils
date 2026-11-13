@@ -218,8 +218,19 @@ class MachineTokenServiceTest extends TestCase
         }
     }
 
+    /** Expects one warning with this message, feature, action and error type. */
+    private function expectWarning(string $message, string $action, string $errorType = 'machine_token_cache_failed'): void
+    {
+        Log::shouldReceive('warning')->once()->with($message, Mockery::on(
+            fn ($context) => $context['feature'] === 'machine_token'
+                && $context['action'] === $action
+                && $context['error_type'] === $errorType
+        ));
+    }
+
     public function test_cache_read_failure_fetches_a_token_directly()
     {
+        $this->expectWarning('Machine token cache read failed: Connection refused', 'cache_read_failed');
         Cache::shouldReceive('flush'); // tearDown
         Cache::shouldReceive('get')->once()->andThrow(new RuntimeException('Connection refused'));
         Cache::shouldReceive('put')->once();
@@ -230,6 +241,7 @@ class MachineTokenServiceTest extends TestCase
 
     public function test_cache_write_failure_keeps_the_fresh_token_in_memory()
     {
+        $this->expectWarning('Machine token cache write failed: Connection refused', 'cache_write_failed');
         Cache::shouldReceive('flush'); // tearDown
         Cache::shouldReceive('get')->once()->andReturn(null);
         Cache::shouldReceive('put')->once()->andThrow(new RuntimeException('Connection refused'));
@@ -254,6 +266,7 @@ class MachineTokenServiceTest extends TestCase
 
     public function test_invalidate_skips_a_cache_copy_it_could_not_forget()
     {
+        $this->expectWarning('Machine token cache forget failed: Connection refused', 'cache_forget_failed');
         Cache::shouldReceive('flush'); // tearDown
         Cache::shouldReceive('get')->andReturn([
             'token' => 'refused_token',
@@ -415,6 +428,7 @@ class MachineTokenServiceTest extends TestCase
 
     public function test_spent_budget_makes_no_fetch()
     {
+        $this->expectWarning("Machine token fetch skipped: the caller's time budget is spent", 'budget_spent', 'machine_token_budget_spent');
         Http::fake();
 
         try {

@@ -51,6 +51,8 @@ If refresh fails while an old token is still valid, the service returns the old 
 
 A cache outage does not block a token: a failed read fetches a token from the auth endpoint, and a failed write keeps the fresh token in memory for the rest of the request (or the worker's life under a long-lived runtime). The cache read itself is bounded only by the default cache connection's own timeouts.
 
+The fallback has a cost. Under a runtime that resets state per request (PHP-FPM, FrankenPHP without workers), the in-memory token lasts one request, so during a cache outage every request that needs a token fetches its own from the auth endpoint. That endpoint then takes the service's request rate, and an issuer that stores each token it grants stores one per request, until the cache recovers.
+
 ### Time budget
 
 `getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).

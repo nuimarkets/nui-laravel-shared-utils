@@ -107,6 +107,16 @@ class TokenStatusClientHttpTest extends TestCase
         $this->assertSame('oversized', $check->reason);
     }
 
+    public function test_overflow_ends_the_call_without_waiting_for_the_rest()
+    {
+        $started = microtime(true);
+
+        $check = $this->check('/status/large-then-stall');
+
+        $this->assertSame('oversized', $check->reason);
+        $this->assertLessThan(1.0, microtime(true) - $started);
+    }
+
     public function test_stalled_answer_is_unavailable_within_the_budget()
     {
         Config::set('token_revocation.timeout', 1.0);

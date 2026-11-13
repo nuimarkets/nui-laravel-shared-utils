@@ -20,7 +20,8 @@ check(jti, exp)                                   t0 = when the check starts
     breaker key set                               -> unavailable (no call)
   get this service's machine token                inside the budget
   POST {"jti": ...} to the status URL             inside the budget, no redirects
-    401 or 403    -> drop the machine token everywhere, fetch a new one, retry once
+    401 or 403    -> drop the machine token from this process and the cache,
+                     fetch a new one, retry once
     200 {"active": true}   -> write `active`, active_until = t0 + active_ttl,
                               only if no entry exists           -> active
     200 {"active": false}  -> write `revoked`, overwriting      -> revoked
@@ -144,15 +145,17 @@ Every line carries `feature: token_revocation` and an `action`.
 
 | Message | Level | `action` | When | Fields |
 | --- | --- | --- | --- | --- |
-| `Token revocation: check enabled` | info | `startup` | First check in a process, then hourly. Not logged in `off`. | `mode`, `fail`, `url_host`, `cache_store`, `cache_store_defined`, `sample_rate` |
+| `Token revocation: check enabled` | info | `startup` | First check in a process that misses the cache, then hourly, and again after `mode` or `fail` changes. Not logged in `off`. | `mode`, `fail`, `url_host`, `cache_store`, `cache_store_defined`, `sample_rate` |
 | `Token revocation: would reject` | warning | `would_reject` | `shadow`, a check `enforce` would reject | `jti`, `sub`, `user_id`, `aud`, `grant_type`, `validator` (the app name), `result`, `reason`, `mode`, `fail` |
 | `Token revocation: rejected` | warning | `rejected` | `enforce`, a rejected check | as `would reject` |
 | `Token revocation: status unavailable` | warning | `unavailable` | An `unavailable` result other than the breaker, at most once a minute per process | `reason`, `admitted`, `mode`, `fail` |
 | `Token revocation: breaker open, status not checked` | warning | `breaker_open` | A miss skipped by the breaker, at most once a minute per process | `reason`, `admitted`, `mode`, `fail` |
-| `Token revocation: check` | info | `check` | A `sample_rate` fraction of checks | `result`, `reason`, `cache` (`hit` or `miss`), `cache_error`, `latency_ms`, `mode`, `fail` |
+| `Token revocation: check` | info | `check` | A `sample_rate` fraction of checks | `result`, `reason`, `cache.hit` (boolean), `cache_error`, `duration_ms` (the client's check), `mode`, `fail` |
 | `Token revocation: unrecognised setting, using the default` | warning | `invalid_setting` | `mode` or `fail` not recognised, at most once a minute per process | `mode_setting`, `fail_setting` |
 
-A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) keeps no memory between requests, so the once-per-process and once-a-minute limits are held in the token status store, under keys naming the host and process ID. If that store fails, each of these lines is logged at most once per request.
+A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) keeps no memory between requests, so the once-per-process and once-a-minute limits are held in the token status store, under keys naming the host and process ID. Checking a limit is a cache write, which is why the startup line waits for a check that missed the cache: a hit costs the one read and nothing more. If that store fails, each of these lines is logged at most once per request.
+
+The package's default `SensitiveDataProcessor` redacts `user_id` when PII redaction is on (the default), so `would reject` and `rejected` lines show `user_id` as `[REDACTED]` unless `logging-utils.processors.sensitive_data.preserve_fields` lists it. `sub` and `jti` are not redacted.
 
 `reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`.
 
