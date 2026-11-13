@@ -27,13 +27,15 @@ check(jti, exp)                                   t0 = when the check starts
     anything else          -> set the breaker, write nothing    -> unavailable
 ```
 
-The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it.
+The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The machine token's own cache read is bounded only by the default cache connection's timeouts, so keep those short as well.
+
+The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered.
 
 | Result | Meaning | Cached |
 | --- | --- | --- |
 | `active` | 200 with `"active": true` | Until `t0 + active_ttl`, and never past the token's `exp`. Written only when no entry exists, so a slow positive answer cannot replace a newer `revoked`. Not written when the token has already expired. |
 | `revoked` | 200 with `"active": false`. The only result that is a revocation. | Overwrites any entry, for `max(revoked_grace, exp + revoked_grace - now)` seconds. |
-| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB, no machine token, a spent budget, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
+| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB once decoded, no machine token, a spent budget, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
 
 `TokenStatusClient` and `TokenRevocationGuard` never throw.
 
@@ -152,7 +154,7 @@ Every line carries `feature: token_revocation` and an `action`.
 
 A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) keeps no memory between requests, so the once-per-process and once-a-minute limits are held in the token status store, under keys naming the host and process ID. If that store fails, each of these lines is logged at most once per request.
 
-`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `machine_token`, `deadline`, `connection`, `http_<status>`, `malformed` or `unexpected`.
+`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`.
 
 ## Testing
 

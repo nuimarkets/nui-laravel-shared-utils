@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Mockery;
 use Mockery\MockInterface;
+use NuiMarkets\LaravelSharedUtils\Auth\BoundedBodyStream;
 use NuiMarkets\LaravelSharedUtils\Auth\TokenStatus;
 use NuiMarkets\LaravelSharedUtils\Auth\TokenStatusClient;
 use NuiMarkets\LaravelSharedUtils\Services\MachineTokenService;
@@ -147,7 +148,7 @@ class TokenStatusClientTest extends TestCase
         $this->assertEquals(1.0, $options['connect_timeout']);
         $this->assertEquals(2.0, $options['timeout']);
         $this->assertFalse($options['allow_redirects']);
-        $this->assertSame(TokenStatusClient::MAX_BODY_BYTES, $options['curl'][CURLOPT_MAXFILESIZE]);
+        $this->assertInstanceOf(BoundedBodyStream::class, $options['sink']);
     }
 
     // Answers that are not answers

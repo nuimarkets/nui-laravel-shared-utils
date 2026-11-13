@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Auth;
 
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
@@ -179,11 +180,13 @@ class TokenStatusClient
                 return 'deadline';
             }
 
+            $sink = new BoundedBodyStream(Utils::streamFor(''), self::MAX_BODY_BYTES);
+
             try {
-                $response = $this->post($url, $jti, $machineToken, $remaining);
+                $response = $this->post($url, $jti, $machineToken, $remaining, $sink);
                 $code = $response->status();
             } catch (Throwable) {
-                return 'connection';
+                return $sink->overflowed() ? 'oversized' : 'connection';
             }
 
             if (($code === 401 || $code === 403) && $attempt === 1) {
@@ -200,24 +203,21 @@ class TokenStatusClient
         }
     }
 
-    private function post(string $url, string $jti, string $machineToken, float $remaining): Response
+    /**
+     * The sink takes the decoded body as it arrives and aborts the transfer past
+     * MAX_BODY_BYTES, so an oversized or inflating response is never buffered.
+     * Http::fake() responses bypass the sink; readActive() caps those.
+     */
+    private function post(string $url, string $jti, string $machineToken, float $remaining, BoundedBodyStream $sink): Response
     {
-        $options = [
-            'connect_timeout' => min((float) config('token_revocation.connect_timeout', 1), $remaining),
-            'timeout' => $remaining,
-        ];
-
-        // Abort a download bigger than the cap: before the body when the length
-        // is declared, and during it on libcurl 8.4 and later. readActive()
-        // enforces the cap either way.
-        if (defined('CURLOPT_MAXFILESIZE')) {
-            $options['curl'] = [CURLOPT_MAXFILESIZE => self::MAX_BODY_BYTES];
-        }
-
         return Http::withToken($machineToken)
             ->acceptJson()
             ->withoutRedirecting()
-            ->withOptions($options)
+            ->withOptions([
+                'connect_timeout' => min((float) config('token_revocation.connect_timeout', 1), $remaining),
+                'timeout' => $remaining,
+                'sink' => $sink,
+            ])
             ->post($url, ['jti' => $jti]);
     }
 
