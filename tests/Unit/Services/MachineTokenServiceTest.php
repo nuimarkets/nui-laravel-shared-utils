@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Services;
 
+use Illuminate\Log\LogManager;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -295,8 +296,107 @@ class MachineTokenServiceTest extends TestCase
         }]);
 
         $this->assertSame('bounded_token', $this->service->getToken(1.25));
-        $this->assertSame(1.25, $options['timeout']);
-        $this->assertSame(1.25, $options['connect_timeout']);
+        $this->assertEqualsWithDelta(1.25, $options['timeout'], 0.05);
+        $this->assertSame($options['timeout'], $options['connect_timeout']);
+        $this->assertFalse($options['allow_redirects']);
+    }
+
+    public function test_time_spent_reading_the_cache_comes_out_of_the_budget()
+    {
+        Carbon::setTestNow(Carbon::now());
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturnUsing(function () {
+            Carbon::setTestNow(Carbon::now()->addMilliseconds(1500));
+
+            return null;
+        });
+        Cache::shouldReceive('put')->once();
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'late_token', 'expires_in' => 3600]);
+        }]);
+
+        try {
+            $this->assertSame('late_token', $this->service->getToken(2.0));
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $this->assertEqualsWithDelta(0.5, $options['timeout'], 0.001);
+    }
+
+    public function test_cache_read_that_spends_the_budget_makes_no_fetch()
+    {
+        Carbon::setTestNow(Carbon::now());
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturnUsing(function () {
+            Carbon::setTestNow(Carbon::now()->addSeconds(3));
+
+            return null;
+        });
+        Http::fake();
+
+        try {
+            $this->service->getToken(2.0);
+            $this->fail('Expected a spent budget without an old token to throw.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Could not get new machine token.', $e->getMessage());
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_budgeted_fetch_does_not_follow_a_redirect()
+    {
+        Http::fake([
+            'https://auth.test.com/token' => Http::response('', 302, ['Location' => 'https://auth.test.com/elsewhere']),
+            'https://auth.test.com/elsewhere' => Http::response(['access_token' => 'redirected_token', 'expires_in' => 3600]),
+        ]);
+
+        $this->expectException(RuntimeException::class);
+
+        try {
+            $this->service->getToken(2.0);
+        } finally {
+            Http::assertSentCount(1);
+        }
+    }
+
+    public function test_unbudgeted_fetch_keeps_the_client_redirect_default()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'default_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->service->getToken();
+
+        $this->assertNotFalse($options['allow_redirects'] ?? null);
+    }
+
+    public function test_failing_logger_does_not_undo_a_cache_fallback()
+    {
+        $failing = Mockery::spy(LogManager::class);
+        $failing->shouldReceive('warning')->andThrow(new RuntimeException('log handler down'));
+        Log::swap($failing);
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturn(null);
+        Cache::shouldReceive('put')->once()->andThrow(new RuntimeException('Connection refused'));
+        Cache::shouldReceive('forget')->once()->andThrow(new RuntimeException('Connection refused'));
+        $this->fakeTokenEndpoint('fresh_token', 'second_token');
+
+        $this->assertSame('fresh_token', $this->service->getToken());
+        $this->assertSame('fresh_token', $this->service->getToken());
+        Http::assertSentCount(1);
+
+        $this->service->invalidate();
+        $failing->shouldHaveReceived('warning')->twice();
     }
 
     public function test_without_a_budget_the_fetch_keeps_the_client_defaults()

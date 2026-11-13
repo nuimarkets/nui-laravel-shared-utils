@@ -53,7 +53,7 @@ A cache outage does not block a token: a failed read fetches a token from the au
 
 ### Time budget
 
-`getToken($timeout)` applies `$timeout` seconds as the auth request's total and connection timeouts. A budget under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
+`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
 
 ### Invalidating a refused token
 
@@ -69,7 +69,9 @@ A cache outage does not block a token: a failed read fetches a token from the au
 | `cache_read_failed` | `warning` | Reading the cached token throws; the token is fetched instead. |
 | `cache_write_failed` | `warning` | Writing a fresh token to the cache throws; it is kept in memory. |
 | `cache_forget_failed` | `warning` | `invalidate()` cannot clear the cached copy. |
-| `budget_spent` | `warning` | A fetch is needed but the caller's budget is under 10 ms. |
+| `budget_spent` | `warning` | A fetch is needed but under 10 ms of the caller's budget is left. |
+
+`cache_read_failed`, `cache_write_failed`, `cache_forget_failed` and `budget_spent` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
 
 Warnings use `ErrorLogger::logWarning()` and should not page Slack in normal consumer routing. The refresh failure path uses `ErrorLogger::logError()` because it needs operator attention before the old token expires.
 
