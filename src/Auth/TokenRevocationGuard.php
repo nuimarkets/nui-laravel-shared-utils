@@ -72,12 +72,16 @@ class TokenRevocationGuard
             $this->warnInvalidSettings();
         }
 
-        $this->announce($mode, $fail);
-
         try {
             $check = $this->client->check($jti, $exp);
         } catch (Throwable) {
             $check = new TokenStatusCheck(TokenStatus::Unavailable, false, 'unexpected', 0.0);
+        }
+
+        // Only after a miss, which has already paid for a call: the window check
+        // is a cache write, and a hit must cost no more than the client's read.
+        if (! $check->cacheHit) {
+            $this->announce($mode, $fail);
         }
 
         $reject = match ($check->status) {
@@ -130,17 +134,21 @@ class TokenRevocationGuard
             $this->log('info', 'Token revocation: check', [
                 ...$context,
                 LogFields::ACTION => 'check',
-                'cache' => $check->cacheHit ? 'hit' : 'miss',
+                LogFields::CACHE_HIT => $check->cacheHit,
                 'cache_error' => $check->cacheError,
-                'latency_ms' => round($check->latencyMs, 3),
+                LogFields::DURATION_MS => round($check->latencyMs, 3),
             ]);
         }
     }
 
-    /** The startup line, once per process per STARTUP_INTERVAL. */
+    /**
+     * The startup line, once per process per STARTUP_INTERVAL, logged on the
+     * first check that misses the cache. Keyed by the settings too, so a
+     * process that reuses a host and pid after a settings change logs again.
+     */
     private function announce(string $mode, string $fail): void
     {
-        if (! $this->firstInWindow('startup', self::STARTUP_INTERVAL)) {
+        if (! $this->firstInWindow("startup:{$mode}:{$fail}", self::STARTUP_INTERVAL)) {
             return;
         }
 

@@ -65,10 +65,10 @@ class TokenRevocationGuardTest extends TestCase
         parent::tearDown();
     }
 
-    private function clientReturning(TokenStatus $status, ?string $reason = null, bool $cacheHit = false): MockInterface
+    private function clientReturning(TokenStatus $status, ?string $reason = null, bool $cacheHit = false, bool $cacheError = false): MockInterface
     {
         $client = Mockery::mock(TokenStatusClient::class);
-        $client->shouldReceive('check')->andReturn(new TokenStatusCheck($status, $cacheHit, $reason, 1.25));
+        $client->shouldReceive('check')->andReturn(new TokenStatusCheck($status, $cacheHit, $reason, 1.25, $cacheError));
 
         return $client;
     }
@@ -305,8 +305,67 @@ class TokenRevocationGuardTest extends TestCase
         $line = $this->lines('check')[0];
         $this->assertSame('info', $line['level']);
         $this->assertSame('active', $line['context']['result']);
-        $this->assertSame('hit', $line['context']['cache']);
-        $this->assertSame(1.25, $line['context']['latency_ms']);
+        $this->assertTrue($line['context']['cache.hit']);
+        $this->assertFalse($line['context']['cache_error']);
+        $this->assertSame(1.25, $line['context']['duration_ms']);
+    }
+
+    public function test_sampled_check_line_reports_a_cache_error()
+    {
+        Config::set('token_revocation.mode', 'shadow');
+        Config::set('token_revocation.sample_rate', 1.0);
+
+        $this->guard($this->clientReturning(TokenStatus::Active, cacheError: true))->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $line = $this->lines('check')[0];
+        $this->assertFalse($line['context']['cache.hit']);
+        $this->assertTrue($line['context']['cache_error']);
+    }
+
+    public function test_cache_hit_makes_no_store_call_of_its_own()
+    {
+        Config::set('token_revocation.mode', 'enforce');
+        ThrowingCacheStore::register();
+        Config::set('cache.stores.token_status', ['driver' => 'throwing']);
+
+        $this->assertTrue($this->guard($this->clientReturning(TokenStatus::Revoked, cacheHit: true))->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS));
+
+        $this->assertSame(0, ThrowingCacheStore::$calls);
+        $this->assertSame([], $this->lines('startup'));
+    }
+
+    public function test_startup_line_logs_again_after_a_settings_change()
+    {
+        Config::set('token_revocation.mode', 'shadow');
+        $client = $this->clientReturning(TokenStatus::Active);
+
+        $this->guard($client)->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+        Config::set('token_revocation.mode', 'enforce');
+        $this->guard($client)->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $this->assertSame(['shadow', 'enforce'], array_map(fn ($line) => $line['context']['mode'], $this->lines('startup')));
+    }
+
+    public function test_shadow_unavailable_warning_says_admitted_even_when_closed()
+    {
+        Config::set('token_revocation.mode', 'shadow');
+        Config::set('token_revocation.fail', 'closed');
+
+        $this->guard($this->clientReturning(TokenStatus::Unavailable, 'http_503'))->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $this->assertTrue($this->lines('unavailable')[0]['context']['admitted']);
+    }
+
+    public function test_invalid_setting_warning_is_rate_limited()
+    {
+        Config::set('token_revocation.mode', 'enforced');
+        $client = Mockery::mock(TokenStatusClient::class);
+        $client->shouldNotReceive('check');
+
+        $this->guard($client)->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+        $this->guard($client)->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $this->assertCount(1, $this->lines('invalid_setting'));
     }
 
     public function test_no_check_line_at_zero_sample_rate()
