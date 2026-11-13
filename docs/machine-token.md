@@ -59,7 +59,7 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 
 ### Invalidating a refused token
 
-`invalidate()` drops the in-memory token, the old-token fallback and the cached copy, so the next `getToken()` fetches a new token from the auth endpoint. Call it when a request made with the token is refused (401 or 403) because the token was revoked or rotated. If the cache cannot be cleared, the next fetch skips the cache read and overwrites the refused copy. It never throws.
+`invalidate()` drops the in-memory token, the old-token fallback and the cached copy, so the next `getToken()` fetches a new token from the auth endpoint. Call it when a request made with the token is refused with a 401 because the token was revoked or rotated. A 403 refuses the client's scope, which a new token from the same client does not change. If the cache cannot be cleared, the next fetch skips the cache read and overwrites the refused copy. It never throws.
 
 ## Logging
 

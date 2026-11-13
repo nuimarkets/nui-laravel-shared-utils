@@ -560,25 +560,37 @@ class TokenStatusClientTest extends TestCase
 
     // The service's own machine token
 
-    public static function refusals(): array
-    {
-        return ['401' => [401], '403' => [403]];
-    }
-
-    #[DataProvider('refusals')]
-    public function test_refused_machine_token_is_dropped_refetched_and_the_call_retried(int $refusal)
+    public function test_refused_machine_token_is_dropped_refetched_and_the_call_retried()
     {
         Cache::put('machine_token', ['token' => 'revoked-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
         Http::fake([
             self::TOKEN_URL => Http::response(['access_token' => 'new-token', 'expires_in' => 3600]),
             self::STATUS_URL => fn (Request $request) => $request->hasHeader('Authorization', 'Bearer new-token')
                 ? Http::response(['active' => false])
-                : Http::response(['message' => 'Unauthenticated.'], $refusal),
+                : Http::response(['message' => 'Unauthenticated.'], 401),
         ]);
 
         $this->assertSame(TokenStatus::Revoked, $this->realClient()->status(self::JTI, $this->exp));
         $this->assertSame(2, $this->statusCalls());
         $this->assertSame('new-token', Cache::get('machine_token')['token']);
+    }
+
+    public function test_forbidden_is_unavailable_without_a_refetch()
+    {
+        Cache::put('machine_token', ['token' => 'valid-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+        Http::fake([
+            self::TOKEN_URL => Http::response(['access_token' => 'new-token', 'expires_in' => 3600]),
+            self::STATUS_URL => Http::response(['message' => 'Forbidden'], 403),
+        ]);
+
+        $check = $this->realClient()->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('http_403', $check->reason);
+        $this->assertSame(1, $this->statusCalls());
+        Http::assertNotSent(fn (Request $request) => $request->url() === self::TOKEN_URL);
+        $this->assertSame('valid-token', Cache::get('machine_token')['token']);
+        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_second_refusal_is_unavailable()

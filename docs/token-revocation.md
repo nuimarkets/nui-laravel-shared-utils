@@ -20,7 +20,7 @@ check(jti, exp)                                   t0 = when the check starts
     breaker key set                               -> unavailable (no call)
   get this service's machine token                inside the budget
   POST {"jti": ...} to the status URL             inside the budget, no redirects
-    401 or 403    -> drop the machine token from this process and the cache,
+    401           -> drop the machine token from this process and the cache,
                      fetch a new one, retry once
     200 {"active": true}   -> write `active`, active_until = t0 + active_ttl,
                               only if no entry exists           -> active
@@ -137,7 +137,7 @@ The check expects an endpoint that:
 - answers `200` with `{"active": true}` or `{"active": false}`, and nothing else counts as an answer;
 - does not evaluate expiry, since each validator owns expiry and its own leeway;
 - answers a database or other infrastructure error with a 5xx, never `"active": false`;
-- answers 401 or 403 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget. A route that keeps answering 401 or 403 for another reason (a gateway that does not know the path, a firewall) therefore costs one new machine token per `breaker_seconds` per service while the cache works. While it does not, under a runtime that resets state per request (PHP-FPM, FrankenPHP without workers) nothing remembers the breaker or the token, so each request fetches a token, is refused, drops it, fetches another and is refused again: two token grants and two status calls per request. A long-lived worker keeps the second token in memory, so after its first request it makes one grant and two status calls per request.
+- answers 401 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget. A 403 is `unavailable` like any other status, with no new token: a new token from the same client cannot change a refusal of its scope, or a refusal from a gateway or firewall in front of the route. A route that keeps answering 401 for another reason therefore costs one new machine token per `breaker_seconds` per service while the cache works. While it does not, under a runtime that resets state per request (PHP-FPM, FrankenPHP without workers) nothing remembers the breaker or the token, so each request fetches a token, is refused, drops it, fetches another and is refused again: two token grants and two status calls per request. A long-lived worker keeps the second token in memory, so after its first request it makes one grant and two status calls per request.
 
 ## Logging
 

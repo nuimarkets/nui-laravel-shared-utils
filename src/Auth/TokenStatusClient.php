@@ -156,7 +156,9 @@ class TokenStatusClient
 
     /**
      * Calls the status route, retrying once with a new machine token if the
-     * route refuses this service's token (401 or 403).
+     * route refuses this service's token (401). A 403 is no answer, like any
+     * other status: a new token from the same client cannot change a refusal
+     * of its scope, or one from something in front of the route.
      *
      * @return bool|string The `active` answer, or why there is none.
      */
@@ -197,7 +199,7 @@ class TokenStatusClient
                 return 'oversized';
             }
 
-            if (($code === 401 || $code === 403) && $attempt === 1) {
+            if ($code === 401 && $attempt === 1) {
                 $this->quietly(fn () => $this->machineTokens->invalidate());
 
                 continue;
