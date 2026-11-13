@@ -189,6 +189,13 @@ class TokenStatusClient
                 return $sink->overflowed() ? 'oversized' : 'connection';
             }
 
+            // A transport that stops copying on a refused write without failing
+            // (Guzzle's PHP stream handler) returns the truncated prefix, which
+            // can parse as an answer.
+            if ($sink->overflowed()) {
+                return 'oversized';
+            }
+
             if (($code === 401 || $code === 403) && $attempt === 1) {
                 $this->quietly(fn () => $this->machineTokens->invalidate());
 

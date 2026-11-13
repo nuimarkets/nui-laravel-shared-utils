@@ -227,6 +227,24 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame('malformed', $check->reason);
     }
 
+    public function test_overflow_without_a_transport_error_is_not_read_as_an_answer()
+    {
+        // Guzzle's PHP stream handler stops copying on a refused write and returns
+        // what it has, so the response holds a prefix that parses on its own.
+        Http::fake([self::STATUS_URL => function (Request $request, array $options) {
+            $options['sink']->write('{"active":false}');
+            $options['sink']->write(str_repeat('x', 2000));
+
+            return Http::response('{"active":false}');
+        }]);
+
+        $check = $this->client()->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('oversized', $check->reason);
+        $this->assertNull($this->entry());
+    }
+
     public function test_redirect_is_not_followed_and_is_unavailable()
     {
         Http::fake([
