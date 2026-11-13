@@ -137,7 +137,7 @@ The check expects an endpoint that:
 - answers `200` with `{"active": true}` or `{"active": false}`, and nothing else counts as an answer;
 - does not evaluate expiry, since each validator owns expiry and its own leeway;
 - answers a database or other infrastructure error with a 5xx, never `"active": false`;
-- answers 401 or 403 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget. A route that keeps answering 401 or 403 for another reason (a gateway that does not know the path, a firewall) therefore costs one new machine token per `breaker_seconds` per service while the cache works, and one per request while it does not.
+- answers 401 or 403 when it refuses the caller's machine token. The client then drops that token from memory and the cache (`MachineTokenService::invalidate()`), fetches a new one and retries once within the budget. A route that keeps answering 401 or 403 for another reason (a gateway that does not know the path, a firewall) therefore costs one new machine token per `breaker_seconds` per service while the cache works. While it does not, nothing remembers the breaker or the token, so each request fetches a token, is refused, drops it, fetches another and is refused again: two token grants and two status calls per request.
 
 ## Logging
 
