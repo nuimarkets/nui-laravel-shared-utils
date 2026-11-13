@@ -37,7 +37,8 @@ class TokenStatusClient
 
     public const KEY_PREFIX = 'token_status:';
 
-    public const BREAKER_KEY = 'token_status:breaker';
+    /** Outside KEY_PREFIX, so no jti can name the breaker. */
+    public const BREAKER_KEY = 'token_status_breaker';
 
     /** Less budget than this cannot carry a call, and a sub-millisecond Guzzle timeout means none. */
     private const MIN_CALL_SECONDS = 0.01;
@@ -273,8 +274,13 @@ class TokenStatusClient
                 return;
             }
 
+            // Both bounds count from t0, so the entry is gone by active_until (or
+            // up to a second before, since cache TTLs are whole seconds) and the
+            // first miss after it can store a fresh answer. A TTL counted from
+            // the write would keep the lapsed entry for as long as the call
+            // took, refusing every set-if-absent refresh in that window.
             $activeTtl = (int) config('token_revocation.active_ttl', 30);
-            $ttl = (int) min($activeTtl, floor($secondsLeft));
+            $ttl = (int) floor(min($t0 + $activeTtl, (float) $exp) - $now);
 
             if ($ttl <= 0) {
                 return;

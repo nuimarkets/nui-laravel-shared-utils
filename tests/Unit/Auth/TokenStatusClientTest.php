@@ -2,11 +2,13 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Auth;
 
+use Illuminate\Cache\Events\RetrievingManyKeys;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Mockery;
 use Mockery\MockInterface;
@@ -368,13 +370,35 @@ class TokenStatusClientTest extends TestCase
         $client->status(self::JTI, $this->exp);
         $this->assertSame((float) self::T0 + 30, $this->entry()['active_until']);
 
-        Carbon::setTestNow(Carbon::createFromTimestampMs(self::T0 * 1000 + 29_900));
+        Carbon::setTestNow(Carbon::createFromTimestampMs(self::T0 * 1000 + 29_400));
         $this->assertTrue($client->check(self::JTI, $this->exp)->cacheHit);
 
-        // 30 s after t0 the entry is lapsed, though its cache TTL (from the write at t0 + 1.5) is not.
+        // By t0 + 30 the answer is no longer trusted, however late it was written.
         Carbon::setTestNow(Carbon::createFromTimestamp(self::T0 + 30));
-        $this->assertNotNull($this->entry());
         $this->assertFalse($client->check(self::JTI, $this->exp)->cacheHit);
+        $this->assertSame(2, $this->statusCalls());
+    }
+
+    public function test_slow_answer_does_not_block_the_refresh_after_it_lapses()
+    {
+        // Only the first answer is slow, so its entry is what the refresh meets.
+        $calls = 0;
+        Http::fake([self::STATUS_URL => function () use (&$calls) {
+            if (++$calls === 1) {
+                $this->advance(1.5);
+            }
+
+            return Http::response(['active' => true]);
+        }]);
+        $client = $this->client();
+
+        $client->status(self::JTI, $this->exp);
+        Carbon::setTestNow(Carbon::createFromTimestamp(self::T0 + 30));
+        $client->status(self::JTI, $this->exp);
+
+        // The refresh at t0 + 30 was stored, so the next check is a hit.
+        $this->advance(0.5);
+        $this->assertTrue($client->check(self::JTI, $this->exp)->cacheHit);
         $this->assertSame(2, $this->statusCalls());
     }
 
@@ -600,7 +624,38 @@ class TokenStatusClientTest extends TestCase
         $machineTokens->shouldReceive('getToken')->andThrow(new \TypeError('bad config'));
         Http::fake();
 
-        $this->assertSame(TokenStatus::Unavailable, $this->client($machineTokens)->status(self::JTI, $this->exp));
+        $check = $this->client($machineTokens)->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('machine_token', $check->reason);
+        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+    }
+
+    public function test_time_spent_reading_the_status_cache_comes_out_of_the_budget()
+    {
+        Event::listen(RetrievingManyKeys::class, fn () => $this->advance(0.5));
+        $timeout = null;
+        Http::fake([self::STATUS_URL => function (Request $request, array $options) use (&$timeout) {
+            $timeout = $options['timeout'];
+
+            return Http::response(['active' => true]);
+        }]);
+
+        $this->client()->status(self::JTI, $this->exp);
+
+        $this->assertEqualsWithDelta(1.5, $timeout, 0.001);
+    }
+
+    public function test_a_jti_named_like_the_breaker_cannot_open_it()
+    {
+        $this->fakeStatus(false);
+        $client = $this->client();
+
+        $client->status('breaker', $this->exp);
+        $check = $client->check(self::JTI, $this->exp);
+
+        $this->assertNotSame('breaker_open', $check->reason);
+        $this->assertSame(2, $this->statusCalls());
     }
 
     public function test_machine_token_acquisition_stalling_past_the_budget_is_unavailable_without_a_call()
