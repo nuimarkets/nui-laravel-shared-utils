@@ -479,6 +479,20 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame(2, $this->statusCalls());
     }
 
+    public function test_breaker_seconds_zero_never_suppresses_a_call()
+    {
+        Config::set('token_revocation.breaker_seconds', 0);
+        Http::fake([self::STATUS_URL => Http::response('', 503)]);
+        $client = $this->client();
+
+        $client->status(self::JTI, $this->exp);
+        $check = $client->check('other-jti', $this->exp);
+
+        $this->assertSame('http_503', $check->reason);
+        $this->assertSame(2, $this->statusCalls());
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+    }
+
     public function test_cached_answers_are_served_while_the_breaker_is_open()
     {
         Cache::store('token_status')->put(TokenStatusClient::KEY_PREFIX.self::JTI, ['status' => 'revoked'], 600);
