@@ -4,7 +4,7 @@
 
 A resource server that validates JWT access tokens on its own (signature and expiry) cannot see a revocation recorded at the token issuer, so a revoked token keeps working until it expires. `TokenRevocationGuard` closes that gap: after the token passes local validation, it asks the issuer whether the token is still active, through `TokenStatusClient`, and caches the answer briefly.
 
-In `enforce` mode, while the issuer answers, a revocation takes effect within `active_ttl` (30 seconds by default) plus the duration of one call, at every service that runs the check; while it cannot answer, the `fail` setting decides whether tokens are admitted. `shadow` makes the same calls and logs the tokens it would reject, but admits every token.
+In `enforce` mode, while the issuer answers, a revocation takes effect within `active_ttl` (30 seconds by default) plus the duration of one call, at every service that runs the check. A failed call opens the breaker for `breaker_seconds` (10 seconds by default), and until it lapses cache misses skip the issuer even if it has recovered, so the window can stretch by up to that long; `breaker_seconds` set to `0` removes the stretch. While the issuer cannot answer, or the breaker is open, the `fail` setting decides whether tokens are admitted, and `closed` refuses them instead. `shadow` makes the same calls and logs the tokens it would reject, but admits every token.
 
 ## How a check runs
 
