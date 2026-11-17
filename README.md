@@ -95,7 +95,7 @@ Automated test database management, specialized test jobs for queue testing, JSO
 
 ## Requirements
 
-- PHP 8.3 or higher
+- PHP 8.3 or higher, with the `curl` extension (the HTTP time budgets rely on it)
 - Laravel 11.x or 12.x
 - Composer 2.x
 

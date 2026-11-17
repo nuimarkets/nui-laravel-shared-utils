@@ -30,6 +30,8 @@ check(jti, exp)                                   t0 = when the check starts
 
 The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The machine token's own cache read is bounded only by the default cache connection's timeouts, so keep those short as well.
 
+Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget.
+
 The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered.
 
 | Result | Meaning | Cached |

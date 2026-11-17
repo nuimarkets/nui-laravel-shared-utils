@@ -136,4 +136,46 @@ class TokenStatusClientHttpTest extends TestCase
         $this->assertSame(TokenStatus::Unavailable, $check->status);
         $this->assertSame('http_302', $check->reason);
     }
+
+    public function test_dripping_answer_is_unavailable_within_the_budget()
+    {
+        Config::set('token_revocation.timeout', 1.0);
+        $started = microtime(true);
+
+        $check = $this->check('/status/drip');
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('connection', $check->reason);
+        $this->assertLessThan(1.5, microtime(true) - $started);
+    }
+
+    public function test_dripping_token_endpoint_is_unavailable_within_the_budget()
+    {
+        Config::set('token_revocation.timeout', 1.0);
+        Config::set('token_revocation.url', self::$serverUrl.'/status/inactive');
+        Config::set('machine_token.url', self::$serverUrl.'/token/drip');
+        Config::set('machine_token.client_id', 'client');
+        Config::set('machine_token.secret', 'secret');
+        Config::set('machine_token.redis_key', 'machine_token');
+        Config::set('machine_token.time_before_expire', 300);
+        $started = microtime(true);
+
+        $check = (new TokenStatusClient(new MachineTokenService))->check('jti-token-drip', time() + 3600);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('machine_token', $check->reason);
+        $this->assertLessThan(1.5, microtime(true) - $started);
+    }
+
+    /**
+     * Both budgeted calls rely on cURL's limit on the whole transfer. Guzzle's
+     * PHP stream handler, its choice when cURL is missing, limits each read
+     * only, so the drip tests above would run past the budget there.
+     */
+    public function test_the_package_requires_the_transport_that_enforces_the_budget()
+    {
+        $composer = json_decode(file_get_contents(__DIR__.'/../../composer.json'), true);
+
+        $this->assertArrayHasKey('ext-curl', $composer['require']);
+    }
 }

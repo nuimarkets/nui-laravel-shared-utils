@@ -1,9 +1,9 @@
 <?php
 
 /*
- * Router for `php -S`, standing in for a token issuer's status endpoint in
- * TokenStatusClientHttpTest. Each path answers one way the real endpoint or
- * something in front of it could.
+ * Router for `php -S`, standing in for a token issuer's status and token
+ * endpoints in TokenStatusClientHttpTest. Each path answers one way the real
+ * endpoint or something in front of it could.
  */
 
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
@@ -51,6 +51,35 @@ switch ($path) {
         header('Location: /status/inactive', true, 302);
         break;
 
+    case '/status/drip':
+        drip('{"active":false,"pad":"', '"}');
+        break;
+
+    case '/token/drip':
+        drip('{"access_token":"drip-token","expires_in":3600,"pad":"', '"}');
+        break;
+
     default:
         http_response_code(404);
+}
+
+/**
+ * A small body sent a byte at a time, each well inside any read timeout, for
+ * about six seconds in all: only a limit on the whole transfer ends it sooner.
+ */
+function drip(string $head, string $tail): void
+{
+    header('Content-Type: application/json');
+    echo $head;
+
+    for ($i = 0; $i < 30; $i++) {
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+        usleep(200_000);
+        echo 'x';
+    }
+
+    echo $tail;
 }

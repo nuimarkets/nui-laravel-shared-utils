@@ -55,7 +55,7 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 
 ### Time budget
 
-`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
+`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. The budget holds because cURL applies the timeout to the whole transfer, which is why the package requires the `curl` PHP extension; Guzzle's PHP stream handler, its fallback without cURL, applies it to each read. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
 
 ### Invalidating a refused token
 

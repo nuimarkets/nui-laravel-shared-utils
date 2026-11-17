@@ -177,7 +177,9 @@ class MachineTokenService implements MachineTokenServiceInterface
             if ($timeout !== null) {
                 // The total timeout covers the connection, so both share the budget.
                 // Guzzle gives every redirect hop the full timeout again, so a
-                // budgeted fetch follows none.
+                // budgeted fetch follows none. cURL applies the timeout to the whole
+                // transfer; Guzzle's PHP stream handler, used without cURL, applies
+                // it to each read, which is why the package requires ext-curl.
                 $request = $request->withoutRedirecting()->withOptions([
                     'connect_timeout' => $timeout,
                     'timeout' => $timeout,

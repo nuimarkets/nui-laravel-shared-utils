@@ -216,7 +216,9 @@ class TokenStatusClient
     /**
      * The sink takes the decoded body as it arrives and aborts the transfer past
      * MAX_BODY_BYTES, so an oversized or inflating response is never buffered.
-     * Http::fake() responses bypass the sink; readActive() caps those.
+     * Http::fake() responses bypass the sink; readActive() caps those. `timeout`
+     * bounds the whole transfer under cURL, which the package requires; Guzzle's
+     * PHP stream handler would bound each read only.
      */
     private function post(string $url, string $jti, string $machineToken, float $remaining, BoundedBodyStream $sink): Response
     {
