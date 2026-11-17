@@ -55,7 +55,7 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 
 ### Time budget
 
-`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. The budget holds because cURL applies the timeout to the whole transfer, which is why the package requires the `curl` PHP extension; Guzzle's PHP stream handler, its fallback without cURL, applies it to each read. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
+`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. The budget holds because cURL applies the timeout to the whole transfer; Guzzle's PHP stream handler, its fallback without cURL, applies it to each read. The package requires the `curl` PHP extension, and when the extension is loaded with `curl_exec` and `curl_multi_exec` both disabled, a budgeted fetch is not made: the service logs `curl_unavailable` and falls back to the old token or throws. A fetch without a budget is unaffected. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
 
 ### Invalidating a refused token
 
@@ -72,8 +72,9 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 | `cache_write_failed` | `warning` | Writing a fresh token to the cache throws; it is kept in memory. |
 | `cache_forget_failed` | `warning` | `invalidate()` cannot clear the cached copy. |
 | `budget_spent` | `warning` | A fetch is needed but under 10 ms of the caller's budget is left. |
+| `curl_unavailable` | `warning` | A budgeted fetch is needed but neither `curl_exec` nor `curl_multi_exec` can run. |
 
-`cache_read_failed`, `cache_write_failed`, `cache_forget_failed` and `budget_spent` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
+`cache_read_failed`, `cache_write_failed`, `cache_forget_failed`, `budget_spent` and `curl_unavailable` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
 
 Warnings use `ErrorLogger::logWarning()` and should not page Slack in normal consumer routing. The refresh failure path uses `ErrorLogger::logError()` because it needs operator attention before the old token expires.
 

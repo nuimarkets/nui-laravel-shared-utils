@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use NuiMarkets\LaravelSharedUtils\Services\MachineTokenService;
+use NuiMarkets\LaravelSharedUtils\Support\CurlTransport;
 use Throwable;
 
 /**
@@ -28,7 +29,8 @@ use Throwable;
  *
  * A cache failure skips the cache and the breaker and still makes the call.
  * The whole check, this service's machine token included, runs inside
- * `timeout` seconds. Never throws.
+ * `timeout` seconds. A process where cURL cannot run makes no call: a miss is
+ * `unavailable` (`curl_unavailable`). Never throws.
  */
 class TokenStatusClient
 {
@@ -109,6 +111,12 @@ class TokenStatusClient
             if (($values[self::BREAKER_KEY] ?? null) !== null) {
                 return [TokenStatus::Unavailable, false, 'breaker_open', false];
             }
+        }
+
+        // Without cURL the call's timeout would bound each read, not the call,
+        // so the budget could not hold. No call is made, so no breaker either.
+        if (! CurlTransport::available()) {
+            return [TokenStatus::Unavailable, false, 'curl_unavailable', $cacheError];
         }
 
         $answer = $this->ask($url, $jti, $deadline);
@@ -217,8 +225,8 @@ class TokenStatusClient
      * The sink takes the decoded body as it arrives and aborts the transfer past
      * MAX_BODY_BYTES, so an oversized or inflating response is never buffered.
      * Http::fake() responses bypass the sink; readActive() caps those. `timeout`
-     * bounds the whole transfer under cURL, which the package requires; Guzzle's
-     * PHP stream handler would bound each read only.
+     * bounds the whole transfer under cURL. Guzzle's PHP stream handler would
+     * bound each read only, so resolve() makes no call when cURL cannot run.
      */
     private function post(string $url, string $jti, string $machineToken, float $remaining, BoundedBodyStream $sink): Response
     {

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 use NuiMarkets\LaravelSharedUtils\Contracts\MachineTokenServiceInterface;
 use NuiMarkets\LaravelSharedUtils\Logging\ErrorLogger;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
+use NuiMarkets\LaravelSharedUtils\Support\CurlTransport;
 use Throwable;
 
 use function config;
@@ -35,7 +36,8 @@ class MachineTokenService implements MachineTokenServiceInterface
      * @param  float|null  $timeout  Seconds the caller can still spend. When given,
      *                               a fetch from the auth endpoint gets what is left
      *                               of it after the cache read, and follows no
-     *                               redirects. Null keeps the HTTP client's defaults.
+     *                               redirects; without a cURL transport no fetch is
+     *                               made. Null keeps the HTTP client's defaults.
      */
     public function getToken(?float $timeout = null): string
     {
@@ -171,6 +173,12 @@ class MachineTokenService implements MachineTokenServiceInterface
             return $this->panic();
         }
 
+        if ($timeout !== null && ! CurlTransport::available()) {
+            $this->warn('machine_token_curl_unavailable', 'Machine token fetch skipped: no cURL transport to bound it by the caller\'s time budget', 'curl_unavailable');
+
+            return $this->panic();
+        }
+
         try {
             $request = Http::accept('application/json');
 
@@ -179,7 +187,7 @@ class MachineTokenService implements MachineTokenServiceInterface
                 // Guzzle gives every redirect hop the full timeout again, so a
                 // budgeted fetch follows none. cURL applies the timeout to the whole
                 // transfer; Guzzle's PHP stream handler, used without cURL, applies
-                // it to each read, which is why the package requires ext-curl.
+                // it to each read, which is why a budgeted fetch needs cURL.
                 $request = $request->withoutRedirecting()->withOptions([
                     'connect_timeout' => $timeout,
                     'timeout' => $timeout,

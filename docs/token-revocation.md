@@ -30,7 +30,7 @@ check(jti, exp)                                   t0 = when the check starts
 
 The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The machine token's own cache read is bounded only by the default cache connection's timeouts, so keep those short as well.
 
-Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget.
+Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. The extension can also be loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and Guzzle then falls back the same way. In that case the client makes no call: a cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides.
 
 The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered.
 
@@ -38,7 +38,7 @@ The response body goes into a sink that refuses bytes past 1 KB, counted after d
 | --- | --- | --- |
 | `active` | 200 with `"active": true` | Until `t0 + active_ttl`, and never past the token's `exp`. Written only when no entry exists, so a slow positive answer cannot replace a newer `revoked`. Not written when the token has already expired. |
 | `revoked` | 200 with `"active": false`. The only result that is a revocation. | Overwrites any entry, for `max(revoked_grace, exp + revoked_grace - now)` seconds. |
-| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB once decoded, no machine token, a spent budget, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
+| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB once decoded, no machine token, a spent budget, no cURL to make the call with, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
 
 `TokenStatusClient` and `TokenRevocationGuard` never throw.
 
@@ -159,7 +159,7 @@ A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) ke
 
 The package's default `SensitiveDataProcessor` redacts `user_id` when PII redaction is on (the default), so `would reject` and `rejected` lines show `user_id` as `[REDACTED]` unless `logging-utils.processors.sensitive_data.preserve_fields` lists it. `sub` and `jti` are not redacted.
 
-`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`.
+`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `curl_unavailable`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`.
 
 ## Testing
 
