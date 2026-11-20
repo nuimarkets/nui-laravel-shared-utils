@@ -27,10 +27,11 @@ class MachineTokenService implements MachineTokenServiceInterface
     private ?array $oldToken = null;
 
     /**
-     * Set by invalidate(): the next fetch goes to the auth endpoint even if the
-     * cache still holds the refused token, for example because forget() failed.
+     * Set by invalidate(): the token a caller said was refused. A cached entry
+     * still holding it is a miss, so the next fetch replaces it, while a
+     * replacement another process has cached is used as it is.
      */
-    private bool $skipCacheRead = false;
+    private ?string $refusedToken = null;
 
     /**
      * @param  float|null  $timeout  Seconds the caller can still spend. When given,
@@ -44,13 +45,16 @@ class MachineTokenService implements MachineTokenServiceInterface
         if ($this->tokenString === '') {
             $deadline = $timeout === null ? null : $this->now() + $timeout;
 
-            /** Try redis, unless invalidate() said its copy was refused */
-            $token = $this->skipCacheRead ? null : $this->readCachedToken();
+            /** Try redis */
+            $token = $this->readCachedToken();
 
             /** Check expiry, throw it away if too old */
             if ($token) {
                 if (! is_array($token) or empty($token['expiry']) or empty($token['token'])) {
                     /** Something wrong with it, get a new one. */
+                    $token = null;
+                } elseif ($token['token'] === $this->refusedToken) {
+                    /** A caller said it was refused, so it is no fallback either. */
                     $token = null;
                 } else {
                     $expiry = strtotime($token['expiry']);
@@ -66,7 +70,6 @@ class MachineTokenService implements MachineTokenServiceInterface
             if (! $token) {
                 /** Retrieve new token and store in redis */
                 $token = $this->retrieveFromAuth($deadline === null ? null : $deadline - $this->now());
-                $this->skipCacheRead = false;
                 $this->writeCachedToken($token);
             }
 
@@ -78,23 +81,23 @@ class MachineTokenService implements MachineTokenServiceInterface
     }
 
     /**
-     * Drop every copy of the current token, in memory and in the cache, so the
-     * next getToken() fetches a new one. For a caller whose request was refused
-     * with this token (revoked or rotated at the issuer). Never throws.
+     * For a caller whose request was refused with the token this process last
+     * returned (revoked or rotated at the issuer). Drops this process's copies
+     * of it and nothing else: the next getToken() treats a cache entry still
+     * holding it as a miss and fetches a replacement, which overwrites the
+     * entry, but uses a replacement another process has already cached.
+     * Nothing is deleted, so a late refusal cannot remove another process's
+     * replacement, and the shared entry stays for other callers if the fetch
+     * fails. Never throws.
      */
     public function invalidate(): void
     {
+        if ($this->tokenString !== '') {
+            $this->refusedToken = $this->tokenString;
+        }
+
         $this->tokenString = '';
         $this->oldToken = null;
-        $this->skipCacheRead = true;
-
-        try {
-            Cache::forget(config('machine_token.redis_key'));
-        } catch (Throwable $e) {
-            $this->warn('machine_token_cache_failed', 'Machine token cache forget failed: '.$e->getMessage(), 'cache_forget_failed', [
-                'error' => $e->getMessage(),
-            ]);
-        }
     }
 
     /** A cache read failure is a miss: the token is fetched from the auth endpoint. */

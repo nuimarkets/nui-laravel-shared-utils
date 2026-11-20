@@ -589,6 +589,45 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame('new-token', Cache::get('machine_token')['token']);
     }
 
+    public function test_late_refusal_uses_the_replacement_another_process_cached()
+    {
+        Cache::put('machine_token', ['token' => 'revoked-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+        Http::fake([
+            self::TOKEN_URL => Http::response(['access_token' => 'own-token', 'expires_in' => 3600]),
+            self::STATUS_URL => function (Request $request) {
+                if ($request->hasHeader('Authorization', 'Bearer replacement-token')) {
+                    return Http::response(['active' => true]);
+                }
+
+                // Another process refreshed the shared token while this call ran.
+                Cache::put('machine_token', ['token' => 'replacement-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+
+                return Http::response(['message' => 'Unauthenticated.'], 401);
+            },
+        ]);
+
+        $this->assertSame(TokenStatus::Active, $this->realClient()->status(self::JTI, $this->exp));
+        $this->assertSame(2, $this->statusCalls());
+        Http::assertNotSent(fn (Request $request) => $request->url() === self::TOKEN_URL);
+        $this->assertSame('replacement-token', Cache::get('machine_token')['token']);
+    }
+
+    public function test_refusal_during_a_token_endpoint_outage_keeps_the_shared_token()
+    {
+        Cache::put('machine_token', ['token' => 'shared-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+        Http::fake([
+            self::TOKEN_URL => Http::response(['error' => 'unavailable'], 503),
+            self::STATUS_URL => Http::response(['message' => 'Unauthenticated.'], 401),
+        ]);
+
+        $check = $this->realClient()->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('machine_token', $check->reason);
+        $this->assertSame(1, $this->statusCalls());
+        $this->assertSame('shared-token', Cache::get('machine_token')['token']);
+    }
+
     public function test_forbidden_is_unavailable_without_a_refetch()
     {
         Cache::put('machine_token', ['token' => 'valid-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);

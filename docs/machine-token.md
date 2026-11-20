@@ -59,7 +59,7 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 
 ### Invalidating a refused token
 
-`invalidate()` drops the in-memory token, the old-token fallback and the cached copy, so the next `getToken()` fetches a new token from the auth endpoint. Call it when a request made with the token is refused with a 401 because the token was revoked or rotated. A 403 refuses the client's scope, which a new token from the same client does not change. If the cache cannot be cleared, the next fetch skips the cache read and overwrites the refused copy. It never throws.
+`invalidate()` drops this process's copies of the token it last returned: the in-memory token and the old-token fallback. Call it when a request made with the token is refused with a 401 because the token was revoked or rotated. A 403 refuses the client's scope, which a new token from the same client does not change. The cached copy is not deleted. The next `getToken()` in this process treats a cache entry that still holds the refused token as a miss and fetches a new token, which overwrites the entry, and uses a different token it finds there, one another process has already fetched, with no request. So a refusal that arrives after another process has cached a replacement cannot remove it, and when the auth endpoint is down the cached token stays for the service's other callers instead of being deleted with nothing to replace it. It never throws.
 
 ## Logging
 
@@ -70,11 +70,10 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 | `token_refresh_failed` | `error` | Refresh fails while an old token is still valid. |
 | `cache_read_failed` | `warning` | Reading the cached token throws; the token is fetched instead. |
 | `cache_write_failed` | `warning` | Writing a fresh token to the cache throws; it is kept in memory. |
-| `cache_forget_failed` | `warning` | `invalidate()` cannot clear the cached copy. |
 | `budget_spent` | `warning` | A fetch is needed but under 10 ms of the caller's budget is left. |
 | `curl_unavailable` | `warning` | A budgeted fetch is needed but neither `curl_exec` nor `curl_multi_exec` can run. |
 
-`cache_read_failed`, `cache_write_failed`, `cache_forget_failed`, `budget_spent` and `curl_unavailable` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
+`cache_read_failed`, `cache_write_failed`, `budget_spent` and `curl_unavailable` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
 
 Warnings use `ErrorLogger::logWarning()` and should not page Slack in normal consumer routing. The refresh failure path uses `ErrorLogger::logError()` because it needs operator attention before the old token expires.
 
