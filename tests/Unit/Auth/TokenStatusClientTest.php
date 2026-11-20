@@ -650,7 +650,13 @@ class TokenStatusClientTest extends TestCase
     {
         $machineTokens = $this->machineTokens();
         $machineTokens->shouldReceive('invalidate')->once();
-        Http::fake([self::STATUS_URL => Http::response(['message' => 'Unauthenticated.'], 401)]);
+        // The clock moves with each call, so a retry loop without its limit
+        // ends at the deadline instead of hanging.
+        Http::fake([self::STATUS_URL => function () {
+            $this->advance(0.1);
+
+            return Http::response(['message' => 'Unauthenticated.'], 401);
+        }]);
 
         $check = $this->client($machineTokens)->check(self::JTI, $this->exp);
 
