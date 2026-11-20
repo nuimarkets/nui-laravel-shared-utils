@@ -21,17 +21,29 @@ class MachineTokenService implements MachineTokenServiceInterface
      */
     private const MIN_TIMEOUT_SECONDS = 0.01;
 
+    /**
+     * Refused tokens remembered per process. Bounds a long-lived worker whose
+     * status route keeps refusing; a token older than this coming back costs
+     * one more refusal and retry.
+     */
+    private const MAX_REFUSED = 16;
+
     /** Cache token for any subsequent calls to get within this request. */
     private string $tokenString = '';
 
     private ?array $oldToken = null;
 
     /**
-     * Set by invalidate(): the token a caller said was refused. A cached entry
-     * still holding it is a miss, so the next fetch replaces it, while a
-     * replacement another process has cached is used as it is.
+     * Set by invalidate(): fingerprints of the tokens callers said were
+     * refused, oldest first, so the credentials themselves are not kept. A
+     * cached entry holding one is a miss, so the next fetch replaces it, while
+     * a replacement another process has cached is used as it is. Every refused
+     * token is remembered, not only the last: another process's failed refresh
+     * can write an older one back.
+     *
+     * @var array<string, true>
      */
-    private ?string $refusedToken = null;
+    private array $refused = [];
 
     /**
      * @param  float|null  $timeout  Seconds the caller can still spend. When given,
@@ -53,7 +65,7 @@ class MachineTokenService implements MachineTokenServiceInterface
                 if (! is_array($token) or empty($token['expiry']) or empty($token['token'])) {
                     /** Something wrong with it, get a new one. */
                     $token = null;
-                } elseif ($token['token'] === $this->refusedToken) {
+                } elseif ($this->wasRefused($token['token'])) {
                     /** A caller said it was refused, so it is no fallback either. */
                     $token = null;
                 } else {
@@ -83,9 +95,10 @@ class MachineTokenService implements MachineTokenServiceInterface
     /**
      * For a caller whose request was refused with the token this process last
      * returned (revoked or rotated at the issuer). Drops this process's copies
-     * of it and nothing else: the next getToken() treats a cache entry still
-     * holding it as a miss and fetches a replacement, which overwrites the
-     * entry, but uses a replacement another process has already cached.
+     * of it and nothing else: the next getToken() treats a cache entry holding
+     * it, or a token refused earlier, as a miss and fetches a replacement,
+     * which overwrites the entry, but uses a replacement another process has
+     * already cached.
      * Nothing is deleted, so a late refusal cannot remove another process's
      * replacement, and the shared entry stays for other callers if the fetch
      * fails. Never throws.
@@ -93,11 +106,22 @@ class MachineTokenService implements MachineTokenServiceInterface
     public function invalidate(): void
     {
         if ($this->tokenString !== '') {
-            $this->refusedToken = $this->tokenString;
+            $this->refused[$this->fingerprint($this->tokenString)] = true;
+            $this->refused = array_slice($this->refused, -self::MAX_REFUSED, null, true);
         }
 
         $this->tokenString = '';
         $this->oldToken = null;
+    }
+
+    private function wasRefused(mixed $token): bool
+    {
+        return $this->refused !== [] && is_string($token) && isset($this->refused[$this->fingerprint($token)]);
+    }
+
+    private function fingerprint(string $token): string
+    {
+        return hash('sha256', $token);
     }
 
     /** A cache read failure is a miss: the token is fetched from the auth endpoint. */

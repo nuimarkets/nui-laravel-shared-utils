@@ -339,6 +339,47 @@ class MachineTokenServiceTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_earlier_refused_token_written_back_is_not_used()
+    {
+        $this->cacheToken('first_refused');
+        $this->fakeTokenEndpoint('second_refused', 'replacement_token');
+
+        $this->assertSame('first_refused', $this->service->getToken());
+        $this->service->invalidate();
+        $this->assertSame('second_refused', $this->service->getToken());
+        $this->service->invalidate();
+
+        // Another process's failed refresh writes its old token back.
+        $this->cacheToken('first_refused');
+
+        $this->assertSame('replacement_token', $this->service->getToken());
+        Http::assertSentCount(2);
+    }
+
+    public function test_refused_tokens_are_remembered_up_to_a_bound()
+    {
+        $tokens = array_map(fn (int $i) => "token_{$i}", range(1, 17));
+        $this->fakeTokenEndpoint(...$tokens);
+
+        foreach ($tokens as $token) {
+            $this->assertSame($token, $this->service->getToken());
+            $this->service->invalidate();
+        }
+
+        // The oldest of the 17 is forgotten; the second oldest is still refused,
+        // so it is skipped and the fetch, with the sequence spent, fails.
+        $this->cacheToken('token_2');
+        try {
+            $this->service->getToken();
+            $this->fail('Expected the refused token_2 to be skipped and the failed fetch to throw.');
+        } catch (RuntimeException) {
+            // token_2 was not reused.
+        }
+
+        $this->cacheToken('token_1');
+        $this->assertSame('token_1', $this->service->getToken());
+    }
+
     public function test_invalidate_never_deletes_the_cache_entry()
     {
         Cache::shouldReceive('flush'); // tearDown
