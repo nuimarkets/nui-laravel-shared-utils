@@ -31,7 +31,7 @@ check(jti, exp)                                   t0 = when the check starts
     anything else          -> set the breaker, write nothing    -> unavailable
 ```
 
-The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The machine token's own cache read is bounded only by the default cache connection's timeouts, so keep those short as well.
+The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The cache round trips are not cut off by the budget, only by their stores' own timeouts, and those before the status call count against it. The machine token's own cache read and write run on the default cache connection, so keep its timeouts short as well: a store that hangs can cost the check both timeouts.
 
 Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. Guzzle also falls back when the extension is loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and, for the HTTP client's requests, when libcurl is older than 7.34 or built without SSL. On such a host the client makes no call: every cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides, so `open` admits every token the cache does not already know is revoked. The startup line's `curl_available` field shows which case a process is in.
 
@@ -40,7 +40,7 @@ The response body goes into a sink that refuses bytes past 1 KB, counted after d
 | Result | Meaning | Cached |
 | --- | --- | --- |
 | `active` | 200 with `"active": true` | Until `t0 + active_ttl`, and never past the token's `exp`. Written only when no entry exists, so a slow positive answer cannot replace a newer `revoked`. Not written when the token has already expired. |
-| `revoked` | 200 with `"active": false`. The only result that is a revocation. | Overwrites any entry, for `max(revoked_grace, exp + revoked_grace - now)` seconds. |
+| `revoked` | 200 with `"active": false`. The only result that is a revocation. | Overwrites any entry, for `max(revoked_grace, exp + revoked_grace - now)` seconds. Final for that token at this service: if the issuer later answers `active` for it again, for example after restoring a client or user, it stays refused until the entry lapses. To admit it sooner, delete `token_status:<jti>` from the token status store. |
 | `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB once decoded, no machine token, a spent budget, no cURL to make the call with, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
 
 `TokenStatusClient` and `TokenRevocationGuard` never throw.
@@ -102,7 +102,7 @@ use NuiMarkets\LaravelSharedUtils\Auth\TokenRevocationGuard;
 
 $claims = (array) JWT::decode($jwt, $keys); // signature and expiry verified
 
-if (app(TokenRevocationGuard::class)->shouldReject((string) ($claims['jti'] ?? ''), (int) $claims['exp'], $claims)) {
+if (app(TokenRevocationGuard::class)->shouldReject((string) ($claims['jti'] ?? ''), (int) ($claims['exp'] ?? 0), $claims)) {
     throw new AuthenticationException('Token Exception.'); // the app's own 401
 }
 ```
@@ -190,3 +190,5 @@ class RevokedTokenTest extends TestCase
     }
 }
 ```
+
+`TokenStatusClient` takes the concrete `MachineTokenService`, so a double bound only to `MachineTokenServiceInterface` leaves the real service inside the client. Bind the concrete class too, as the trait does.

@@ -28,9 +28,12 @@ use Throwable;
  *   makes cache misses skip the call for `breaker_seconds`.
  *
  * A cache failure skips the cache and the breaker and still makes the call.
- * The whole check, this service's machine token included, runs inside
- * `timeout` seconds. A process where cURL cannot run makes no call: a miss is
- * `unavailable` (`curl_unavailable`). Never throws.
+ * `timeout` seconds from the start bound this service's machine token, the
+ * status call and its body. Cache reads and writes are cut off only by their
+ * stores' own timeouts; those before the status call (this read, and the
+ * machine token's read and write) count against the budget. A process where
+ * cURL cannot run makes no call: a miss is `unavailable` (`curl_unavailable`).
+ * Never throws.
  */
 class TokenStatusClient
 {
