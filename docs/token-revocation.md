@@ -33,7 +33,7 @@ check(jti, exp)                                   t0 = when the check starts
 
 The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The machine token's own cache read is bounded only by the default cache connection's timeouts, so keep those short as well.
 
-Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. The extension can also be loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and Guzzle then falls back the same way. In that case the client makes no call: a cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides.
+Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. Guzzle also falls back when the extension is loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and, for the HTTP client's requests, when libcurl is older than 7.34 or built without SSL. On such a host the client makes no call: every cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides, so `open` admits every token the cache does not already know is revoked. The startup line's `curl_available` field shows which case a process is in.
 
 The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered.
 
@@ -150,7 +150,7 @@ Every line carries `feature: token_revocation` and an `action`.
 
 | Message | Level | `action` | When | Fields |
 | --- | --- | --- | --- | --- |
-| `Token revocation: check enabled` | info | `startup` | First check in a process that misses the cache, then hourly, and again after `mode` or `fail` changes. Not logged in `off`. | `mode`, `fail`, `url_host`, `cache_store`, `cache_store_defined`, `sample_rate` |
+| `Token revocation: check enabled` | info | `startup` | First check in a process that misses the cache, then hourly, and again after `mode` or `fail` changes. Not logged in `off`. | `mode`, `fail`, `url_host`, `cache_store`, `cache_store_defined`, `curl_available` (false where every miss is `curl_unavailable`), `sample_rate`, and `active_ttl`, `revoked_grace`, `timeout`, `connect_timeout` and `breaker_seconds` as the client reads them |
 | `Token revocation: would reject` | warning | `would_reject` | `shadow`, a check `enforce` would reject | `jti`, `sub`, `user_id`, `aud`, `grant_type`, `validator` (the app name), `result`, `reason`, `mode`, `fail` |
 | `Token revocation: rejected` | warning | `rejected` | `enforce`, a rejected check | as `would reject` |
 | `Token revocation: status unavailable` | warning | `unavailable` | An `unavailable` result other than the breaker, at most once a minute per process | `reason`, `admitted`, `mode`, `fail` |

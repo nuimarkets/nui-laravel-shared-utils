@@ -10,11 +10,11 @@ final class TokenStatusCheck
     /**
      * @param  bool  $cacheHit  The result came from the cache, with no call.
      * @param  string|null  $reason  Why the result is `unavailable`: not_configured,
-     *                               missing_jti, breaker_open, machine_token, deadline,
-     *                               connection, oversized, http_<status>, malformed or
-     *                               unexpected.
-     * @param  bool  $cacheError  The cache store could not be read, so the check
-     *                            called the issuer without the cache or the breaker.
+     *                               missing_jti, breaker_open, curl_unavailable,
+     *                               machine_token, deadline, connection, oversized,
+     *                               http_<status>, malformed or unexpected.
+     * @param  bool  $cacheError  The cache store could not be read, so the check went
+     *                            on without the cache or the breaker.
      */
     public function __construct(
         public readonly TokenStatus $status,

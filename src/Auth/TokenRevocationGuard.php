@@ -6,6 +6,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use NuiMarkets\LaravelSharedUtils\Logging\LogFields;
+use NuiMarkets\LaravelSharedUtils\Support\CurlTransport;
 use Throwable;
 
 /**
@@ -163,7 +164,14 @@ class TokenRevocationGuard
             'url_host' => $url === '' ? null : parse_url($url, PHP_URL_HOST),
             'cache_store' => $store,
             'cache_store_defined' => $store ? config("cache.stores.{$store}") !== null : true,
+            'curl_available' => CurlTransport::available(),
             'sample_rate' => (float) config('token_revocation.sample_rate', 0.01),
+            // As TokenStatusClient reads them, since only mode and fail are checked.
+            'active_ttl' => (int) config('token_revocation.active_ttl', 30),
+            'revoked_grace' => (int) config('token_revocation.revoked_grace', 60),
+            'timeout' => (float) config('token_revocation.timeout', 2),
+            'connect_timeout' => (float) config('token_revocation.connect_timeout', 1),
+            'breaker_seconds' => (int) config('token_revocation.breaker_seconds', 10),
         ]);
     }
 

@@ -278,11 +278,32 @@ class TokenRevocationGuardTest extends TestCase
             'url_host' => 'issuer.test',
             'cache_store' => 'token_status',
             'cache_store_defined' => true,
-        ], array_intersect_key($startup[0]['context'], array_flip(['mode', 'fail', 'url_host', 'cache_store', 'cache_store_defined'])));
+            'curl_available' => true,
+        ], array_intersect_key($startup[0]['context'], array_flip(['mode', 'fail', 'url_host', 'cache_store', 'cache_store_defined', 'curl_available'])));
 
         $this->travel(TokenRevocationGuard::STARTUP_INTERVAL)->seconds();
         $this->guard($client)->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
         $this->assertCount(2, $this->lines('startup'));
+    }
+
+    public function test_startup_line_carries_the_numeric_settings_as_the_client_reads_them()
+    {
+        Config::set('token_revocation.mode', 'shadow');
+        Config::set('token_revocation.active_ttl', '45');
+        Config::set('token_revocation.revoked_grace', 90);
+        Config::set('token_revocation.timeout', '1.5');
+        Config::set('token_revocation.connect_timeout', 0.5);
+        Config::set('token_revocation.breaker_seconds', 0);
+
+        $this->guard($this->clientReturning(TokenStatus::Active))->shouldReject(self::JTI, self::T0 + 60, self::CLAIMS);
+
+        $this->assertSame([
+            'active_ttl' => 45,
+            'revoked_grace' => 90,
+            'timeout' => 1.5,
+            'connect_timeout' => 0.5,
+            'breaker_seconds' => 0,
+        ], array_intersect_key($this->lines('startup')[0]['context'], array_flip(['active_ttl', 'revoked_grace', 'timeout', 'connect_timeout', 'breaker_seconds'])));
     }
 
     public function test_startup_line_reports_an_undefined_store()
