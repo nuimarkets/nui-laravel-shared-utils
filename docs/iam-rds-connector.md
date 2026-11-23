@@ -35,7 +35,7 @@ The provider is a no-op unless `config('iam-rds.auth_mode')` equals `'iam'`. Wit
 
 4. Grant the service's task role (or IAM user) `rds-db:connect` on the relevant `dbuser` ARN. This lives in your infrastructure code, outside this package.
 
-5. Smoke-test a web request, a queue worker, and a CLI command. Retain the original password principal and credentials until credential removal is separately approved. Password rollback must restore the original username and endpoint as well as password mode.
+5. Smoke-test a web request, a queue worker, and a CLI command. Keep the original password user and credentials in place until you have decided to remove them; rolling back to password mode means restoring the original username and endpoint as well as the password.
 
 No edits to `config/database.php` are required. The provider intercepts any connection whose driver is `mysql` or `pgsql` and sets TLS parameters before building the connection and obtains the token inside the lazy PDO resolver when PDO actually opens. Resolving a Laravel connection object alone does not sign a token. IAM connection config exposes a null password; the token is passed only to the underlying driver connector.
 
@@ -57,6 +57,8 @@ The config is read via `config('iam-rds.*')`, not `env()`, so it survives `php a
 Tokens are obtained when PDO opens, not per query. Once a connection is open, RDS only checks the token during the TLS handshake; existing connections continue to work after the token expires. The connector caches tokens in-process keyed on `host:port|username` so PDO openings for the same endpoint and username reuse an unexpired cached token. Delaying first PDO use or a reconnect beyond the cache TTL causes a new token to be minted at that later opening.
 
 Long-lived processes (Horizon workers, daemonized queue workers) still refresh correctly: if the underlying connection drops and Laravel reconnects, the reconnection goes through `DB::extend` again and the new lazy PDO resolver obtains a current token when it opens.
+
+Tools that read the connection's configured password instead of opening PDO receive no token under IAM mode. That includes Laravel's schema dump and load (`php artisan schema:dump`, and `migrate` loading a `database/schema` file into an empty database), which hand the configured password to `mysqldump`, `mysql`, `pg_dump`, `pg_restore` or `psql`. Run them in password mode.
 
 ## Worker and scheduler notes
 
