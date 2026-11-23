@@ -70,6 +70,27 @@ class IamRdsServiceProviderTest extends TestCase
         parent::tearDown();
     }
 
+    private function capturePdoConfig(string $driver, $connection): array
+    {
+        $connector = new class
+        {
+            public array $config = [];
+
+            public function connect(array $config): PDO
+            {
+                $this->config = $config;
+
+                return new PDO('sqlite::memory:');
+            }
+        };
+        $this->app->instance("db.connector.{$driver}", $connector);
+        $this->assertSame(0, self::$fakeGenerator->calls);
+        $this->assertNull($connection->getConfig('password'));
+        $connection->getPdo();
+
+        return $connector->config;
+    }
+
     private function makeFakeGenerator(): object
     {
         return new class
@@ -126,7 +147,7 @@ class IamRdsServiceProviderTest extends TestCase
         $this->refreshApplication();
 
         $conn = DB::connection('rds_mysql');
-        $cfg = $conn->getConfig();
+        $cfg = $this->capturePdoConfig('mysql', $conn);
 
         $this->assertSame(
             'fake-token:proxy.example.rds.amazonaws.com:3306:app_user',
@@ -190,7 +211,7 @@ class IamRdsServiceProviderTest extends TestCase
         $this->refreshApplication();
 
         $conn = DB::connection('rds_pgsql');
-        $cfg = $conn->getConfig();
+        $cfg = $this->capturePdoConfig('pgsql', $conn);
 
         $this->assertSame(
             'fake-token:proxy.example.rds.amazonaws.com:5432:app_user',
