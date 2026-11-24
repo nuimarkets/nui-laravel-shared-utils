@@ -4,7 +4,7 @@ Opt-in support for authenticating Laravel database connections against Amazon RD
 
 ## What this gives you
 
-- Mint a fresh SigV4-signed token (~15 minute TTL) on each new database connection
+- Obtain a SigV4-signed token (~15 minute validity, cached for 840 seconds by default) when PDO opens
 - Correct TLS wiring for MySQL (`PDO::MYSQL_ATTR_SSL_CA` + server cert verification) and Postgres (`sslmode=verify-full`, `sslrootcert`)
 - The AWS RDS global CA truststore, committed with the package
 - A service provider that wraps the default `mysql` and `pgsql` connection factories transparently: no edits to `config/database.php` in your application
@@ -30,14 +30,14 @@ The provider is a no-op unless `config('iam-rds.auth_mode')` equals `'iam'`. Wit
    IAM_RDS_AUTH_MODE=iam
    DB_USERNAME=my-service                 # the IAM-mapped DB user
    DB_HOST=proxy.abc123.us-west-2.rds.amazonaws.com
-   # DB_PASSWORD left unset or empty; the connector overrides it
+   # IAM mode supplies a token; retain existing password credentials for rollback
    ```
 
 4. Grant the service's task role (or IAM user) `rds-db:connect` on the relevant `dbuser` ARN. This lives in your infrastructure code, outside this package.
 
-5. Smoke-test a web request, a queue worker, and a CLI command. Drop `DB_PASSWORD` once the service has been stable for a week.
+5. Smoke-test a web request, a queue worker, and a CLI command. Keep the original password user and credentials in place until you have decided to remove them; rolling back to password mode means restoring the original username and endpoint as well as the password.
 
-No edits to `config/database.php` are required. The provider intercepts any connection whose driver is `mysql` or `pgsql` and injects the token + TLS params before the Laravel `ConnectionFactory` builds the connection.
+No edits to `config/database.php` are required. The provider intercepts any connection whose driver is `mysql` or `pgsql` and sets TLS parameters before building the connection and obtains the token inside the lazy PDO resolver when PDO actually opens. Resolving a Laravel connection object alone does not sign a token. IAM connection config exposes a null password; the token is passed only to the underlying driver connector.
 
 ## Configuration reference
 
@@ -54,16 +54,18 @@ The config is read via `config('iam-rds.*')`, not `env()`, so it survives `php a
 
 ## How tokens are used
 
-Tokens are generated per connection, not per query. Once a connection is open, RDS only checks the token during the TLS handshake; existing connections continue to work after the token expires. The connector caches tokens in-process keyed on `host:port|username` so repeated `DB::connection()` calls in the same process reuse a single token.
+Tokens are obtained when PDO opens, not per query. Once a connection is open, RDS only checks the token during the TLS handshake; existing connections continue to work after the token expires. The connector caches tokens in-process keyed on `host:port|username` so PDO openings for the same endpoint and username reuse an unexpired cached token. Delaying first PDO use or a reconnect beyond the cache TTL causes a new token to be minted at that later opening.
 
-Long-lived processes (Horizon workers, daemonized queue workers) still refresh correctly: if the underlying connection drops and Laravel reconnects, the reconnection goes through `DB::extend` again and a fresh token is minted.
+Long-lived processes (Horizon workers, daemonized queue workers) still refresh correctly: if the underlying connection drops and Laravel reconnects, the reconnection goes through `DB::extend` again and the new lazy PDO resolver obtains a current token when it opens.
+
+Tools that read the connection's configured password instead of opening PDO receive no token under IAM mode. That includes Laravel's schema dump and load (`php artisan schema:dump`, and `migrate` loading a `database/schema` file into an empty database), which hand the configured password to `mysqldump`, `mysql`, `pg_dump`, `pg_restore` or `psql`. Run them in password mode.
 
 ## Worker and scheduler notes
 
 Worker fleets (Horizon, `queue:work`, scheduled artisan commands) are the primary motivator for IAM auth, so a closer look at their behaviour:
 
 - **Auth is checked once per connection, not per query.** A `queue:work` process can hold the same MySQL connection for hours after the minting token expired at t+15 minutes. RDS only validates the token during the TLS handshake; the session stays authenticated for the life of the connection.
-- **Reconnects re-mint.** When MySQL's `wait_timeout` drops an idle worker connection (or the network blips, or RDS fails over), Laravel's `DatabaseManager::reconnect()` re-enters `makeConnection()` which re-invokes the `DB::extend` resolver. The connector's in-process cache either returns a still-valid token or mints a fresh one.
+- **Reconnects re-mint.** When MySQL's `wait_timeout` drops an idle worker connection (or the network blips, or RDS fails over), Laravel's `DatabaseManager::reconnect()` re-enters `makeConnection()`, which re-invokes the `DB::extend` resolver and builds a new lazy PDO resolver. When PDO opens through it, the connector's in-process cache either returns a still-valid token or mints a fresh one.
 - **Schedulers run in fresh processes.** Each `schedule:run` invocation is a new PHP process: empty token cache, mint, open PDO, exit. No long-lived state.
 - **AWS credentials rotate transparently.** The default token generator uses `CredentialProvider::defaultProvider()`, so ECS task-role rotations (every ~6h) flow through automatically; the next `createToken()` call picks up refreshed credentials.
 
@@ -80,7 +82,7 @@ IAM tokens are SigV4-signed against a single endpoint, so configs that hand the 
 - **Read/write split** (`'read' => [...], 'write' => [...]` in the connection config): rejected. Define separate connections per endpoint, or use an RDS Proxy reader/writer endpoint pair.
 - **Host arrays** (`'host' => ['host1', 'host2']`): rejected. Use RDS Proxy or split into per-host connections.
 
-Both throw `InvalidArgumentException` at the first connection attempt, with a message naming the connection and pointing at the supported alternatives.
+Both throw `InvalidArgumentException` when the connection is resolved (`DB::connection()`), before any token is signed or PDO opens, with a message naming the connection and pointing at the supported alternatives.
 
 ### Clock skew
 

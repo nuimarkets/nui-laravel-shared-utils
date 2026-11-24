@@ -2,10 +2,10 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Providers;
 
-use Illuminate\Database\Connectors\ConnectionFactory;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnectionFactory;
 use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnector;
 
 /**
@@ -13,9 +13,9 @@ use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnector;
  *
  * When `config('iam-rds.auth_mode')` equals `'iam'`, the provider
  * registers replacement resolvers for the `mysql` and `pgsql` drivers
- * via `DB::extend`. Each resolver mints a fresh IAM auth token,
- * wires in the appropriate TLS options, and delegates to the
- * standard ConnectionFactory.
+ * via `DB::extend`. Each resolver wires in TLS options and delegates
+ * to a ConnectionFactory that obtains the token when PDO opens,
+ * including after a delayed first use or reconnect.
  *
  * When the config is unset (default), the provider is a no-op and
  * the application continues to use static DB_PASSWORD.
@@ -62,14 +62,15 @@ class IamRdsServiceProvider extends ServiceProvider
             /** @var IamRdsConnector $iam */
             $iam = $app->make(IamRdsConnector::class);
 
-            $config['password'] = $iam->tokenFor($config);
+            // Keep credentials out of the long-lived connection configuration.
+            $config['password'] = null;
             // IAM's TLS options take precedence over app-provided options so a
             // stale/weakened PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=false cannot
             // silently disable cert verification under IAM auth. Matches the
             // pgsql path which forcibly sets sslmode=verify-full + sslrootcert.
             $config['options'] = $iam->mysqlPdoOptions() + ($config['options'] ?? []);
 
-            return (new ConnectionFactory($app))->make($config, $name);
+            return (new IamRdsConnectionFactory($app, $iam))->make($config, $name);
         });
 
         $db->extend('pgsql', static function (array $config, string $name) use ($app) {
@@ -78,10 +79,11 @@ class IamRdsServiceProvider extends ServiceProvider
             /** @var IamRdsConnector $iam */
             $iam = $app->make(IamRdsConnector::class);
 
-            $config['password'] = $iam->tokenFor($config);
+            // Keep credentials out of the long-lived connection configuration.
+            $config['password'] = null;
             $config = $iam->applyPgsqlSslToConfig($config);
 
-            return (new ConnectionFactory($app))->make($config, $name);
+            return (new IamRdsConnectionFactory($app, $iam))->make($config, $name);
         });
     }
 
