@@ -16,7 +16,7 @@ shouldReject(jti, exp, claims)
 check(jti, exp)                                   t0 = when the check starts
   read the entry for jti and the breaker key (one cache round trip)
     entry `revoked`                               -> revoked (hit)
-    entry `active`, active_until > t0             -> active (hit)
+    entry `active`, active_until > now            -> active (hit)
     breaker key set                               -> unavailable (no call)
   get this service's machine token                inside the budget
     none, or budget spent  -> write nothing                     -> unavailable
@@ -34,7 +34,7 @@ check(jti, exp)                                   t0 = when the check starts
                               a 401 after the retry)
 ```
 
-The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The cache round trips are not cut off by the budget, only by their stores' own timeouts, and those before the status call count against it. The machine token's own cache read and write run on the default cache connection, so keep its timeouts short as well: a store that hangs can cost the check both timeouts.
+The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The cache round trips are not cut off by the budget, only by their stores' own timeouts, and those before the status call count against it. An `active` entry is checked against the time the read returns, so a slow read cannot stretch it past `active_until`. The machine token's own cache read and write run on the default cache connection, so keep its timeouts short as well: a store that hangs can cost the check both timeouts.
 
 Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. Guzzle also falls back when the extension is loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and, for the HTTP client's requests, when libcurl is older than 7.34 or built without SSL. On such a host the client makes no call: every cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides, so `open` admits every token the cache does not already know is revoked. The startup line's `curl_available` field shows which case a process is in.
 

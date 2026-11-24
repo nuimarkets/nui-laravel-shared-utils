@@ -108,7 +108,9 @@ class TokenStatusClient
         $cacheError = $store === null;
 
         if ($store !== null) {
-            $cached = $this->cachedStatus($values[$key] ?? null, $t0);
+            // Against the time the read returned, so a slow read cannot stretch
+            // an `active` entry past its active_until.
+            $cached = $this->cachedStatus($values[$key] ?? null, $this->now());
 
             if ($cached !== null) {
                 return [$cached, true, null, false];

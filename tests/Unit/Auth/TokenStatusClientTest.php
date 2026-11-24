@@ -337,6 +337,22 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame(1, $this->statusCalls());
     }
 
+    public function test_active_entry_that_lapses_during_the_cache_read_is_a_miss()
+    {
+        Cache::store('token_status')->put(TokenStatusClient::KEY_PREFIX.self::JTI, [
+            'status' => 'active',
+            'active_until' => (float) self::T0 + 0.25,
+        ], 30);
+        Event::listen(RetrievingManyKeys::class, fn () => $this->advance(0.5));
+        $this->fakeStatus(false);
+
+        $check = $this->client()->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Revoked, $check->status);
+        $this->assertFalse($check->cacheHit);
+        $this->assertSame(1, $this->statusCalls());
+    }
+
     public function test_malformed_entry_is_a_miss()
     {
         Cache::store('token_status')->put(TokenStatusClient::KEY_PREFIX.self::JTI, 'revoked', 600);
