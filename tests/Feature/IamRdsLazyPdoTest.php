@@ -11,6 +11,7 @@ use Illuminate\Container\Container;
 use Illuminate\Database\DatabaseServiceProvider;
 use Illuminate\Database\MySqlConnection;
 use Illuminate\Database\PostgresConnection;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Facade;
 use NuiMarkets\LaravelSharedUtils\Database\IamRdsConnector;
@@ -271,6 +272,42 @@ final class IamRdsLazyPdoTest extends TestCase
         $connection->getPdo();
         self::assertSame(2, $this->signer->calls);
         self::assertNotSame($connector->configs[0]['password'], $connector->configs[1]['password']);
+    }
+
+    #[DataProvider('drivers')]
+    public function test_signing_failure_on_a_query_is_wrapped_and_the_connection_recovers(string $driver): void
+    {
+        $this->bootProvider('iam', $driver);
+        $flag = (object) ['fail' => true];
+        $signer = $this->signer;
+        $this->app->instance(IamRdsConnector::class, new IamRdsConnector(
+            'ap-southeast-2', '/synthetic-ca.pem',
+            tokenGeneratorFactory: fn () => new class($flag, $signer)
+            {
+                public function __construct(public object $flag, public object $inner) {}
+
+                public function createToken(string $endpoint, string $region, string $user): string
+                {
+                    if ($this->flag->fail) {
+                        throw new \RuntimeException('synthetic credential failure');
+                    }
+
+                    return $this->inner->createToken($endpoint, $region, $user);
+                }
+            },
+            clock: fn () => $this->clock->now,
+        ));
+        $connection = $this->app['db']->connection();
+        try {
+            $connection->selectOne('SELECT 1 AS n');
+            self::fail('Signing failure must surface');
+        } catch (QueryException $e) {
+            self::assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+            self::assertCount(0, $this->driver->configs);
+        }
+        $flag->fail = false;
+        self::assertSame(1, (int) $connection->selectOne('SELECT 1 AS n')->n);
+        self::assertSame(1, $this->signer->calls);
     }
 
     #[DataProvider('drivers')]

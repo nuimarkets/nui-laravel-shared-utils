@@ -65,7 +65,7 @@ Tools that read the connection's configured password instead of opening PDO rece
 Worker fleets (Horizon, `queue:work`, scheduled artisan commands) are the primary motivator for IAM auth, so a closer look at their behaviour:
 
 - **Auth is checked once per connection, not per query.** A `queue:work` process can hold the same MySQL connection for hours after the minting token expired at t+15 minutes. RDS only validates the token during the TLS handshake; the session stays authenticated for the life of the connection.
-- **Reconnects re-mint.** When MySQL's `wait_timeout` drops an idle worker connection (or the network blips, or RDS fails over), Laravel's `DatabaseManager::reconnect()` re-enters `makeConnection()` which re-invokes the `DB::extend` resolver. The connector's in-process cache either returns a still-valid token or mints a fresh one.
+- **Reconnects re-mint.** When MySQL's `wait_timeout` drops an idle worker connection (or the network blips, or RDS fails over), Laravel's `DatabaseManager::reconnect()` re-enters `makeConnection()`, which re-invokes the `DB::extend` resolver and builds a new lazy PDO resolver. When PDO opens through it, the connector's in-process cache either returns a still-valid token or mints a fresh one.
 - **Schedulers run in fresh processes.** Each `schedule:run` invocation is a new PHP process: empty token cache, mint, open PDO, exit. No long-lived state.
 - **AWS credentials rotate transparently.** The default token generator uses `CredentialProvider::defaultProvider()`, so ECS task-role rotations (every ~6h) flow through automatically; the next `createToken()` call picks up refreshed credentials.
 
@@ -82,7 +82,7 @@ IAM tokens are SigV4-signed against a single endpoint, so configs that hand the 
 - **Read/write split** (`'read' => [...], 'write' => [...]` in the connection config): rejected. Define separate connections per endpoint, or use an RDS Proxy reader/writer endpoint pair.
 - **Host arrays** (`'host' => ['host1', 'host2']`): rejected. Use RDS Proxy or split into per-host connections.
 
-Both throw `InvalidArgumentException` at the first connection attempt, with a message naming the connection and pointing at the supported alternatives.
+Both throw `InvalidArgumentException` when the connection is resolved (`DB::connection()`), before any token is signed or PDO opens, with a message naming the connection and pointing at the supported alternatives.
 
 ### Clock skew
 
