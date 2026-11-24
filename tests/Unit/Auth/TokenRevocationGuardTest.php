@@ -218,6 +218,41 @@ class TokenRevocationGuardTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_revocation_takes_effect_while_another_client_keeps_failing_locally()
+    {
+        Config::set('token_revocation.mode', 'enforce');
+        Config::set('token_revocation.fail', 'open');
+        $revoked = false;
+        Http::fake([self::STATUS_URL => function () use (&$revoked) {
+            return Http::response(['active' => ! $revoked]);
+        }]);
+        $guard = $this->guard(new TokenStatusClient($this->machineTokens()));
+        // Another process on the same store that cannot get its machine token.
+        $noToken = Mockery::mock(MachineTokenService::class);
+        $noToken->shouldReceive('getToken')->andThrow(new RuntimeException('Could not get new machine token.'));
+        $failing = $this->guard(new TokenStatusClient($noToken));
+        $exp = self::T0 + 3600;
+
+        $this->assertFalse($guard->shouldReject(self::JTI, $exp, self::CLAIMS));
+        $revoked = true;
+
+        $activeTtl = config('token_revocation.active_ttl');
+        $breakerSeconds = config('token_revocation.breaker_seconds');
+
+        // The failing process takes a miss every second, ahead of each check
+        // of the revoked token, past active_ttl plus breaker_seconds.
+        for ($second = 1; $second <= $activeTtl + $breakerSeconds + 1; $second++) {
+            Carbon::setTestNow(Carbon::createFromTimestamp(self::T0 + $second));
+            $this->assertFalse($failing->shouldReject('other-'.$second, $exp, self::CLAIMS));
+
+            if ($second > $activeTtl) {
+                $this->assertTrue($guard->shouldReject(self::JTI, $exp, self::CLAIMS), "admitted at t0+{$second}");
+            }
+        }
+
+        Http::assertSentCount(2);
+    }
+
     // Telemetry
 
     public function test_reject_lines_carry_the_caller_claims()

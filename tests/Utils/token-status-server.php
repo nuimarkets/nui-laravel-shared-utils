@@ -41,6 +41,14 @@ switch ($path) {
         echo '"}';
         break;
 
+    case '/status/large-502':
+    case '/status/large-401':
+        // A gateway's error page, past the cap.
+        http_response_code((int) substr($path, -3));
+        header('Content-Type: text/html');
+        echo '<html><body>'.str_repeat('x', 5000).'</body></html>';
+        break;
+
     case '/status/stall':
         sleep(5);
         header('Content-Type: application/json');

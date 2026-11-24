@@ -31,10 +31,11 @@ return [
     | Answer Lifetimes (seconds)
     |--------------------------------------------------------------------------
     |
-    | active_ttl bounds how long a revocation can go unnoticed while the issuer
-    | answers: an `active` answer is trusted for this long from the moment its
-    | check started. revoked_grace is how long past the token's own expiry a
-    | `revoked` answer is kept.
+    | active_ttl bounds how long a revocation can go unnoticed while this
+    | service's checks are answered: an `active` answer is trusted for this
+    | long from the moment its check started. Issuer failures add the time
+    | they recur plus breaker_seconds. revoked_grace is how long past the
+    | token's own expiry a `revoked` answer is kept.
     |
     */
     'active_ttl' => (int) env('TOKEN_STATUS_ACTIVE_TTL', 30),
@@ -58,8 +59,11 @@ return [
     | Breaker (seconds)
     |--------------------------------------------------------------------------
     |
-    | After a check the issuer could not answer, cache misses skip the call
-    | and are `unavailable` for this long. Cached answers keep being served.
+    | After a call that says the issuer, or the path to it, failed (a
+    | connection failure or timeout, a 5xx, a 429, a redirect, or a 200 that
+    | is no answer), cache misses skip the call and are `unavailable` for this
+    | long. A failure before the call (no machine token, the budget spent) and
+    | any other 4xx open nothing. Cached answers keep being served.
     |
     */
     'breaker_seconds' => (int) env('TOKEN_STATUS_BREAKER_SECONDS', 10),

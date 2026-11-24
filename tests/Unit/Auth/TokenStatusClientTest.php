@@ -2,6 +2,10 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Auth;
 
+use Closure;
+use GuzzleHttp\Exception\RequestException as GuzzleRequestException;
+use GuzzleHttp\Psr7\Request as PsrRequest;
+use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Cache\Events\RetrievingManyKeys;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -479,6 +483,129 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame(2, $this->statusCalls());
     }
 
+    /** A response the sink cut off past the cap, as Guzzle's PHP stream handler returns it. */
+    private static function overflowing(int $status): Closure
+    {
+        return function (Request $request, array $options) use ($status) {
+            $options['sink']->write(str_repeat('x', TokenStatusClient::MAX_BODY_BYTES + 1));
+
+            return Http::response('{"active":false}', $status);
+        };
+    }
+
+    /** A transfer cURL aborted when the sink refused the body, after the status line. */
+    private static function aborted(int $status): Closure
+    {
+        return function (Request $request, array $options) use ($status) {
+            $options['sink']->write(str_repeat('x', TokenStatusClient::MAX_BODY_BYTES + 1));
+
+            throw new GuzzleRequestException(
+                'cURL error 23: Failure writing output to destination',
+                new PsrRequest('POST', self::STATUS_URL),
+                new PsrResponse($status, [], '<html>')
+            );
+        };
+    }
+
+    /** @return array<string, array{Closure, string}> */
+    public static function issuerFailures(): array
+    {
+        return [
+            'connection failure' => [fn () => throw new ConnectionException('cURL error 6: Could not resolve host'), 'connection'],
+            'timeout on the status call' => [fn () => throw new ConnectionException('cURL error 28: Operation timed out'), 'connection'],
+            'connection lost after the status line' => [fn () => throw new GuzzleRequestException(
+                'cURL error 56: Recv failure: Connection reset by peer',
+                new PsrRequest('POST', self::STATUS_URL),
+                new PsrResponse(401)
+            ), 'connection'],
+            'server error' => [fn () => Http::response('', 500), 'http_500'],
+            'bad gateway' => [fn () => Http::response('', 502), 'http_502'],
+            'rate limited' => [fn () => Http::response('', 429), 'http_429'],
+            'redirect' => [fn () => Http::response('', 302, ['Location' => 'https://elsewhere.test/']), 'http_302'],
+            'success other than 200' => [fn () => Http::response('', 204), 'http_204'],
+            '200 without a boolean active' => [fn () => Http::response(['active' => 'yes']), 'malformed'],
+            'oversized 200' => [self::overflowing(200), 'oversized'],
+            'oversized 200 cut off by cURL' => [self::aborted(200), 'oversized'],
+            'oversized gateway page' => [self::overflowing(502), 'http_502'],
+            'oversized gateway page cut off by cURL' => [self::aborted(503), 'http_503'],
+            'oversized redirect cut off by cURL' => [self::aborted(302), 'http_302'],
+        ];
+    }
+
+    #[DataProvider('issuerFailures')]
+    public function test_issuer_failure_opens_the_breaker(Closure $answer, string $reason)
+    {
+        Http::fake([self::STATUS_URL => $answer]);
+        $client = $this->client();
+
+        $check = $client->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame($reason, $check->reason);
+        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+        $calls = $this->statusCalls();
+        $this->assertSame('breaker_open', $client->check('other-jti', $this->exp)->reason);
+        $this->assertSame($calls, $this->statusCalls());
+    }
+
+    /** @return array<string, array{Closure|null, Closure|null, string, int}> */
+    public static function localOrPerTokenOutcomes(): array
+    {
+        $refused = fn () => Http::response(['message' => 'Unauthenticated.'], 401);
+
+        return [
+            'no machine token' => [null, fn () => throw new RuntimeException('Could not get new machine token.'), 'machine_token', 0],
+            'budget spent before the call' => [null, function () {
+                Carbon::setTestNow(Carbon::now()->addMilliseconds(2500));
+
+                return 'late-token';
+            }, 'deadline', 0],
+            'bad request' => [fn () => Http::response('', 400), null, 'http_400', 1],
+            'forbidden' => [fn () => Http::response('', 403), null, 'http_403', 1],
+            'not found' => [fn () => Http::response('', 404), null, 'http_404', 1],
+            'unprocessable' => [fn () => Http::response('', 422), null, 'http_422', 1],
+            'refused after the retry' => [$refused, null, 'http_401', 2],
+            'oversized refusal' => [self::overflowing(422), null, 'http_422', 1],
+            'oversized refusal cut off by cURL' => [self::aborted(400), null, 'http_400', 1],
+            'oversized 401, retried and refused again' => [self::overflowing(401), null, 'http_401', 2],
+        ];
+    }
+
+    #[DataProvider('localOrPerTokenOutcomes')]
+    public function test_local_or_per_token_outcome_leaves_the_breaker_shut(?Closure $answer, ?Closure $token, string $reason, int $calls)
+    {
+        Http::fake([self::STATUS_URL => $answer ?? fn () => Http::response(['active' => true])]);
+        $machineTokens = $this->machineTokens();
+
+        if ($token !== null) {
+            $machineTokens->shouldReceive('getToken')->andReturnUsing($token);
+        }
+
+        $client = $this->client($machineTokens);
+
+        $check = $client->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame($reason, $check->reason);
+        $this->assertSame($calls, $this->statusCalls());
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+        $this->assertNotSame('breaker_open', $client->check('other-jti', $this->exp)->reason);
+    }
+
+    public function test_oversized_401_drops_the_machine_token_and_retries()
+    {
+        $machineTokens = $this->machineTokens();
+        $machineTokens->shouldReceive('invalidate')->once();
+        $refusal = self::aborted(401);
+        $attempts = 0;
+        Http::fake([self::STATUS_URL => function (Request $request, array $options) use ($refusal, &$attempts) {
+            return ++$attempts === 1 ? $refusal($request, $options) : Http::response(['active' => false]);
+        }]);
+
+        $this->assertSame(TokenStatus::Revoked, $this->client($machineTokens)->status(self::JTI, $this->exp));
+        $this->assertSame(2, $this->statusCalls());
+    }
+
     public function test_breaker_seconds_zero_never_suppresses_a_call()
     {
         Config::set('token_revocation.breaker_seconds', 0);
@@ -643,7 +770,7 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame(1, $this->statusCalls());
         Http::assertNotSent(fn (Request $request) => $request->url() === self::TOKEN_URL);
         $this->assertSame('valid-token', Cache::get('machine_token')['token']);
-        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_second_refusal_is_unavailable()
@@ -699,7 +826,7 @@ class TokenStatusClientTest extends TestCase
 
         $this->assertSame(TokenStatus::Unavailable, $check->status);
         $this->assertSame('machine_token', $check->reason);
-        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_time_spent_reading_the_status_cache_comes_out_of_the_budget()

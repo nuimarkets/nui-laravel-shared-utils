@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Mockery;
 use NuiMarkets\LaravelSharedUtils\Auth\TokenStatus;
@@ -115,6 +116,29 @@ class TokenStatusClientHttpTest extends TestCase
 
         $this->assertSame('oversized', $check->reason);
         $this->assertLessThan(1.0, microtime(true) - $started);
+    }
+
+    public function test_oversized_gateway_error_keeps_its_status_and_opens_the_breaker()
+    {
+        $check = $this->check('/status/large-502');
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('http_502', $check->reason);
+        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+    }
+
+    public function test_oversized_401_is_retried_and_leaves_the_breaker_shut()
+    {
+        Config::set('token_revocation.url', self::$serverUrl.'/status/large-401');
+        $machineTokens = Mockery::mock(MachineTokenService::class);
+        $machineTokens->shouldReceive('getToken')->andReturn('svc-token');
+        $machineTokens->shouldReceive('invalidate')->once();
+
+        $check = (new TokenStatusClient($machineTokens))->check('jti-large-401', time() + 3600);
+
+        $this->assertSame(TokenStatus::Unavailable, $check->status);
+        $this->assertSame('http_401', $check->reason);
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_stalled_answer_is_unavailable_within_the_budget()

@@ -4,7 +4,7 @@
 
 A resource server that validates JWT access tokens on its own (signature and expiry) cannot see a revocation recorded at the token issuer, so a revoked token keeps working until it expires. `TokenRevocationGuard` closes that gap: after the token passes local validation, it asks the issuer whether the token is still active, through `TokenStatusClient`, and caches the answer briefly.
 
-In `enforce` mode, while the issuer answers, a revocation takes effect within `active_ttl` (30 seconds by default) plus the duration of one call, at every service that runs the check. A failed call opens the breaker for `breaker_seconds` (10 seconds by default), and until it lapses cache misses skip the issuer even if it has recovered, so the window can stretch by up to that long; `breaker_seconds` set to `0` removes the stretch. While the issuer cannot answer, or the breaker is open, the `fail` setting decides whether tokens are admitted, and `closed` refuses them instead. `shadow` makes the same calls and logs the tokens it would reject, but admits every token.
+In `enforce` mode, while the issuer answers, a revocation takes effect within `active_ttl` (30 seconds by default) plus the duration of one call, at every service that runs the check. A call that says the issuer, or the path to it, failed (a connection failure or timeout, a 5xx, a 429, a redirect, or a 200 that is no answer) opens the breaker for `breaker_seconds` (10 seconds by default), and until it lapses cache misses skip the issuer even if it has recovered. So the window stretches for as long as issuer failures recur, plus `breaker_seconds`; `breaker_seconds` set to `0` removes the extra. A failure on this service's side before the call (no machine token, the budget spent) and a refusal of one token or of this caller (any other 4xx) open nothing, so they cannot hold off checks the issuer would answer, but they recur on every miss: with no valid machine token and a token endpoint that stalls, each miss spends the whole budget. While the issuer cannot answer, or the breaker is open, the `fail` setting decides whether tokens are admitted, and `closed` refuses them instead. `shadow` makes the same calls and logs the tokens it would reject, but admits every token.
 
 ## How a check runs
 
@@ -19,29 +19,31 @@ check(jti, exp)                                   t0 = when the check starts
     entry `active`, active_until > t0             -> active (hit)
     breaker key set                               -> unavailable (no call)
   get this service's machine token                inside the budget
+    none, or budget spent  -> write nothing                     -> unavailable
   POST {"jti": ...} to the status URL             inside the budget, no redirects
-    body over 1 KB         -> set the breaker, write nothing    -> unavailable
-                              (a 401 too: no token dropped, no retry)
-    401                    -> drop the machine token from this process (the
+    first 401              -> drop the machine token from this process (the
                               cached copy stays until a new one overwrites
                               it), get a new one, retry once
     200 {"active": true}   -> write `active`, active_until = t0 + active_ttl,
                               only if no entry exists           -> active
     200 {"active": false}  -> write `revoked`, overwriting      -> revoked
+    other 4xx but 429      -> write nothing                     -> unavailable
     anything else          -> set the breaker, write nothing    -> unavailable
+                              (connection failure or timeout, 5xx, 429,
+                              redirect, 200 without a boolean `active`)
 ```
 
 The budget is `timeout` (2 seconds) from t0, and covers the machine token, the status call and reading its body. The status call's connection phase is capped at `connect_timeout` (1 second) inside it. The cache round trips are not cut off by the budget, only by their stores' own timeouts, and those before the status call count against it. The machine token's own cache read and write run on the default cache connection, so keep its timeouts short as well: a store that hangs can cost the check both timeouts.
 
 Both HTTP calls are bounded by cURL's limit on the whole transfer, so the package requires the `curl` PHP extension. Without it Guzzle falls back to its PHP stream handler, which applies the timeout to each read, and a response sent slowly enough would run past the budget. Guzzle also falls back when the extension is loaded with `curl_exec` and `curl_multi_exec` both disabled through `disable_functions`, which composer's platform check does not see, and, for the HTTP client's requests, when libcurl is older than 7.34 or built without SSL. On such a host the client makes no call: every cache miss is `unavailable` with reason `curl_unavailable`, the breaker is not set, cached answers are still served, and the `fail` setting decides, so `open` admits every token the cache does not already know is revoked. The startup line's `curl_available` field shows which case a process is in.
 
-The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered.
+The response body goes into a sink that refuses bytes past 1 KB, counted after decompression, and the refusal aborts the transfer, so an oversized or inflating answer is never buffered. The status line arrives before the body, so the status still decides: only a 200's body is read, and a 200 over 1 KB is `oversized`, while any other status is `http_<status>` whatever its size, and a 401 is retried whatever its size.
 
 | Result | Meaning | Cached |
 | --- | --- | --- |
 | `active` | 200 with `"active": true` | Until `t0 + active_ttl`, and never past the token's `exp`. Written only when no entry exists, so a slow positive answer cannot replace a newer `revoked`. Not written when the token has already expired. |
 | `revoked` | 200 with `"active": false`. The only result that is a revocation. | Overwrites any entry, for `max(revoked_grace, exp + revoked_grace - now)` seconds. Final for that token at this service: if the issuer later answers `active` for it again, for example after restoring a client or user, it stays refused until the entry lapses. To admit it sooner, delete `token_status:<jti>` from the token status store. |
-| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a body that is not a JSON object with a boolean `active`, a body over 1 KB once decoded, no machine token, a spent budget, no cURL to make the call with, the breaker open, an empty `jti` or no URL configured. | Nothing. A failed call sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Cached answers keep being served meanwhile. |
+| `unavailable` | Anything else: a connection failure or timeout, a status other than 200 (redirects included, which are not followed), a 200 whose body is not a JSON object with a boolean `active` or is over 1 KB once decoded, no machine token, a spent budget, no cURL to make the call with, the breaker open, an empty `jti` or no URL configured. | Nothing. A call that says the issuer or the path to it failed (a connection failure or timeout, a 5xx, a 429, a status other than 200 that is not a 4xx, a 200 that is no answer) sets the breaker key for `breaker_seconds`, so cache misses skip the call until it lapses. Any other 4xx, and an outcome with no call, set nothing. Cached answers keep being served meanwhile. |
 
 `TokenStatusClient` and `TokenRevocationGuard` never throw.
 
@@ -117,11 +119,11 @@ Read from `config/token_revocation.php` under `token_revocation.*`.
 | --- | --- | --- | --- |
 | `url` | `TOKEN_STATUS_URL` | `null` | The issuer's status endpoint. Unset, every check is `unavailable` with no call, so the `fail` setting decides. |
 | `store` | `TOKEN_STATUS_CACHE_STORE` | `token_status` | Cache store for answers, the breaker key and the log rate limits. Empty uses the default store. |
-| `active_ttl` | `TOKEN_STATUS_ACTIVE_TTL` | `30` | Seconds an `active` answer is trusted, from the start of its check. The revocation bound: raising it delays revocations by as much. |
+| `active_ttl` | `TOKEN_STATUS_ACTIVE_TTL` | `30` | Seconds an `active` answer is trusted, from the start of its check. The revocation bound while this service's checks are answered: raising it delays revocations by as much. Issuer failures add the time they recur plus `breaker_seconds`, and a check that is `unavailable` for any reason falls to `fail`. |
 | `revoked_grace` | `TOKEN_STATUS_REVOKED_GRACE` | `60` | Seconds past `exp` a `revoked` answer is kept. |
 | `connect_timeout` | `TOKEN_STATUS_CONNECT_TIMEOUT` | `1` | Seconds for the status call's connection phase. |
 | `timeout` | `TOKEN_STATUS_TIMEOUT` | `2` | The whole check's budget in seconds: machine token, status call and body. |
-| `breaker_seconds` | `TOKEN_STATUS_BREAKER_SECONDS` | `10` | Seconds cache misses skip the call after a check the issuer could not answer. `0` turns the breaker off. |
+| `breaker_seconds` | `TOKEN_STATUS_BREAKER_SECONDS` | `10` | Seconds cache misses skip the call after a call that says the issuer, or the path to it, failed: a connection failure or timeout, a 5xx, a 429, a redirect, or a 200 that is no answer. A failure before the call and any other 4xx open nothing. `0` turns the breaker off. |
 | `mode` | `TOKEN_REVOCATION_MODE` | `off` | `off`, `shadow` or `enforce`. |
 | `fail` | `TOKEN_REVOCATION_FAIL` | `open` | `open` admits a token whose status is `unavailable`; `closed` rejects it. |
 | `sample_rate` | `TOKEN_REVOCATION_SAMPLE_RATE` | `0.01` | Fraction of checks logged with result, cache hit or miss and latency. |
@@ -142,7 +144,7 @@ The check expects an endpoint that:
 - answers `200` with `{"active": true}` or `{"active": false}`, and nothing else counts as an answer;
 - does not evaluate expiry, since each validator owns expiry and its own leeway;
 - answers a database or other infrastructure error with a 5xx, never `"active": false`;
-- answers 401, with a body within 1 KB, when it refuses the caller's machine token. The client then drops that token from this process (`MachineTokenService::invalidate()`), gets a new one and retries once within the budget. The new token is one another process has already cached in its place, or else a fresh one, which overwrites the cached copy; the cached copy is only ever overwritten, never deleted, so a late refusal cannot remove a replacement. A larger refusal is `unavailable` as `oversized`, like any other oversized body, and nothing is dropped or retried. A 403 is `unavailable` like any other status, with no new token: a new token from the same client cannot change a refusal of its scope, or a refusal from a gateway or firewall in front of the route. A route that keeps answering 401 for another reason therefore costs one new machine token per `breaker_seconds` per service while the cache works. While it does not, under a runtime that resets state per request (PHP-FPM, FrankenPHP without workers) nothing remembers the breaker or the token, so each request fetches a token, is refused, drops it, fetches another and is refused again: two token grants and two status calls per request. A long-lived worker keeps the second token in memory, so after its first request it makes one grant and two status calls per request.
+- answers 401 when it refuses the caller's machine token, whatever the size of the body. The client then drops that token from this process (`MachineTokenService::invalidate()`), gets a new one and retries once within the budget. The new token is one another process has already cached in its place, or else a fresh one, which overwrites the cached copy; the cached copy is only ever overwritten, never deleted, so a late refusal cannot remove a replacement. A 403 is `unavailable` like any other status, with no new token: a new token from the same client cannot change a refusal of its scope, or a refusal from a gateway or firewall in front of the route. A 401 after the retry is `unavailable` as `http_401` and opens no breaker, like any other 4xx, and `unavailable` caches nothing, so a route that keeps answering 401 for another reason costs one token grant and two status calls per cache miss, and every check misses once its earlier answer lapses. Without a working cache, under a runtime that resets state per request (PHP-FPM, FrankenPHP without workers) nothing remembers the token, so each request fetches a token, is refused, drops it, fetches another and is refused again: two token grants and two status calls per request. A long-lived worker keeps the second token in memory, so after its first request it makes one grant and two status calls per request.
 
 ## Logging
 
@@ -162,7 +164,7 @@ A runtime that resets state per request (PHP-FPM, FrankenPHP without workers) ke
 
 The package's default `SensitiveDataProcessor` redacts `user_id` when PII redaction is on (the default), so `would reject` and `rejected` lines show `user_id` as `[REDACTED]` unless `logging-utils.processors.sensitive_data.preserve_fields` lists it. `sub` and `jti` are not redacted.
 
-`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `curl_unavailable`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`.
+`reason` on an `unavailable` result is one of `not_configured`, `missing_jti`, `breaker_open`, `curl_unavailable`, `machine_token`, `deadline`, `connection`, `oversized`, `http_<status>`, `malformed` or `unexpected`. Of these, `connection`, `oversized`, `malformed` and an `http_<status>` that is not a 4xx, or is 429, open the breaker.
 
 ## Testing
 

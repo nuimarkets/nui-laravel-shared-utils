@@ -2,8 +2,10 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Auth;
 
+use GuzzleHttp\Exception\RequestException as GuzzleRequestException;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +26,8 @@ use Throwable;
  *   slow positive answer never replaces a newer `revoked`.
  * - 200 `{"active": false}` is cached as `revoked`, overwriting, until
  *   `revoked_grace` seconds past the token's expiry.
- * - Anything else is `unavailable`: nothing is cached, and the breaker key
+ * - Anything else is `unavailable` and caches nothing. When it says the
+ *   issuer or the path to it failed (see issuerFailed()), the breaker key
  *   makes cache misses skip the call for `breaker_seconds`.
  *
  * A cache failure skips the cache and the breaker and still makes the call.
@@ -125,7 +128,7 @@ class TokenStatusClient
         $answer = $this->ask($url, $jti, $deadline);
 
         if (! is_bool($answer)) {
-            if ($store !== null) {
+            if ($store !== null && self::issuerFailed($answer)) {
                 $this->quietly(fn () => $store->put(
                     self::BREAKER_KEY,
                     1,
@@ -141,6 +144,33 @@ class TokenStatusClient
         }
 
         return [$answer ? TokenStatus::Active : TokenStatus::Revoked, false, null, $cacheError];
+    }
+
+    /**
+     * Whether a reason says the issuer, or the path to it, failed, so the
+     * next miss would most likely fail the same way: a connection failure or a
+     * timeout on the status call, a 5xx, a 429, a redirect or any other status
+     * that is neither 200 nor a 4xx, and a 200 that is no answer (`malformed`,
+     * `oversized`). These open the breaker. An outcome that ends before the
+     * status call (no machine token, the budget spent) or that is about this
+     * token or this caller (any other 4xx, a 401 after the retry included)
+     * opens nothing, so it cannot keep cache misses from reaching a healthy
+     * issuer. A function of the reason alone, so the logged reason says
+     * whether the breaker opened.
+     */
+    private static function issuerFailed(string $reason): bool
+    {
+        if (in_array($reason, ['connection', 'malformed', 'oversized'], true)) {
+            return true;
+        }
+
+        if (! str_starts_with($reason, 'http_')) {
+            return false;
+        }
+
+        $code = (int) substr($reason, strlen('http_'));
+
+        return $code === 429 || $code < 400 || $code >= 500;
     }
 
     /** A cached `revoked`, or a cached `active` whose active_until is still ahead. Anything else is a miss. */
@@ -169,7 +199,10 @@ class TokenStatusClient
      * Calls the status route, retrying once with a new machine token if the
      * route refuses this service's token (401). A 403 is no answer, like any
      * other status: a new token from the same client cannot change a refusal
-     * of its scope, or one from something in front of the route.
+     * of its scope, or one from something in front of the route. The status
+     * decides before the body cap does: only a 200's body is read, so a
+     * non-200 is `http_<status>` whatever its size, and a 401 is retried
+     * whatever its size.
      *
      * @return bool|string The `active` answer, or why there is none.
      */
@@ -199,15 +232,15 @@ class TokenStatusClient
             try {
                 $response = $this->post($url, $jti, $machineToken, $remaining, $sink);
                 $code = $response->status();
-            } catch (Throwable) {
-                return $sink->overflowed() ? 'oversized' : 'connection';
-            }
+            } catch (Throwable $e) {
+                // The sink aborts the transfer once the body passes the cap,
+                // after the status line has arrived, so that status still
+                // classifies the outcome. Any other failure is the connection's.
+                $code = $sink->overflowed() ? self::abortedStatus($e) : null;
 
-            // A transport that stops copying on a refused write without failing
-            // (Guzzle's PHP stream handler) returns the truncated prefix, which
-            // can parse as an answer.
-            if ($sink->overflowed()) {
-                return 'oversized';
+                if ($code === null) {
+                    return $sink->overflowed() ? 'oversized' : 'connection';
+                }
             }
 
             if ($code === 401 && $attempt === 1) {
@@ -220,8 +253,37 @@ class TokenStatusClient
                 return 'http_'.$code;
             }
 
+            // A 200 past the cap is no answer, whether the transfer was aborted
+            // or the transport stopped copying on the refused write without
+            // failing (Guzzle's PHP stream handler) and returned the truncated
+            // prefix, which can parse as one.
+            if ($sink->overflowed()) {
+                return 'oversized';
+            }
+
             return $this->readActive($response) ?? 'malformed';
         }
+    }
+
+    /**
+     * The status of a response whose transfer the sink aborted. Laravel throws
+     * its RequestException for a 4xx or 5xx and a ConnectionException wrapping
+     * Guzzle's for any other status (older releases let Guzzle's through), and
+     * each carries the response, whose status line arrived before the body.
+     */
+    private static function abortedStatus(Throwable $e): ?int
+    {
+        for ($cause = $e; $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof RequestException) {
+                return $cause->response->status();
+            }
+
+            if ($cause instanceof GuzzleRequestException && $cause->getResponse() !== null) {
+                return $cause->getResponse()->getStatusCode();
+            }
+        }
+
+        return null;
     }
 
     /**
