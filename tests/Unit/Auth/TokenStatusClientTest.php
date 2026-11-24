@@ -92,6 +92,11 @@ class TokenStatusClientTest extends TestCase
         Carbon::setTestNow(Carbon::now()->addMilliseconds((int) round($seconds * 1000)));
     }
 
+    /**
+     * Status calls as Http::recorded() saw them. Laravel 12.0 records a request whose fake throws
+     * only when it throws Guzzle's ConnectException, so a test that counts any other counts it in
+     * the fake.
+     */
     private function statusCalls(): int
     {
         return Http::recorded(fn (Request $request) => $request->url() === self::STATUS_URL)->count();
@@ -574,7 +579,13 @@ class TokenStatusClientTest extends TestCase
     #[DataProvider('localOrPerTokenOutcomes')]
     public function test_local_or_per_token_outcome_leaves_the_breaker_shut(?Closure $answer, ?Closure $token, string $reason, int $calls)
     {
-        Http::fake([self::STATUS_URL => $answer ?? fn () => Http::response(['active' => true])]);
+        $answer ??= fn () => Http::response(['active' => true]);
+        $sent = 0;
+        Http::fake([self::STATUS_URL => function (Request $request, array $options) use ($answer, &$sent) {
+            $sent++;
+
+            return $answer($request, $options);
+        }]);
         $machineTokens = $this->machineTokens();
 
         if ($token !== null) {
@@ -587,7 +598,7 @@ class TokenStatusClientTest extends TestCase
 
         $this->assertSame(TokenStatus::Unavailable, $check->status);
         $this->assertSame($reason, $check->reason);
-        $this->assertSame($calls, $this->statusCalls());
+        $this->assertSame($calls, $sent);
         $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
         $this->assertNotSame('breaker_open', $client->check('other-jti', $this->exp)->reason);
     }
@@ -603,7 +614,7 @@ class TokenStatusClientTest extends TestCase
         }]);
 
         $this->assertSame(TokenStatus::Revoked, $this->client($machineTokens)->status(self::JTI, $this->exp));
-        $this->assertSame(2, $this->statusCalls());
+        $this->assertSame(2, $attempts);
     }
 
     public function test_breaker_seconds_zero_never_suppresses_a_call()
