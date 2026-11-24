@@ -914,6 +914,35 @@ class TokenStatusClientTest extends TestCase
         $this->assertLessThanOrEqual(2.0, $tokenOptions['connect_timeout']);
     }
 
+    public function test_stalled_refresh_inside_the_window_still_gets_a_status_answer()
+    {
+        // The service reads expiry against time(), which the test clock does not move.
+        Cache::put('machine_token', ['token' => 'current-token', 'expiry' => date(DATE_ATOM, time() + 200)]);
+        $tokenTimeout = null;
+        $statusTimeout = null;
+        Http::fake([
+            self::TOKEN_URL => function (Request $request, array $options) use (&$tokenTimeout) {
+                $tokenTimeout = $options['timeout'];
+                $this->advance($options['timeout']);
+
+                throw new ConnectionException('cURL error 28: Operation timed out');
+            },
+            self::STATUS_URL => function (Request $request, array $options) use (&$statusTimeout) {
+                $statusTimeout = $options['timeout'];
+
+                return $request->hasHeader('Authorization', 'Bearer current-token')
+                    ? Http::response(['active' => false])
+                    : Http::response(['message' => 'Unauthenticated.'], 401);
+            },
+        ]);
+
+        $check = $this->realClient()->check(self::JTI, $this->exp);
+
+        $this->assertSame(TokenStatus::Revoked, $check->status);
+        $this->assertEqualsWithDelta(1.0, $tokenTimeout, 0.001);
+        $this->assertEqualsWithDelta(1.0, $statusTimeout, 0.001);
+    }
+
     public function test_status_call_after_a_slow_token_gets_only_the_remaining_budget_for_connecting()
     {
         $machineTokens = $this->machineTokens();

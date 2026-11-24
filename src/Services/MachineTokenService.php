@@ -48,9 +48,11 @@ class MachineTokenService implements MachineTokenServiceInterface
     /**
      * @param  float|null  $timeout  Seconds the caller can still spend. When given,
      *                               a fetch from the auth endpoint gets what is left
-     *                               of it after the cache read, and follows no
-     *                               redirects; without a cURL transport no fetch is
-     *                               made. Null keeps the HTTP client's defaults.
+     *                               of it after the cache read, or half of that
+     *                               inside the refresh window while the current
+     *                               token is still valid, and follows no redirects;
+     *                               without a cURL transport no fetch is made. Null
+     *                               keeps the HTTP client's defaults.
      */
     public function getToken(?float $timeout = null): string
     {
@@ -80,8 +82,16 @@ class MachineTokenService implements MachineTokenServiceInterface
             }
 
             if (! $token) {
+                $budget = $deadline === null ? null : $deadline - $this->now();
+
+                // The current token still works, so a refresh that stalls must
+                // leave the caller time to use it.
+                if ($budget !== null && $this->oldTokenValid()) {
+                    $budget /= 2;
+                }
+
                 /** Retrieve new token and store in redis */
-                $token = $this->retrieveFromAuth($deadline === null ? null : $deadline - $this->now());
+                $token = $this->retrieveFromAuth($budget);
                 $this->writeCachedToken($token);
             }
 
@@ -112,6 +122,11 @@ class MachineTokenService implements MachineTokenServiceInterface
 
         $this->tokenString = '';
         $this->oldToken = null;
+    }
+
+    private function oldTokenValid(): bool
+    {
+        return $this->oldToken !== null && time() < strtotime($this->oldToken['expiry']);
     }
 
     private function wasRefused(mixed $token): bool
@@ -189,7 +204,7 @@ class MachineTokenService implements MachineTokenServiceInterface
                 'has_secret' => ! empty($clientSecret),
             ]);
 
-            return $this->panic();
+            return $this->panic($timeout !== null);
         }
 
         if ($timeout !== null && $timeout < self::MIN_TIMEOUT_SECONDS) {
@@ -197,13 +212,13 @@ class MachineTokenService implements MachineTokenServiceInterface
                 'budget_seconds' => $timeout,
             ]);
 
-            return $this->panic();
+            return $this->panic($timeout !== null);
         }
 
         if ($timeout !== null && ! CurlTransport::available()) {
             $this->warn('machine_token_curl_unavailable', 'Machine token fetch skipped: no cURL transport to bound it by the caller\'s time budget', 'curl_unavailable');
 
-            return $this->panic();
+            return $this->panic($timeout !== null);
         }
 
         try {
@@ -229,7 +244,7 @@ class MachineTokenService implements MachineTokenServiceInterface
             ]);
 
             if ($response->failed()) {
-                return $this->panic();
+                return $this->panic($timeout !== null);
             }
         } catch (\Exception $e) {
             ErrorLogger::logWarning('machine_token_connection_failed', 'Failed to retrieve token from machine token service: '.$e->getMessage(), [
@@ -238,14 +253,14 @@ class MachineTokenService implements MachineTokenServiceInterface
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->panic();
+            return $this->panic($timeout !== null);
         }
 
         $body = $response->body();
         $data = json_decode($body, true);
 
         if (! is_array($data) || empty($data['access_token']) || empty($data['expires_in'])) {
-            return $this->panic();
+            return $this->panic($timeout !== null);
         }
 
         $expiry = Carbon::createFromTimestamp(time() + $data['expires_in']);
@@ -258,21 +273,30 @@ class MachineTokenService implements MachineTokenServiceInterface
         return $token;
     }
 
-    private function panic(): array
+    /**
+     * @param  bool  $budgeted  The fetch ran inside a caller's time budget, which
+     *                          can cut it short while the auth endpoint is healthy,
+     *                          so falling back to the old token is a warning.
+     */
+    private function panic(bool $budgeted = false): array
     {
-        if ($this->oldToken) {
+        if ($this->oldTokenValid()) {
             /** Mild Panic */
-            $expiry = strtotime($this->oldToken['expiry']);
-            if (time() < $expiry) {
+            $message = 'Could not get a new machine token. Current one expires: '.$this->oldToken['expiry'];
+            $context = ['token_expiry' => $this->oldToken['expiry']];
+
+            if ($budgeted) {
+                $this->warn('machine_token_refresh_failed', $message, 'token_refresh_failed', $context);
+            } else {
                 /** Send message to slack to fix things before token really expires */
-                ErrorLogger::logError('machine_token_refresh_failed', 'Could not get a new machine token. Current one expires: '.$this->oldToken['expiry'], [
+                ErrorLogger::logError('machine_token_refresh_failed', $message, [
                     LogFields::FEATURE => 'machine_token',
                     LogFields::ACTION => 'token_refresh_failed',
-                    'token_expiry' => $this->oldToken['expiry'],
+                    ...$context,
                 ]);
-
-                return $this->oldToken;
             }
+
+            return $this->oldToken;
         }
         /** Full Panic. We don't have an old token, or the old one has expired */
         throw new \RuntimeException('Could not get new machine token.');

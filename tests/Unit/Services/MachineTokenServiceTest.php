@@ -429,6 +429,73 @@ class MachineTokenServiceTest extends TestCase
         $this->assertFalse($options['allow_redirects']);
     }
 
+    public function test_budgeted_refresh_while_the_current_token_is_valid_gets_half_the_budget()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'current_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'fresh_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('fresh_token', $this->service->getToken(2.0));
+        $this->assertEqualsWithDelta(1.0, $options['timeout'], 0.05);
+        $this->assertSame($options['timeout'], $options['connect_timeout']);
+    }
+
+    public function test_budgeted_refresh_of_an_expired_token_gets_the_whole_budget()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'expired_token',
+            'expiry' => Carbon::now()->subSeconds(5)->toIso8601String(),
+        ]);
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'fresh_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('fresh_token', $this->service->getToken(2.0));
+        $this->assertEqualsWithDelta(2.0, $options['timeout'], 0.05);
+    }
+
+    public function test_budgeted_refresh_that_fails_uses_the_current_token_with_a_warning()
+    {
+        $expiry = Carbon::now()->addSeconds(200)->toIso8601String();
+        Cache::put('test_machine_token', ['token' => 'current_token', 'expiry' => $expiry]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'service_unavailable'], 500)]);
+        Log::shouldReceive('error')->never();
+        Log::shouldReceive('warning')->once()->with(
+            'Could not get a new machine token. Current one expires: '.$expiry,
+            Mockery::on(fn ($context) => $context['error_type'] === 'machine_token_refresh_failed'
+                && $context['feature'] === 'machine_token'
+                && $context['action'] === 'token_refresh_failed'
+                && $context['token_expiry'] === $expiry)
+        );
+
+        $this->assertSame('current_token', $this->service->getToken(2.0));
+    }
+
+    public function test_failing_logger_does_not_undo_a_budgeted_refresh_fallback()
+    {
+        $failing = Mockery::spy(LogManager::class);
+        $failing->shouldReceive('warning')->andThrow(new RuntimeException('log handler down'));
+        Log::swap($failing);
+        Cache::put('test_machine_token', [
+            'token' => 'current_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'service_unavailable'], 500)]);
+
+        $this->assertSame('current_token', $this->service->getToken(2.0));
+        $failing->shouldHaveReceived('warning')->once();
+    }
+
     public function test_time_spent_reading_the_cache_comes_out_of_the_budget()
     {
         Carbon::setTestNow(Carbon::now());

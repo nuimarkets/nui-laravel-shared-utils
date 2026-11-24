@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Feature;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Mockery;
@@ -188,6 +189,25 @@ class TokenStatusClientHttpTest extends TestCase
 
         $this->assertSame(TokenStatus::Unavailable, $check->status);
         $this->assertSame('machine_token', $check->reason);
+        $this->assertLessThan(1.5, microtime(true) - $started);
+    }
+
+    public function test_stalled_refresh_still_leaves_time_for_the_status_call()
+    {
+        Config::set('token_revocation.timeout', 1.0);
+        Config::set('token_revocation.url', self::$serverUrl.'/status/inactive');
+        Config::set('machine_token.url', self::$serverUrl.'/token/drip');
+        Config::set('machine_token.client_id', 'client');
+        Config::set('machine_token.secret', 'secret');
+        Config::set('machine_token.redis_key', 'machine_token');
+        Config::set('machine_token.time_before_expire', 300);
+        // Inside the refresh window, and still valid.
+        Cache::put('machine_token', ['token' => 'current-token', 'expiry' => Carbon::now()->addSeconds(200)->toIso8601String()]);
+        $started = microtime(true);
+
+        $check = (new TokenStatusClient(new MachineTokenService))->check('jti-refresh-drip', time() + 3600);
+
+        $this->assertSame(TokenStatus::Revoked, $check->status);
         $this->assertLessThan(1.5, microtime(true) - $started);
     }
 

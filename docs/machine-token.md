@@ -47,7 +47,7 @@ getToken(?float $timeout = null)
   -> cache new token payload (a write failure keeps it in memory) and return token
 ```
 
-If refresh fails while an old token is still valid, the service returns the old token and logs an error so operators can fix the auth endpoint before the token expires. If no valid old token exists, it throws `RuntimeException`.
+If refresh fails while an old token is still valid, the service returns the old token and logs an error so operators can fix the auth endpoint before the token expires; a budgeted refresh logs a warning instead (see [Time budget](#time-budget)). If no valid old token exists, it throws `RuntimeException`.
 
 A cache outage does not block a token: a failed read fetches a token from the auth endpoint, and a failed write keeps the fresh token in memory for the rest of the request (or the worker's life under a long-lived runtime). The cache read and write are bounded only by the default cache connection's own timeouts, so a store that hangs can cost a caller both timeouts.
 
@@ -55,7 +55,7 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 
 ### Time budget
 
-`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Without the argument the HTTP client's defaults apply, as for every existing caller. The budget holds because cURL applies the timeout to the whole transfer; Guzzle's PHP stream handler, its fallback without cURL, applies it to each read. The package requires the `curl` PHP extension. Where Guzzle would still use the stream handler, because `curl_exec` and `curl_multi_exec` are both disabled, or libcurl is older than 7.34 or built without SSL, a budgeted fetch is not made: the service logs `curl_unavailable` and falls back to the old token or throws. A fetch without a budget is unaffected. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
+`getToken($timeout)` gives the auth request what is left of `$timeout` seconds after the cache read, as both its total and connection timeouts, and the request follows no redirects (each redirect hop would get the full timeout again). A remainder under 10 ms is treated as spent: no request is made, and the service falls back to the old token or throws. A cached or in-memory token is returned whatever the budget. Inside the refresh window, while the current token is still valid, the auth request gets half of what is left, so an auth endpoint that stalls still leaves the caller time to use the current token, which the service falls back to with a `token_refresh_failed` warning rather than the error: a budget can cut a refresh short while the endpoint is healthy. The service keeps the token it returned for the rest of the request (or the worker's life under a long-lived runtime, until `invalidate()`), so the refresh is tried again by the next request or process that reads the cached token inside the window. So a service whose only caller passes a budget is warned, not alerted, until the token expires. Without the argument the HTTP client's defaults apply, as for every existing caller. The budget holds because cURL applies the timeout to the whole transfer; Guzzle's PHP stream handler, its fallback without cURL, applies it to each read. The package requires the `curl` PHP extension. Where Guzzle would still use the stream handler, because `curl_exec` and `curl_multi_exec` are both disabled, or libcurl is older than 7.34 or built without SSL, a budgeted fetch is not made: the service logs `curl_unavailable` and falls back to the old token or throws. A fetch without a budget is unaffected. `TokenStatusClient` passes its remaining budget (see [Token Revocation Check](token-revocation.md)).
 
 ### Invalidating a refused token
 
@@ -67,15 +67,15 @@ The fallback has a cost. Under a runtime that resets state per request (PHP-FPM,
 | --- | --- | --- |
 | `config_missing` | `warning` | `url`, `client_id`, or `secret` is missing. |
 | `connection_failed` | `warning` | The HTTP request to the token endpoint throws. |
-| `token_refresh_failed` | `error` | Refresh fails while an old token is still valid. |
+| `token_refresh_failed` | `error`, or `warning` for a budgeted fetch | Refresh fails while an old token is still valid. |
 | `cache_read_failed` | `warning` | Reading the cached token throws; the token is fetched instead. |
 | `cache_write_failed` | `warning` | Writing a fresh token to the cache throws; it is kept in memory. |
 | `budget_spent` | `warning` | A fetch is needed but under 10 ms of the caller's budget is left. |
 | `curl_unavailable` | `warning` | A budgeted fetch is needed but cURL cannot make it: `curl_exec` and `curl_multi_exec` are both disabled, or libcurl is older than 7.34 or built without SSL. |
 
-`cache_read_failed`, `cache_write_failed`, `budget_spent` and `curl_unavailable` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
+`cache_read_failed`, `cache_write_failed`, `budget_spent`, `curl_unavailable` and a budgeted `token_refresh_failed` describe failures the service has already worked around, so a logger that throws while writing one of them is ignored rather than allowed to undo the fallback.
 
-Warnings use `ErrorLogger::logWarning()` and should not page Slack in normal consumer routing. The refresh failure path uses `ErrorLogger::logError()` because it needs operator attention before the old token expires.
+Warnings use `ErrorLogger::logWarning()` and should not page Slack in normal consumer routing. An unbudgeted refresh failure uses `ErrorLogger::logError()` because it needs operator attention before the old token expires.
 
 ## Testing
 
