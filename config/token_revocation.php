@@ -60,10 +60,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | After a call that says the issuer, or the path to it, failed (a
-    | connection failure or timeout, a 5xx, a 429, a redirect, or a 200 that
-    | is no answer), cache misses skip the call and are `unavailable` for this
-    | long. A failure before the call (no machine token, the budget spent) and
-    | any other 4xx open nothing. Cached answers keep being served.
+    | connection failure or timeout, a 5xx, a 429, a redirect, a 200 that is
+    | no answer, or a 401 after the retry), cache misses skip the call and are
+    | `unavailable` for this long. A failure before the call (no machine
+    | token, the budget spent) and any other 4xx open nothing. Cached answers
+    | keep being served.
     |
     */
     'breaker_seconds' => (int) env('TOKEN_STATUS_BREAKER_SECONDS', 10),

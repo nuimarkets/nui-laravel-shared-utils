@@ -128,7 +128,7 @@ class TokenStatusClientHttpTest extends TestCase
         $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
-    public function test_oversized_401_is_retried_and_leaves_the_breaker_shut()
+    public function test_oversized_401_is_retried_and_a_second_one_opens_the_breaker()
     {
         Config::set('token_revocation.url', self::$serverUrl.'/status/large-401');
         $machineTokens = Mockery::mock(MachineTokenService::class);
@@ -139,7 +139,7 @@ class TokenStatusClientHttpTest extends TestCase
 
         $this->assertSame(TokenStatus::Unavailable, $check->status);
         $this->assertSame('http_401', $check->reason);
-        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
+        $this->assertNotNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_stalled_answer_is_unavailable_within_the_budget()

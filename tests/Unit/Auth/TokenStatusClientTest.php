@@ -510,6 +510,8 @@ class TokenStatusClientTest extends TestCase
     /** @return array<string, array{Closure, string}> */
     public static function issuerFailures(): array
     {
+        $refused = fn () => Http::response(['message' => 'Unauthenticated.'], 401);
+
         return [
             'connection failure' => [fn () => throw new ConnectionException('cURL error 6: Could not resolve host'), 'connection'],
             'timeout on the status call' => [fn () => throw new ConnectionException('cURL error 28: Operation timed out'), 'connection'],
@@ -529,6 +531,8 @@ class TokenStatusClientTest extends TestCase
             'oversized gateway page' => [self::overflowing(502), 'http_502'],
             'oversized gateway page cut off by cURL' => [self::aborted(503), 'http_503'],
             'oversized redirect cut off by cURL' => [self::aborted(302), 'http_302'],
+            'refused after the retry' => [$refused, 'http_401'],
+            'oversized 401, retried and refused again' => [self::overflowing(401), 'http_401'],
         ];
     }
 
@@ -551,8 +555,6 @@ class TokenStatusClientTest extends TestCase
     /** @return array<string, array{Closure|null, Closure|null, string, int}> */
     public static function localOrPerTokenOutcomes(): array
     {
-        $refused = fn () => Http::response(['message' => 'Unauthenticated.'], 401);
-
         return [
             'no machine token' => [null, fn () => throw new RuntimeException('Could not get new machine token.'), 'machine_token', 0],
             'budget spent before the call' => [null, function () {
@@ -564,10 +566,8 @@ class TokenStatusClientTest extends TestCase
             'forbidden' => [fn () => Http::response('', 403), null, 'http_403', 1],
             'not found' => [fn () => Http::response('', 404), null, 'http_404', 1],
             'unprocessable' => [fn () => Http::response('', 422), null, 'http_422', 1],
-            'refused after the retry' => [$refused, null, 'http_401', 2],
             'oversized refusal' => [self::overflowing(422), null, 'http_422', 1],
             'oversized refusal cut off by cURL' => [self::aborted(400), null, 'http_400', 1],
-            'oversized 401, retried and refused again' => [self::overflowing(401), null, 'http_401', 2],
         ];
     }
 
@@ -753,6 +753,38 @@ class TokenStatusClientTest extends TestCase
         $this->assertSame('machine_token', $check->reason);
         $this->assertSame(1, $this->statusCalls());
         $this->assertSame('shared-token', Cache::get('machine_token')['token']);
+    }
+
+    public function test_refusal_of_a_stale_replacement_opens_the_breaker_for_one_period()
+    {
+        Cache::put('machine_token', ['token' => 'refused-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+        Http::fake([
+            self::TOKEN_URL => Http::response(['access_token' => 'fresh-token', 'expires_in' => 3600]),
+            self::STATUS_URL => function (Request $request) {
+                if ($request->hasHeader('Authorization', 'Bearer fresh-token')) {
+                    return Http::response(['active' => false]);
+                }
+
+                if ($request->hasHeader('Authorization', 'Bearer refused-token')) {
+                    // Another process cached a replacement the route refuses as well.
+                    Cache::put('machine_token', ['token' => 'stale-token', 'expiry' => Carbon::now()->addDays(30)->toIso8601String()]);
+                }
+
+                return Http::response(['message' => 'Unauthenticated.'], 401);
+            },
+        ]);
+        $client = $this->realClient();
+
+        $this->assertSame('http_401', $client->check(self::JTI, $this->exp)->reason);
+        $this->advance(5);
+        $this->assertSame('breaker_open', $client->check('other-jti', $this->exp)->reason);
+        $this->advance(5);
+
+        $this->assertSame(TokenStatus::Revoked, $client->status(self::JTI, $this->exp));
+        $this->assertSame(4, $this->statusCalls());
+        Http::assertSentCount(5);
+        $this->assertSame('fresh-token', Cache::get('machine_token')['token']);
+        $this->assertNull(Cache::store('token_status')->get(TokenStatusClient::BREAKER_KEY));
     }
 
     public function test_forbidden_is_unavailable_without_a_refetch()

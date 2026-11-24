@@ -151,12 +151,15 @@ class TokenStatusClient
      * next miss would most likely fail the same way: a connection failure or a
      * timeout on the status call, a 5xx, a 429, a redirect or any other status
      * that is neither 200 nor a 4xx, and a 200 that is no answer (`malformed`,
-     * `oversized`). These open the breaker. An outcome that ends before the
+     * `oversized`). These open the breaker. So does `http_401`, which ask()
+     * returns only after the retry: the route refused a replacement token as
+     * well, so it refuses this service's credential, which every process of
+     * the service shares and no new token changes, and no check from the
+     * service can be answered while it lasts. An outcome that ends before the
      * status call (no machine token, the budget spent) or that is about this
-     * token or this caller (any other 4xx, a 401 after the retry included)
-     * opens nothing, so it cannot keep cache misses from reaching a healthy
-     * issuer. A function of the reason alone, so the logged reason says
-     * whether the breaker opened.
+     * token or this caller (any other 4xx) opens nothing, so it cannot keep
+     * cache misses from reaching an issuer that would answer them. A function
+     * of the reason alone, so the logged reason says whether the breaker opened.
      */
     private static function issuerFailed(string $reason): bool
     {
@@ -170,7 +173,7 @@ class TokenStatusClient
 
         $code = (int) substr($reason, strlen('http_'));
 
-        return $code === 429 || $code < 400 || $code >= 500;
+        return $code === 401 || $code === 429 || $code < 400 || $code >= 500;
     }
 
     /** A cached `revoked`, or a cached `active` whose active_until is still ahead. Anything else is a miss. */
