@@ -2,6 +2,7 @@
 
 namespace NuiMarkets\LaravelSharedUtils\Tests\Unit\Services;
 
+use Illuminate\Log\LogManager;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -206,5 +207,429 @@ class MachineTokenServiceTest extends TestCase
         $this->expectExceptionMessage('Could not get new machine token.');
 
         $this->service->getToken();
+    }
+
+    /** Caches a token outside the refresh window, as another process would. */
+    private function cacheToken(string $token): void
+    {
+        Cache::put('test_machine_token', [
+            'token' => $token,
+            'expiry' => Carbon::now()->addDays(30)->toIso8601String(),
+        ]);
+    }
+
+    private function fakeTokenEndpoint(string ...$tokens): void
+    {
+        $sequence = Http::fakeSequence('https://auth.test.com/token');
+
+        foreach ($tokens as $token) {
+            $sequence->push(['access_token' => $token, 'expires_in' => 3600]);
+        }
+    }
+
+    /** Expects one warning with this message, feature, action and error type. */
+    private function expectWarning(string $message, string $action, string $errorType = 'machine_token_cache_failed'): void
+    {
+        Log::shouldReceive('warning')->once()->with($message, Mockery::on(
+            fn ($context) => $context['feature'] === 'machine_token'
+                && $context['action'] === $action
+                && $context['error_type'] === $errorType
+        ));
+    }
+
+    public function test_cache_read_failure_fetches_a_token_directly()
+    {
+        $this->expectWarning('Machine token cache read failed: Connection refused', 'cache_read_failed');
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andThrow(new RuntimeException('Connection refused'));
+        Cache::shouldReceive('put')->once();
+        $this->fakeTokenEndpoint('direct_token');
+
+        $this->assertSame('direct_token', $this->service->getToken());
+    }
+
+    public function test_cache_write_failure_keeps_the_fresh_token_in_memory()
+    {
+        $this->expectWarning('Machine token cache write failed: Connection refused', 'cache_write_failed');
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturn(null);
+        Cache::shouldReceive('put')->once()->andThrow(new RuntimeException('Connection refused'));
+        $this->fakeTokenEndpoint('fresh_token', 'second_token');
+
+        $this->assertSame('fresh_token', $this->service->getToken());
+        $this->assertSame('fresh_token', $this->service->getToken());
+        Http::assertSentCount(1);
+    }
+
+    public function test_invalidate_refetches_while_the_cache_holds_the_refused_token()
+    {
+        $this->fakeTokenEndpoint('first_token', 'second_token');
+
+        $this->assertSame('first_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        // Nothing is deleted: the replacement overwrites the shared entry.
+        $this->assertSame('first_token', Cache::get('test_machine_token')['token']);
+        $this->assertSame('second_token', $this->service->getToken());
+        $this->assertSame('second_token', Cache::get('test_machine_token')['token']);
+    }
+
+    public function test_late_refusal_keeps_a_replacement_another_process_cached()
+    {
+        $this->cacheToken('refused_token');
+        Http::fake();
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->cacheToken('replacement_token'); // another process refreshed first
+        $this->service->invalidate();
+
+        $this->assertSame('replacement_token', Cache::get('test_machine_token')['token']);
+        $this->assertSame('replacement_token', $this->service->getToken());
+        Http::assertNothingSent();
+    }
+
+    public function test_failed_refetch_after_a_refusal_keeps_the_shared_token()
+    {
+        $this->cacheToken('refused_token');
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'unavailable'], 500)]);
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        try {
+            $this->service->getToken();
+            $this->fail('Expected a failed fetch with only the refused token cached to throw.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Could not get new machine token.', $e->getMessage());
+        }
+
+        $this->assertSame('refused_token', Cache::get('test_machine_token')['token']);
+    }
+
+    public function test_failed_refetch_does_not_stop_later_cache_reads()
+    {
+        $this->cacheToken('refused_token');
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'unavailable'], 500)]);
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        try {
+            $this->service->getToken();
+            $this->fail('Expected a failed fetch with only the refused token cached to throw.');
+        } catch (RuntimeException) {
+            // The auth endpoint is down.
+        }
+
+        $this->cacheToken('replacement_token'); // another process got through
+        $this->assertSame('replacement_token', $this->service->getToken());
+        Http::assertSentCount(1);
+    }
+
+    public function test_invalidate_without_a_loaded_token_keeps_the_refused_one()
+    {
+        $this->cacheToken('refused_token');
+        $this->fakeTokenEndpoint('replacement_token');
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->service->invalidate();
+        $this->service->invalidate();
+
+        $this->assertSame('replacement_token', $this->service->getToken());
+        Http::assertSentCount(1);
+    }
+
+    public function test_earlier_refused_token_written_back_is_not_used()
+    {
+        $this->cacheToken('first_refused');
+        $this->fakeTokenEndpoint('second_refused', 'replacement_token');
+
+        $this->assertSame('first_refused', $this->service->getToken());
+        $this->service->invalidate();
+        $this->assertSame('second_refused', $this->service->getToken());
+        $this->service->invalidate();
+
+        // Another process's failed refresh writes its old token back.
+        $this->cacheToken('first_refused');
+
+        $this->assertSame('replacement_token', $this->service->getToken());
+        Http::assertSentCount(2);
+    }
+
+    public function test_refused_tokens_are_remembered_up_to_a_bound()
+    {
+        $tokens = array_map(fn (int $i) => "token_{$i}", range(1, 17));
+        $this->fakeTokenEndpoint(...$tokens);
+
+        foreach ($tokens as $token) {
+            $this->assertSame($token, $this->service->getToken());
+            $this->service->invalidate();
+        }
+
+        // The oldest of the 17 is forgotten; the second oldest is still refused,
+        // so it is skipped and the fetch, with the sequence spent, fails.
+        $this->cacheToken('token_2');
+        try {
+            $this->service->getToken();
+            $this->fail('Expected the refused token_2 to be skipped and the failed fetch to throw.');
+        } catch (RuntimeException) {
+            // token_2 was not reused.
+        }
+
+        $this->cacheToken('token_1');
+        $this->assertSame('token_1', $this->service->getToken());
+    }
+
+    public function test_invalidate_never_deletes_the_cache_entry()
+    {
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->andReturn([
+            'token' => 'refused_token',
+            'expiry' => Carbon::now()->addDays(30)->toIso8601String(),
+        ]);
+        Cache::shouldReceive('forget')->never();
+        Cache::shouldReceive('put')->once();
+        $this->fakeTokenEndpoint('replacement_token');
+
+        $this->assertSame('refused_token', $this->service->getToken());
+        $this->service->invalidate();
+
+        $this->assertSame('replacement_token', $this->service->getToken());
+    }
+
+    public function test_invalidate_drops_the_old_token_fallback()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'refused_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'unavailable'], 500)]);
+
+        // Inside the refresh window a failed refresh falls back to the old token...
+        $this->assertSame('refused_token', $this->service->getToken());
+
+        // ...but not once the caller has said that token was refused.
+        $this->service->invalidate();
+        $this->expectException(RuntimeException::class);
+        $this->service->getToken();
+    }
+
+    public function test_budget_bounds_the_token_fetch()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'bounded_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('bounded_token', $this->service->getToken(1.25));
+        $this->assertEqualsWithDelta(1.25, $options['timeout'], 0.05);
+        $this->assertSame($options['timeout'], $options['connect_timeout']);
+        $this->assertFalse($options['allow_redirects']);
+    }
+
+    public function test_budgeted_refresh_while_the_current_token_is_valid_gets_half_the_budget()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'current_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'fresh_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('fresh_token', $this->service->getToken(2.0));
+        $this->assertEqualsWithDelta(1.0, $options['timeout'], 0.05);
+        $this->assertSame($options['timeout'], $options['connect_timeout']);
+    }
+
+    public function test_budgeted_refresh_of_an_expired_token_gets_the_whole_budget()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'expired_token',
+            'expiry' => Carbon::now()->subSeconds(5)->toIso8601String(),
+        ]);
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'fresh_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->assertSame('fresh_token', $this->service->getToken(2.0));
+        $this->assertEqualsWithDelta(2.0, $options['timeout'], 0.05);
+    }
+
+    public function test_budgeted_refresh_that_fails_uses_the_current_token_with_a_warning()
+    {
+        $expiry = Carbon::now()->addSeconds(200)->toIso8601String();
+        Cache::put('test_machine_token', ['token' => 'current_token', 'expiry' => $expiry]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'service_unavailable'], 500)]);
+        Log::shouldReceive('error')->never();
+        Log::shouldReceive('warning')->once()->with(
+            'Could not get a new machine token. Current one expires: '.$expiry,
+            Mockery::on(fn ($context) => $context['error_type'] === 'machine_token_refresh_failed'
+                && $context['feature'] === 'machine_token'
+                && $context['action'] === 'token_refresh_failed'
+                && $context['token_expiry'] === $expiry)
+        );
+
+        $this->assertSame('current_token', $this->service->getToken(2.0));
+    }
+
+    public function test_failing_logger_does_not_undo_a_budgeted_refresh_fallback()
+    {
+        $failing = Mockery::spy(LogManager::class);
+        $failing->shouldReceive('warning')->andThrow(new RuntimeException('log handler down'));
+        Log::swap($failing);
+        Cache::put('test_machine_token', [
+            'token' => 'current_token',
+            'expiry' => Carbon::now()->addSeconds(200)->toIso8601String(),
+        ]);
+        Http::fake(['https://auth.test.com/token' => Http::response(['error' => 'service_unavailable'], 500)]);
+
+        $this->assertSame('current_token', $this->service->getToken(2.0));
+        $failing->shouldHaveReceived('warning')->once();
+    }
+
+    public function test_time_spent_reading_the_cache_comes_out_of_the_budget()
+    {
+        Carbon::setTestNow(Carbon::now());
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturnUsing(function () {
+            Carbon::setTestNow(Carbon::now()->addMilliseconds(1500));
+
+            return null;
+        });
+        Cache::shouldReceive('put')->once();
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'late_token', 'expires_in' => 3600]);
+        }]);
+
+        try {
+            $this->assertSame('late_token', $this->service->getToken(2.0));
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $this->assertEqualsWithDelta(0.5, $options['timeout'], 0.001);
+    }
+
+    public function test_cache_read_that_spends_the_budget_makes_no_fetch()
+    {
+        Carbon::setTestNow(Carbon::now());
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturnUsing(function () {
+            Carbon::setTestNow(Carbon::now()->addSeconds(3));
+
+            return null;
+        });
+        Http::fake();
+
+        try {
+            $this->service->getToken(2.0);
+            $this->fail('Expected a spent budget without an old token to throw.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Could not get new machine token.', $e->getMessage());
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_budgeted_fetch_does_not_follow_a_redirect()
+    {
+        Http::fake([
+            'https://auth.test.com/token' => Http::response('', 302, ['Location' => 'https://auth.test.com/elsewhere']),
+            'https://auth.test.com/elsewhere' => Http::response(['access_token' => 'redirected_token', 'expires_in' => 3600]),
+        ]);
+
+        $this->expectException(RuntimeException::class);
+
+        try {
+            $this->service->getToken(2.0);
+        } finally {
+            Http::assertSentCount(1);
+        }
+    }
+
+    public function test_unbudgeted_fetch_keeps_the_client_redirect_default()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'default_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->service->getToken();
+
+        $this->assertNotFalse($options['allow_redirects'] ?? null);
+    }
+
+    public function test_failing_logger_does_not_undo_a_cache_fallback()
+    {
+        $failing = Mockery::spy(LogManager::class);
+        $failing->shouldReceive('warning')->andThrow(new RuntimeException('log handler down'));
+        Log::swap($failing);
+        Cache::shouldReceive('flush'); // tearDown
+        Cache::shouldReceive('get')->once()->andReturn(null);
+        Cache::shouldReceive('put')->once()->andThrow(new RuntimeException('Connection refused'));
+        $this->fakeTokenEndpoint('fresh_token', 'second_token');
+
+        $this->assertSame('fresh_token', $this->service->getToken());
+        $this->assertSame('fresh_token', $this->service->getToken());
+        Http::assertSentCount(1);
+
+        $failing->shouldHaveReceived('warning')->once();
+    }
+
+    public function test_without_a_budget_the_fetch_keeps_the_client_defaults()
+    {
+        $options = null;
+        Http::fake(['https://auth.test.com/token' => function ($request, array $sent) use (&$options) {
+            $options = $sent;
+
+            return Http::response(['access_token' => 'default_token', 'expires_in' => 3600]);
+        }]);
+
+        $this->service->getToken();
+
+        $this->assertSame(30, $options['timeout']);
+    }
+
+    public function test_spent_budget_makes_no_fetch()
+    {
+        $this->expectWarning("Machine token fetch skipped: the caller's time budget is spent", 'budget_spent', 'machine_token_budget_spent');
+        Http::fake();
+
+        try {
+            $this->service->getToken(0.001);
+            $this->fail('Expected a spent budget without an old token to throw.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Could not get new machine token.', $e->getMessage());
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_budget_does_not_apply_to_a_cached_token()
+    {
+        Cache::put('test_machine_token', [
+            'token' => 'cached_token',
+            'expiry' => Carbon::now()->addDays(30)->toIso8601String(),
+        ]);
+        Http::fake();
+
+        $this->assertSame('cached_token', $this->service->getToken(0.001));
+        Http::assertNothingSent();
     }
 }
